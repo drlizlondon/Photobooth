@@ -349,23 +349,31 @@ function typography(){
   };
 }
 function renderStrip(ctx,c,imgs){
-  const W=720,H=1680;c.width=W;c.height=H;
+  /* Wider, shorter strip: better for group shots and easier to view on phones.
+     Photos themselves are preserved and never artistically re-cropped. */
+  const W=900,H=1440;c.width=W;c.height=H;
   const dark=stripStyle==="black"||stripStyle==="film";
-  const bg=stripStyle==="editorial"?"#f7f1e8":dark?"#090909":"#fff";
+  const bg=stripStyle==="editorial"?"#f8f2e8":dark?"#090909":"#fff";
   const ink=dark?"#fff":"#111";
   const t=typography();
 
   ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
   ctx.fillStyle=ink;ctx.textAlign="center";
 
-  ctx.font=`400 34px ${t.serif}`;
-  ctx.fillText(settings.title,360,54);
-  ctx.font=`700 14px ${t.sans}`;
-  ctx.globalAlpha=.66;
-  ctx.fillText(settings.year,360,84);
+  ctx.font=`400 30px ${t.serif}`;
+  ctx.fillText(settings.title,W/2,44);
+  ctx.font=`700 12px ${t.sans}`;
+  ctx.globalAlpha=.62;
+  ctx.fillText(settings.year,W/2,70);
   ctx.globalAlpha=1;
 
-  const mx=42,gap=10,top=112,bottom=76,pw=W-2*mx,ph=(H-top-bottom-gap*2)/3;
+  const mx=24;
+  const gap=8;
+  const top=88;
+  const bottom=52;
+  const pw=W-(mx*2);
+  const ph=(H-top-bottom-gap*2)/3;
+
   imgs.forEach((img,i)=>{
     const y=top+i*(ph+gap);
     ctx.save();
@@ -375,58 +383,60 @@ function renderStrip(ctx,c,imgs){
   });
 
   ctx.fillStyle=ink;
-  ctx.font=`400 15px ${t.serif}`;
-  ctx.fillText(settings.stripFooter,360,H-34);
+  ctx.font=`400 13px ${t.serif}`;
+  ctx.fillText(settings.stripFooter,W/2,H-20);
 }
 function renderMagazine(ctx,c,imgs){
   const W=900,H=1200;c.width=W;c.height=H;
   const t=typography();
   const img=imgs[coverIndex];
 
-  ctx.fillStyle=settings.theme==="luxury"?"#fbf7ef":"#fff";
+  const warm=settings.theme==="luxury"||settings.theme==="romantic";
+  ctx.fillStyle=warm?"#fbf7f0":"#fff";
   ctx.fillRect(0,0,W,H);
 
-  /* Keep the selected photo intact within the cover window. */
+  /* Full, intact photograph inside the cover window. */
   ctx.save();
   ctx.filter=filterCSS();
-  drawContain(ctx,img,48,126,804,950,"#ece7df");
+  drawContain(ctx,img,34,132,832,940,"#ece7df");
   ctx.restore();
 
   ctx.fillStyle="#111";
   ctx.textAlign="center";
+  ctx.font=`700 ${settings.theme==="party"?88:106}px ${t.mast}`;
+  ctx.fillText(settings.magazineMasthead,450,98);
 
-  const mastSize=settings.theme==="party"?92:110;
-  ctx.font=`700 ${mastSize}px ${t.mast}`;
-  ctx.fillText(settings.magazineMasthead,450,96);
-
+  /* Premium cover hierarchy */
   ctx.textAlign="left";
-  ctx.font=`700 17px ${t.sans}`;
-  ctx.letterSpacing="2px";
-  ctx.fillText(settings.magazineCaption1.toUpperCase(),68,170);
+  ctx.font=`700 14px ${t.sans}`;
+  ctx.fillText(settings.magazineCaption1.toUpperCase(),52,168);
 
-  ctx.font=`700 16px ${t.sans}`;
-  ctx.fillText(settings.magazineCaption2.toUpperCase(),68,1045);
+  ctx.font=`700 15px ${t.sans}`;
+  ctx.fillText(settings.magazineCaption2.toUpperCase(),52,1028);
 
   ctx.textAlign="right";
-  ctx.fillText(settings.magazineCaption3.toUpperCase(),832,1045);
+  ctx.fillText(settings.magazineCaption3.toUpperCase(),848,1028);
 
   ctx.textAlign="left";
-  ctx.font=`700 13px ${t.sans}`;
-  ctx.fillText(`ISSUE 026  •  ${settings.year}`,68,1128);
+  ctx.font=`700 11px ${t.sans}`;
+  ctx.fillText(`ISSUE 026  ·  ${settings.year}`,52,1141);
 
-  /* Faux barcode and issue details make it read as a real magazine. */
-  const bx=690,by=1090,bw=145,bh=48;
-  ctx.fillStyle="#fff";ctx.fillRect(bx,by,bw,bh);
-  ctx.strokeStyle="#111";ctx.lineWidth=1;ctx.strokeRect(bx,by,bw,bh);
+  /* Minimal barcode / issue mark */
+  const bx=710,by=1091,bw=138,bh=50;
+  ctx.fillStyle="#fff";
+  ctx.fillRect(bx,by,bw,bh);
+  ctx.strokeStyle="#111";
+  ctx.lineWidth=1;
+  ctx.strokeRect(bx,by,bw,bh);
   ctx.fillStyle="#111";
-  for(let i=0;i<28;i++){
-    const x=bx+8+i*4.4;
-    const w=(i%3===0?2.2:1.2);
-    ctx.fillRect(x,by+7,w,bh-18);
+  for(let i=0;i<25;i++){
+    const x=bx+8+i*4.65;
+    const w=(i%4===0?2.4:(i%3===0?1.8:1.1));
+    ctx.fillRect(x,by+7,w,29);
   }
-  ctx.font=`700 9px ${t.sans}`;
+  ctx.font=`700 8px ${t.sans}`;
   ctx.textAlign="center";
-  ctx.fillText("026  2026  08",bx+bw/2,by+bh-4);
+  ctx.fillText("026  2026",bx+bw/2,by+45);
 }
 function renderPolaroid(ctx,c,imgs){
   const W=900,H=1200;c.width=W;c.height=H;

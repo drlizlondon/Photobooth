@@ -82,3 +82,13 @@ Allow camera access.
 Test Share/AirDrop and shutter sound before the event.
 Add to Home Screen for a more app-like experience.
 Keep the iPad on charge.
+
+
+## 1.1 changes
+- Wider, shorter photo strip for group shots
+- Reduced strip margins and branding space so the photos dominate
+- Phone-friendlier final strip proportions
+- More editorial magazine cover hierarchy
+- Larger review preview with a smaller control panel
+- Preserves original photo framing
+- All 1.0 guest/admin behaviour retained

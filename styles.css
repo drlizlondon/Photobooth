@@ -42,11 +42,11 @@ video.mirror{transform:scaleX(-1)}
 .flash.on{opacity:1}
 
 .review-screen{background:#e8e1d8;padding:18px;align-items:center;justify-content:center}
-.review-grid{width:min(1380px,98vw);display:grid;grid-template-columns:minmax(0,4fr) minmax(315px,1fr);gap:24px;align-items:center}
+.review-grid{width:min(1380px,98vw);display:grid;grid-template-columns:minmax(0,4.5fr) minmax(300px,1fr);gap:24px;align-items:center}
 .hero-preview{min-height:88svh;display:flex;align-items:center;justify-content:center}
-#mainCanvas{max-height:88svh;max-width:100%;width:auto;box-shadow:0 30px 80px rgba(50,40,30,.22);transition:opacity .16s ease,transform .16s ease}
+#mainCanvas{max-height:89svh;max-width:100%;width:auto;box-shadow:0 30px 80px rgba(50,40,30,.22);transition:opacity .16s ease,transform .16s ease}
 #mainCanvas.changing{opacity:.25;transform:scale(.992)}
-.review-controls{background:#fbf9f5;padding:26px 24px;max-height:92svh;overflow:auto;border:1px solid rgba(0,0,0,.05)}
+.review-controls{background:#fbf9f5;padding:22px 20px;max-height:92svh;overflow:auto;border:1px solid rgba(0,0,0,.05)}
 .review-controls h2{font-size:46px;line-height:.95;margin:9px 0 22px}
 .version-tabs{display:flex;gap:6px;flex-wrap:wrap;padding:16px 0 18px;border-top:1px solid var(--line)}
 .version-tab{border:1px solid var(--line);background:#fff;padding:8px 10px;font-size:11px}
@@ -90,7 +90,14 @@ video.mirror{transform:scaleX(-1)}
 @media(max-width:920px){
   .review-grid{grid-template-columns:1fr}
   .hero-preview{min-height:auto;padding:6px 0}
-  #mainCanvas{max-height:61svh;max-width:82vw}
+  #mainCanvas{max-height:58svh;max-width:90vw}
   .review-controls{max-height:none}
   .settings-grid{grid-template-columns:1fr}
 }
+
+/* 1.1 polish */
+.review-controls .eyebrow{opacity:.7}
+.review-controls h2{margin-bottom:18px}
+.version-tab,.choice{transition:background .15s ease,color .15s ease,border-color .15s ease}
+.primary-btn,.secondary-btn,.next-btn{transition:transform .12s ease,opacity .12s ease}
+.primary-btn:active,.secondary-btn:active,.next-btn:active{transform:scale(.985)}

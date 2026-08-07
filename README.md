@@ -1,7 +1,84 @@
-# Rae's Photo Booth v3
+# Rae's Photo Booth 1.0
 
-Capture three photos once, then create and independently save/share: classic strip, magazine cover, Polaroid, square grid and Story output. Magazine mode lets guests choose their favourite of the three shots. Next Guest returns straight to the camera. Review resets after two minutes.
+Production-style birthday/event photo booth for iPad.
 
-Settings include editable event title, year/date, strip footer, magazine masthead, three magazine captions, Polaroid caption, grid caption, Story caption, accent colour, countdown, mirror, prompts, shutter sound and flash.
+## Guest flow
+Start → 3 photos → finished strip → try strip styles / filters → Share / Save → try another version → Next guest.
 
-No backend. Photos stay in browser memory unless saved or shared.
+Next guest goes directly to the camera.
+
+Cancel during capture immediately stops the countdown and camera, then returns to the homepage.
+
+The review screen resets to the homepage after 2 minutes of inactivity.
+
+## Guest choices
+Strip:
+- White
+- Black
+- Editorial
+- Film
+
+Filters:
+- Original
+- B&W
+- Warm
+- Film
+- Glow
+- Party
+
+Other outputs:
+- Magazine
+- Polaroid
+- Square grid
+- Story
+
+Magazine lets the guest choose the best of the three photos for the cover.
+
+Every version can be saved or shared independently.
+
+## Admin
+The host configures the event before guests arrive:
+- Event title
+- Year / date
+- Strip footer
+- Event design: Luxury / Editorial / Romantic / Party
+- Magazine masthead and 3 cover lines
+- Polaroid, grid and story captions
+- Accent colour
+- Countdown
+- Mirror mode
+- Group prompts
+- Shutter sound
+- Flash
+- Enable / disable keepsake types
+
+Guests cannot edit event wording or typography.
+
+## Photography philosophy
+The app does not use face detection, AI enhancement or artistic re-cropping. The photograph itself is preserved. Templates design around the original photo.
+
+## Deploying through GitHub Web
+Unzip this folder.
+
+In your existing GitHub repository choose:
+Add file → Upload files
+
+Drag the CONTENTS of this folder into GitHub:
+- index.html
+- app.js
+- styles.css
+- manifest.webmanifest
+- sw.js
+- README.md
+- icons/
+
+Commit the changes to main.
+
+If the repository is linked to Vercel, Vercel should redeploy automatically and keep the same production URL.
+
+## iPad
+Use the HTTPS production URL in Safari.
+Allow camera access.
+Test Share/AirDrop and shutter sound before the event.
+Add to Home Screen for a more app-like experience.
+Keep the iPad on charge.

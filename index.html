@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#090909" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Rae's Booth" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>Rae's Photo Booth</title>
+</head>
+<body>
+  <main id="app">
+    <section id="idleScreen" class="screen active">
+      <button id="adminButton" class="admin-button" aria-label="Open settings">SETTINGS</button>
+      <div class="idle-wrap">
+        <p class="kicker">PHOTO BOOTH</p>
+        <h1 id="idleTitle">Rae's 26th Birthday</h1>
+        <div class="hairline"></div>
+        <p id="idleYear" class="idle-year">2026</p>
+        <button id="startButton" class="start-button">
+          <span>START</span>
+          <small>tap to begin</small>
+        </button>
+        <p class="privacy-note">Private by default. Nothing is uploaded.</p>
+      </div>
+      <div class="corner-mark">♡</div>
+    </section>
+
+    <section id="cameraScreen" class="screen camera-screen">
+      <div class="camera-shell">
+        <video id="video" playsinline autoplay muted></video>
+        <canvas id="captureCanvas" hidden></canvas>
+        <div class="vignette"></div>
+        <div class="top-status">
+          <span id="shotProgress">PHOTO 1 / 3</span>
+          <button id="cancelCapture" class="text-button">CANCEL</button>
+        </div>
+        <div id="posePrompt" class="pose-prompt"></div>
+        <div id="countdown" class="countdown"></div>
+        <div id="flash" class="flash"></div>
+      </div>
+    </section>
+
+    <section id="developScreen" class="screen develop-screen">
+      <div class="develop-card">
+        <p class="kicker">JUST A MOMENT</p>
+        <h2>Developing your strip</h2>
+        <div class="develop-strip">
+          <div class="develop-photo"></div>
+          <div class="develop-photo"></div>
+          <div class="develop-photo"></div>
+        </div>
+        <p class="develop-text">bringing the drama...</p>
+      </div>
+    </section>
+
+    <section id="reviewScreen" class="screen review-screen">
+      <div id="confettiLayer" class="confetti-layer"></div>
+      <div class="review-layout">
+        <div class="preview-stage">
+          <canvas id="outputCanvas"></canvas>
+          <div id="goldBadge" class="gold-badge">GOLD EDITION</div>
+        </div>
+
+        <aside class="review-panel">
+          <div>
+            <p class="kicker">YOUR STRIP</p>
+            <h2>Choose the vibe</h2>
+          </div>
+
+          <div class="picker-section">
+            <span class="picker-label">STYLE</span>
+            <div id="layoutOptions" class="layout-grid"></div>
+          </div>
+
+          <div class="picker-section">
+            <span class="picker-label">FILTER</span>
+            <div id="filterOptions" class="filter-grid"></div>
+          </div>
+
+          <div class="review-actions">
+            <button id="shareButton" class="action-primary">Share</button>
+            <button id="saveButton" class="action-secondary">Save</button>
+            <button id="retakeButton" class="action-secondary">Retake</button>
+            <button id="nextGuestButton" class="action-link">Next guest</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="settingsScreen" class="screen settings-screen">
+      <div class="settings-panel">
+        <div class="settings-header">
+          <div>
+            <p class="kicker">PRIVATE ADMIN</p>
+            <h2>Make it hers</h2>
+          </div>
+          <button id="closeSettings" class="close-button" aria-label="Close">×</button>
+        </div>
+
+        <div class="settings-grid">
+          <label>Event title<input id="settingTitle" type="text" maxlength="48" /></label>
+          <label>Year or date<input id="settingYear" type="text" maxlength="24" /></label>
+          <label>Footer text<input id="settingFooter" type="text" maxlength="48" /></label>
+          <label>Accent colour<input id="settingAccent" type="color" /></label>
+
+          <label>Countdown
+            <select id="settingCountdown">
+              <option value="3">3 seconds</option>
+              <option value="5">5 seconds</option>
+              <option value="10">10 seconds</option>
+            </select>
+          </label>
+
+          <label>Photos
+            <select id="settingPhotoCount">
+              <option value="3">3 photos</option>
+              <option value="4">4 photos</option>
+            </select>
+          </label>
+
+          <label>Camera
+            <select id="settingCamera">
+              <option value="user">Front camera</option>
+              <option value="environment">Rear camera</option>
+            </select>
+          </label>
+
+          <label>Default style
+            <select id="settingLayout">
+              <option value="white">White</option>
+              <option value="black">Black</option>
+              <option value="magazine">Magazine</option>
+              <option value="editorial">Editorial</option>
+              <option value="film">Film</option>
+            </select>
+          </label>
+
+          <label class="toggle"><input id="settingMirror" type="checkbox" /><span>Mirror selfie camera</span></label>
+          <label class="toggle"><input id="settingFlash" type="checkbox" /><span>Camera flash effect</span></label>
+          <label class="toggle"><input id="settingSound" type="checkbox" /><span>Camera sound</span></label>
+          <label class="toggle"><input id="settingPrompts" type="checkbox" /><span>Fun pose prompts</span></label>
+          <label class="toggle"><input id="settingConfetti" type="checkbox" /><span>Confetti reveal</span></label>
+          <label class="toggle"><input id="settingGold" type="checkbox" /><span>Random Gold Edition</span></label>
+        </div>
+
+        <div class="settings-actions">
+          <button id="resetSettings" class="action-link">Reset</button>
+          <button id="saveSettings" class="action-primary">Save settings</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

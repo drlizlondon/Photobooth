@@ -1,18 +1,16 @@
-# Rae's Photo Booth 1.0
-
-Production-style birthday/event photo booth for iPad.
+# Rae's Photo Booth — Live Build
 
 ## Guest flow
-Start → 3 photos → finished strip → try strip styles / filters → Share / Save → try another version → Next guest.
+Start → 3 photos → Strip → optionally try frame/filter → Magazine → pick one of the 3 photos → choose Birthday or Fashion cover → Share / Save → Next guest.
 
-Next guest goes directly to the camera.
+Every new guest resets to:
+- Strip
+- White frame
+- Original filter
+- no magazine photo selected
 
-Cancel during capture immediately stops the countdown and camera, then returns to the homepage.
-
-The review screen resets to the homepage after 2 minutes of inactivity.
-
-## Guest choices
-Strip:
+## Strip
+Frames:
 - White
 - Black
 - Editorial
@@ -21,123 +19,85 @@ Strip:
 Filters:
 - Original
 - B&W
+- Vintage
 - Warm
-- Film
 - Glow
-- Party
 
-Other outputs:
-- Magazine
-- Polaroid
-- Square grid
-- Story
+Frame and filter are separate systems.
 
-Magazine lets the guest choose the best of the three photos for the cover.
+## Magazine
+Two deliberately different covers:
+- Birthday Cover
+- Fashion Cover
 
-Every version can be saved or shared independently.
+Magazine always asks the guest to pick Photo 1 / 2 / 3 before showing the finished cover.
+
+All wording is editable in Admin. The renderer uses text slots and automatic fitting/wrapping, so layout does not depend on any specific wording.
 
 ## Admin
-The host configures the event before guests arrive:
-- Event title
-- Year / date
-- Strip footer
-- Event design: Luxury / Editorial / Romantic / Party
-- Magazine masthead and 3 cover lines
-- Polaroid, grid and story captions
-- Accent colour
-- Countdown
-- Mirror mode
-- Group prompts
-- Shutter sound
-- Flash
-- Enable / disable keepsake types
+Live previews:
+- Strip
+- Birthday
+- Fashion
+- Landscape
+- Portrait
 
-Guests cannot edit event wording or typography.
+All event, strip and magazine copy is editable.
 
-## Photography philosophy
-The app does not use face detection, AI enhancement or artistic re-cropping. The photograph itself is preserved. Templates design around the original photo.
+## Behaviour
+- No backend.
+- No photo upload.
+- Full-frame camera preview.
+- No centre composition box.
+- Session orientation is locked for all three shots.
+- Cancel immediately stops the session and returns home.
+- Next Guest goes directly to a fresh camera session.
+- Soft confetti after the three-shot capture.
+- Two-minute review timeout.
+- Share uses the iOS Share sheet where supported.
+- Save exports a high-resolution PNG.
 
-## Deploying through GitHub Web
-Unzip this folder.
+## New Vercel project
+This is a plain static site.
 
-In your existing GitHub repository choose:
-Add file → Upload files
+1. Unzip this folder.
+2. Create a new Vercel project.
+3. Deploy the folder containing `index.html`.
+4. Framework preset: Other / static.
+5. No build command.
+6. No output directory.
 
-Drag the CONTENTS of this folder into GitHub:
-- index.html
-- app.js
-- styles.css
-- manifest.webmanifest
-- sw.js
-- README.md
-- icons/
-
-Commit the changes to main.
-
-If the repository is linked to Vercel, Vercel should redeploy automatically and keep the same production URL.
-
-## iPad
-Use the HTTPS production URL in Safari.
-Allow camera access.
-Test Share/AirDrop and shutter sound before the event.
-Add to Home Screen for a more app-like experience.
-Keep the iPad on charge.
+Use HTTPS so Safari can access the camera.
 
 
-## 1.1 changes
-- Wider, shorter photo strip for group shots
-- Reduced strip margins and branding space so the photos dominate
-- Phone-friendlier final strip proportions
-- More editorial magazine cover hierarchy
-- Larger review preview with a smaller control panel
-- Preserves original photo framing
-- All 1.0 guest/admin behaviour retained
+## A + B session behaviour
+A. Current session
+- After taking three photos, the guest can move between Strip and Magazine repeatedly.
+- They can save/share multiple outputs from the same three photos.
+- Magazine remembers the chosen photo until the guest explicitly changes it.
+- No retake is required to create another version.
+
+B. Local Event Gallery
+- Every completed three-photo session is stored locally in IndexedDB on the iPad.
+- Admin → Event Gallery shows the most recent 20 sessions.
+- Tap any session to reopen its three photos and make another Strip or Magazine later.
+- Nothing is uploaded to a backend.
+- Clear Event Gallery removes the locally stored sessions from the device.
 
 
-## 1.2
-- Smart landscape/portrait strip composition
-- Luxury script signature at the bottom of the strip
-- Birthday Cover and Fashion Cover magazine variants
-- Magazine remembers the selected cover photo
-- Live admin previews for Strip, Birthday Cover and Fashion Cover
-- Admin preview can switch between landscape and portrait placeholders
-- Host wording updates the preview live
+## Premium Magazine release
+- Strip, capture, gallery, sharing and guest flow are unchanged.
+- Magazine is now based on one premium editorial architecture.
+- Premium Cover and Birthday Edition share the same high-fashion structure.
+- The original guest photograph is never tinted, washed, graded or darkened.
+- Magazine only applies a modest full-bleed crop.
+- All design is transparent typography, rules, barcode and graphic layers over the original photograph.
+- All host wording remains editable.
+- Text auto-fits its semantic zone.
 
 
-## Party-ready build
-- New guest always starts on White Strip + Original filter.
-- Magazine never carries over from the previous guest.
-- Magazine uses the three current guest photos and asks them to pick a cover.
-- Birthday Cover and Fashion Cover remember the selected photo within that guest session.
-- Strip uses much broader Daisy & Jack-style photo proportions.
-- No barcode on the strip.
-- Luxury strip signature remains script/cursive at the bottom.
-- Magazine keeps editorial barcode/details.
-- Camera preview uses the full frame with no centre composition box.
-- Session orientation is detected once and locked for all three photographs.
-- Landscape and portrait sessions get different output canvas proportions.
-- Saved/shared output remains high resolution regardless of on-screen preview size.
-
-
-## Final polish bundle
-- Keeps the broad photo width from the party-ready build.
-- Adds slightly more white space at the top, sides and between strip photos.
-- Adds restrained top event text on the strip.
-- Keeps the script signature/footer at the bottom.
-- No barcode on the strip.
-- Birthday Cover retains warm editorial paper treatment.
-- Fashion Cover uses white typography directly over the flat photo, with no subject cut-out or fake layering.
-- Soft confetti appears briefly after the third shot/review reveal.
-- No artificial "Preparing..." delay.
-- No brand-pack download feature.
-
-
-## Header-editable release
-- Adds distinct editable Strip top line and Strip second line.
-- Keeps Event title separate for the welcome screen.
-- Adds more white space above the strip photos for a stronger header.
-- Header preview updates live in Admin.
-- White / Black / Editorial / Film frame styles remain distinct.
-- Film is a frame treatment, while Vintage is the separate filter.
-- Filter list remains independent from frame style.
-- Strip footer remains independently editable in script.
+## Latest build
+- Incorporates the latest premium magazine hierarchy.
+- Original photograph remains untouched apart from full-bleed crop.
+- Transparent typography and graphic layers only.
+- Existing strips, gallery, capture, sharing and guest flow retained.

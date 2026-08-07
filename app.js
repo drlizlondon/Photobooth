@@ -240,6 +240,7 @@ async function beginSession(){
     showScreen("review");
     resetIdle();
     await renderWithFade();
+    launchConfetti();
   }catch(err){
     if(err.message!=="cancelled"){
       stopCamera();
@@ -371,17 +372,16 @@ function typography(){
 function renderStrip(ctx,c,imgs){
   const first=imgs[0],landscape=sessionOrientation==="landscape",t=typography();
 
-  /* Broad physical-booth proportions. The photograph is never cropped.
-     The paper dimensions adapt to the session orientation. */
+  /* Broad physical-booth proportions with a touch more paper around each frame.
+     The photograph itself is never cropped or altered. */
   const W=landscape?900:680;
-  const side=14;
+  const side=22;
   const innerW=W-side*2;
   const sourceRatio=first.width/first.height;
-  const naturalH=innerW/sourceRatio;
-  const photoH=naturalH;
-  const gap=8;
-  const top=14;
-  const signatureH=landscape?122:112;
+  const photoH=innerW/sourceRatio;
+  const gap=16;
+  const top=28;
+  const signatureH=landscape?132:122;
   const H=Math.round(top+photoH*3+gap*2+signatureH);
 
   c.width=W;c.height=H;
@@ -389,6 +389,13 @@ function renderStrip(ctx,c,imgs){
   const bg=stripStyle==="editorial"?"#f8f2e8":dark?"#090909":"#fff";
   const ink=dark?"#fff":"#111";
   ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+
+  /* restrained top identity */
+  ctx.fillStyle=ink;ctx.textAlign="center";
+  ctx.font=`700 11px ${t.sans}`;
+  ctx.globalAlpha=.7;
+  ctx.fillText(settings.title.toUpperCase(),W/2,14);
+  ctx.globalAlpha=1;
 
   imgs.forEach((img,i)=>{
     const y=top+i*(photoH+gap);
@@ -403,9 +410,9 @@ function renderStrip(ctx,c,imgs){
   const script='Snell Roundhand,"Apple Chancery","Segoe Script",cursive';
   const signatureFont=settings.theme==="party"?t.sans:script;
   ctx.font=`400 ${landscape?34:30}px ${signatureFont}`;
-  ctx.fillText(settings.stripFooter||settings.title,W/2,base+52);
+  ctx.fillText(settings.stripFooter||settings.title,W/2,base+56);
   ctx.font=`700 12px ${t.sans}`;
-  ctx.fillText(settings.year,W/2,base+82);
+  ctx.fillText(settings.year,W/2,base+88);
 }
 function drawBarcode(ctx,x,y,w,h,font){
   ctx.save();ctx.fillStyle="#fff";ctx.fillRect(x,y,w,h);ctx.strokeStyle="#111";ctx.strokeRect(x,y,w,h);ctx.fillStyle="#111";
@@ -418,51 +425,61 @@ function renderMagazine(ctx,c,imgs){
   const t=typography();
   const W=landscape?1200:860,H=landscape?900:1180;
   c.width=W;c.height=H;
-  ctx.fillStyle="#fbf7ef";ctx.fillRect(0,0,W,H);
   const script='Snell Roundhand,"Apple Chancery","Segoe Script",cursive';
 
   if(magazineVariant==="fashion"){
-    /* Fashion cover: photograph dominates, editorial type sits over/around it. */
+    /* Fashion cover: a single flat photograph with all typography overlaid in front. */
+    ctx.fillStyle="#111";ctx.fillRect(0,0,W,H);
     ctx.save();ctx.filter=filterCSS();
-    drawContain(ctx,img,22,22,W-44,H-44,"#e8e2d9");
+    drawContain(ctx,img,0,0,W,H,"#111");
     ctx.restore();
 
-    ctx.fillStyle="#111";ctx.textAlign="center";
+    /* subtle edge vignette for legibility, no subject cut-out/layering */
+    const g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,"rgba(0,0,0,.24)");
+    g.addColorStop(.30,"rgba(0,0,0,0)");
+    g.addColorStop(.72,"rgba(0,0,0,0)");
+    g.addColorStop(1,"rgba(0,0,0,.34)");
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+
+    ctx.fillStyle="#fff";ctx.textAlign="center";
     ctx.font=`700 ${landscape?122:112}px ${t.mast}`;
-    ctx.fillText((settings.magazineMasthead||"RAE").toUpperCase(),W/2,120);
+    ctx.fillText((settings.magazineMasthead||"RAE").toUpperCase(),W/2,116);
 
     ctx.font=`700 ${landscape?16:15}px ${t.sans}`;
     ctx.textAlign="left";
-    ctx.fillText(settings.magazineCaption1.toUpperCase(),44,184);
-    ctx.fillText(settings.magazineCaption2.toUpperCase(),44,H-86);
+    ctx.fillText(settings.magazineCaption1.toUpperCase(),44,182);
+    ctx.fillText(settings.magazineCaption2.toUpperCase(),44,H-88);
     ctx.textAlign="right";
-    ctx.fillText(settings.magazineCaption3.toUpperCase(),W-44,H-86);
+    ctx.fillText(settings.magazineCaption3.toUpperCase(),W-44,H-88);
 
     ctx.textAlign="left";ctx.font=`700 11px ${t.sans}`;
-    ctx.fillText(`THE BIRTHDAY EDIT · ${settings.year}`,44,H-36);
-    drawBarcode(ctx,W-190,H-72,142,45,t.sans);
+    ctx.fillText(`THE BIRTHDAY EDIT · ${settings.year}`,44,H-38);
+    drawBarcode(ctx,W-190,H-74,142,45,t.sans);
     return;
   }
 
-  /* Birthday cover: broad photo, script signature, restrained editorial details. */
-  const photoTop=landscape?136:148;
-  const photoBottom=88;
+  /* Birthday cover: warm paper around the photograph, strong masthead and script accent. */
+  ctx.fillStyle="#fbf7ef";ctx.fillRect(0,0,W,H);
+  const photoTop=landscape?150:162;
+  const photoBottom=96;
+
   ctx.save();ctx.filter=filterCSS();
-  drawContain(ctx,img,22,photoTop,W-44,H-photoTop-photoBottom,"#e8e2d9");
+  drawContain(ctx,img,30,photoTop,W-60,H-photoTop-photoBottom,"#e8e2d9");
   ctx.restore();
 
   ctx.fillStyle="#111";ctx.textAlign="center";
-  ctx.font=`700 ${landscape?82:78}px ${t.mast}`;
+  ctx.font=`700 ${landscape?78:76}px ${t.mast}`;
   ctx.fillText("BIRTHDAY",W/2,78);
   ctx.font=`400 ${landscape?34:31}px ${script}`;
-  ctx.fillText(settings.magazineMasthead||"Rae",W/2,116);
+  ctx.fillText(settings.magazineMasthead||"Rae",W/2,118);
 
   ctx.font=`700 14px ${t.sans}`;ctx.textAlign="left";
-  ctx.fillText(settings.magazineCaption1.toUpperCase(),42,photoTop+32);
-  ctx.fillText(settings.magazineCaption2.toUpperCase(),42,H-40);
+  ctx.fillText(settings.magazineCaption1.toUpperCase(),48,photoTop+34);
+  ctx.fillText(settings.magazineCaption2.toUpperCase(),48,H-44);
   ctx.textAlign="right";
-  ctx.fillText(settings.magazineCaption3.toUpperCase(),W-42,H-40);
-  drawBarcode(ctx,W-190,H-76,142,45,t.sans);
+  ctx.fillText(settings.magazineCaption3.toUpperCase(),W-48,H-44);
+  drawBarcode(ctx,W-190,H-80,142,45,t.sans);
 }
 function renderPolaroid(ctx,c,imgs){
   const W=900,H=1200;c.width=W;c.height=H;
@@ -543,6 +560,24 @@ async function saveCurrent(){
   document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
+
+function launchConfetti(){
+  const layer=$("confettiLayer");
+  if(!layer)return;
+  layer.innerHTML="";
+  const pieces=24;
+  for(let i=0;i<pieces;i++){
+    const p=document.createElement("span");
+    p.className="confetti";
+    p.style.left=(Math.random()*100)+"%";
+    p.style.animationDelay=(Math.random()*.25)+"s";
+    p.style.animationDuration=(.9+Math.random()*.45)+"s";
+    p.style.opacity=(.55+Math.random()*.35).toFixed(2);
+    layer.appendChild(p);
+  }
+  setTimeout(()=>{layer.innerHTML="";},1700);
+}
+
 function resetIdle(){
   clearTimeout(idleTimer);
   if($("review").classList.contains("active")){

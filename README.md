@@ -117,3 +117,16 @@ Keep the iPad on charge.
 - Session orientation is detected once and locked for all three photographs.
 - Landscape and portrait sessions get different output canvas proportions.
 - Saved/shared output remains high resolution regardless of on-screen preview size.
+
+
+## Final polish bundle
+- Keeps the broad photo width from the party-ready build.
+- Adds slightly more white space at the top, sides and between strip photos.
+- Adds restrained top event text on the strip.
+- Keeps the script signature/footer at the bottom.
+- No barcode on the strip.
+- Birthday Cover retains warm editorial paper treatment.
+- Fashion Cover uses white typography directly over the flat photo, with no subject cut-out or fake layering.
+- Soft confetti appears briefly after the third shot/review reveal.
+- No artificial "Preparing..." delay.
+- No brand-pack download feature.

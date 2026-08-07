@@ -45,6 +45,9 @@ let currentMode = "strip";
 let stripStyle = "white";
 let filter = "original";
 let coverIndex = 0;
+let magazineVariant="birthday";
+let adminPreviewType="strip";
+let adminOrientation="landscape";
 let idleTimer = null;
 let captureSessionId = 0;
 let audioCtx = null;
@@ -256,6 +259,10 @@ function buildControls(){
     $("filters").appendChild(b);
   });
 
+  let mv=$("magazineVariantChoices");
+  if(!mv){mv=document.createElement("div");mv.id="magazineVariantChoices";mv.className="choice-row";$("magazinePanel").insertBefore(mv,$("photoPicker"));}
+  mv.innerHTML="";
+  [["birthday","Birthday Cover"],["fashion","Fashion Cover"]].forEach(([k,l])=>{const b=document.createElement("button");b.className="choice"+(magazineVariant===k?" active":"");b.textContent=l;b.onclick=()=>{magazineVariant=k;buildControls();renderWithFade();resetIdle();};mv.appendChild(b);});
   $("photoPicker").innerHTML="";
   photos.forEach((src,i)=>{
     const b=document.createElement("button");
@@ -349,94 +356,50 @@ function typography(){
   };
 }
 function renderStrip(ctx,c,imgs){
-  /* Wider, shorter strip: better for group shots and easier to view on phones.
-     Photos themselves are preserved and never artistically re-cropped. */
-  const W=900,H=1440;c.width=W;c.height=H;
+  const first=imgs[0],landscape=first.width>=first.height,t=typography();
+  const W=landscape?760:620,innerW=W-32,ratio=first.width/first.height;
+  const naturalH=innerW/ratio,photoH=landscape?Math.min(naturalH,285):Math.min(naturalH,410);
+  const gap=9,top=18,sigH=112,H=Math.round(top+photoH*3+gap*2+sigH);
+  c.width=W;c.height=H;
   const dark=stripStyle==="black"||stripStyle==="film";
-  const bg=stripStyle==="editorial"?"#f8f2e8":dark?"#090909":"#fff";
-  const ink=dark?"#fff":"#111";
-  const t=typography();
-
+  const bg=stripStyle==="editorial"?"#f8f2e8":dark?"#090909":"#fff",ink=dark?"#fff":"#111";
   ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+  imgs.forEach((img,i)=>{ctx.save();ctx.filter=filterCSS();drawContain(ctx,img,16,top+i*(photoH+gap),innerW,photoH,dark?"#111":"#f7f4ef");ctx.restore();});
+  const base=top+photoH*3+gap*2;
   ctx.fillStyle=ink;ctx.textAlign="center";
-
-  ctx.font=`400 30px ${t.serif}`;
-  ctx.fillText(settings.title,W/2,44);
-  ctx.font=`700 12px ${t.sans}`;
-  ctx.globalAlpha=.62;
-  ctx.fillText(settings.year,W/2,70);
-  ctx.globalAlpha=1;
-
-  const mx=24;
-  const gap=8;
-  const top=88;
-  const bottom=52;
-  const pw=W-(mx*2);
-  const ph=(H-top-bottom-gap*2)/3;
-
-  imgs.forEach((img,i)=>{
-    const y=top+i*(ph+gap);
-    ctx.save();
-    ctx.filter=filterCSS();
-    drawContain(ctx,img,mx,y,pw,ph,dark?"#111":"#f7f4ef");
-    ctx.restore();
-  });
-
-  ctx.fillStyle=ink;
-  ctx.font=`400 13px ${t.serif}`;
-  ctx.fillText(settings.stripFooter,W/2,H-20);
+  const script='Snell Roundhand,"Apple Chancery","Segoe Script",cursive';
+  ctx.font=`400 ${landscape?30:27}px ${settings.theme==="party"?t.sans:script}`;
+  ctx.fillText(settings.stripFooter||settings.title,W/2,base+48);
+  ctx.font=`700 12px ${t.sans}`;ctx.fillText(settings.year,W/2,base+78);
+}
+function drawBarcode(ctx,x,y,w,h,font){
+  ctx.save();ctx.fillStyle="#fff";ctx.fillRect(x,y,w,h);ctx.strokeStyle="#111";ctx.strokeRect(x,y,w,h);ctx.fillStyle="#111";
+  for(let i=0;i<24;i++){const xx=x+7+i*(w-14)/24;ctx.fillRect(xx,y+6,i%4===0?2.4:1.2,h-17);}
+  ctx.font=`700 8px ${font}`;ctx.textAlign="center";ctx.fillText("026  2026",x+w/2,y+h-3);ctx.restore();
 }
 function renderMagazine(ctx,c,imgs){
-  const W=900,H=1200;c.width=W;c.height=H;
-  const t=typography();
-  const img=imgs[coverIndex];
+  const img=imgs[coverIndex],landscape=img.width>=img.height,t=typography();
+  const W=landscape?1100:820,H=landscape?820:1120;c.width=W;c.height=H;
+  ctx.fillStyle="#fbf7ef";ctx.fillRect(0,0,W,H);
+  const script='Snell Roundhand,"Apple Chancery","Segoe Script",cursive';
 
-  const warm=settings.theme==="luxury"||settings.theme==="romantic";
-  ctx.fillStyle=warm?"#fbf7f0":"#fff";
-  ctx.fillRect(0,0,W,H);
-
-  /* Full, intact photograph inside the cover window. */
-  ctx.save();
-  ctx.filter=filterCSS();
-  drawContain(ctx,img,34,132,832,940,"#ece7df");
-  ctx.restore();
-
-  ctx.fillStyle="#111";
-  ctx.textAlign="center";
-  ctx.font=`700 ${settings.theme==="party"?88:106}px ${t.mast}`;
-  ctx.fillText(settings.magazineMasthead,450,98);
-
-  /* Premium cover hierarchy */
-  ctx.textAlign="left";
-  ctx.font=`700 14px ${t.sans}`;
-  ctx.fillText(settings.magazineCaption1.toUpperCase(),52,168);
-
-  ctx.font=`700 15px ${t.sans}`;
-  ctx.fillText(settings.magazineCaption2.toUpperCase(),52,1028);
-
-  ctx.textAlign="right";
-  ctx.fillText(settings.magazineCaption3.toUpperCase(),848,1028);
-
-  ctx.textAlign="left";
-  ctx.font=`700 11px ${t.sans}`;
-  ctx.fillText(`ISSUE 026  ·  ${settings.year}`,52,1141);
-
-  /* Minimal barcode / issue mark */
-  const bx=710,by=1091,bw=138,bh=50;
-  ctx.fillStyle="#fff";
-  ctx.fillRect(bx,by,bw,bh);
-  ctx.strokeStyle="#111";
-  ctx.lineWidth=1;
-  ctx.strokeRect(bx,by,bw,bh);
-  ctx.fillStyle="#111";
-  for(let i=0;i<25;i++){
-    const x=bx+8+i*4.65;
-    const w=(i%4===0?2.4:(i%3===0?1.8:1.1));
-    ctx.fillRect(x,by+7,w,29);
+  if(magazineVariant==="fashion"){
+    ctx.save();ctx.filter=filterCSS();drawContain(ctx,img,28,28,W-56,H-56,"#e8e2d9");ctx.restore();
+    ctx.fillStyle="#111";ctx.textAlign="center";ctx.font=`700 ${landscape?112:104}px ${t.mast}`;
+    ctx.fillText((settings.magazineMasthead||"RAE").toUpperCase(),W/2,112);
+    ctx.font=`700 15px ${t.sans}`;ctx.textAlign="left";ctx.fillText(settings.magazineCaption1.toUpperCase(),48,175);
+    ctx.fillText(settings.magazineCaption2.toUpperCase(),48,H-82);ctx.textAlign="right";ctx.fillText(settings.magazineCaption3.toUpperCase(),W-48,H-82);
+    ctx.textAlign="left";ctx.font=`700 11px ${t.sans}`;ctx.fillText(`THE BIRTHDAY EDIT · ${settings.year}`,48,H-35);
+    drawBarcode(ctx,W-190,H-70,140,45,t.sans);return;
   }
-  ctx.font=`700 8px ${t.sans}`;
-  ctx.textAlign="center";
-  ctx.fillText("026  2026",bx+bw/2,by+45);
+
+  const py=landscape?132:142;
+  ctx.save();ctx.filter=filterCSS();drawContain(ctx,img,32,py,W-64,H-py-82,"#e8e2d9");ctx.restore();
+  ctx.fillStyle="#111";ctx.textAlign="center";ctx.font=`700 ${landscape?78:82}px ${t.mast}`;ctx.fillText("BIRTHDAY",W/2,78);
+  ctx.font=`400 ${landscape?31:32}px ${script}`;ctx.fillText(settings.magazineMasthead||"Rae",W/2,113);
+  ctx.font=`700 14px ${t.sans}`;ctx.textAlign="left";ctx.fillText(settings.magazineCaption1.toUpperCase(),50,py+34);
+  ctx.fillText(settings.magazineCaption2.toUpperCase(),50,H-38);ctx.textAlign="right";ctx.fillText(settings.magazineCaption3.toUpperCase(),W-50,H-38);
+  drawBarcode(ctx,W-190,H-74,140,44,t.sans);
 }
 function renderPolaroid(ctx,c,imgs){
   const W=900,H=1200;c.width=W;c.height=H;
@@ -536,8 +499,36 @@ $("nextGuestBtn").onclick=beginSession;
 $("shareBtn").onclick=shareCurrent;
 $("saveBtn").onclick=saveCurrent;
 
-$("openSettings").onclick=()=>{applySettings();showScreen("settings");};
+$("openSettings").onclick=()=>{applySettings();showScreen("settings");setTimeout(renderAdminPreview,0);};
 $("closeSettings").onclick=()=>showScreen("welcome");
+
+
+function draft(){
+  return {title:$("setTitle").value||DEFAULTS.title,year:$("setYear").value,stripFooter:$("setStripFooter").value,
+  theme:$("setTheme").value,mast:$("setMagazineMasthead").value||"RAE",c1:$("setMagazineCaption1").value,c2:$("setMagazineCaption2").value,c3:$("setMagazineCaption3").value};
+}
+function renderAdminPreview(){
+  const d=draft(),c=$("adminPreviewCanvas"),x=c.getContext("2d"),land=adminOrientation==="landscape";
+  const W=land?620:410,H=land?440:600;c.width=W;c.height=H;x.fillStyle="#fbf7ef";x.fillRect(0,0,W,H);
+  const serif='Didot,"Bodoni 72",Georgia,serif',sans='"Avenir Next",Arial,sans-serif',script='Snell Roundhand,"Apple Chancery","Segoe Script",cursive';
+  if(adminPreviewType==="strip"){
+    const m=15,g=6,top=14,sig=72,ph=(H-top-sig-g*2)/3;
+    for(let i=0;i<3;i++){x.fillStyle="#e2dcd3";x.fillRect(m,top+i*(ph+g),W-m*2,ph);}
+    x.fillStyle="#111";x.textAlign="center";x.font=`400 ${land?23:20}px ${d.theme==="party"?sans:script}`;x.fillText(d.stripFooter||d.title,W/2,H-38);
+    x.font=`700 9px ${sans}`;x.fillText(d.year,W/2,H-18);return;
+  }
+  if(adminPreviewType==="birthday"){
+    x.fillStyle="#111";x.textAlign="center";x.font=`700 ${land?43:38}px ${serif}`;x.fillText("BIRTHDAY",W/2,46);
+    x.font=`400 ${land?20:18}px ${script}`;x.fillText(d.mast,W/2,70);
+    x.fillStyle="#e2dcd3";x.fillRect(16,86,W-32,H-135);
+    x.fillStyle="#111";x.font=`700 8px ${sans}`;x.textAlign="left";x.fillText((d.c1||"").toUpperCase(),27,106);x.fillText((d.c2||"").toUpperCase(),27,H-24);x.textAlign="right";x.fillText((d.c3||"").toUpperCase(),W-27,H-24);return;
+  }
+  x.fillStyle="#e2dcd3";x.fillRect(15,15,W-30,H-30);x.fillStyle="#111";x.textAlign="center";x.font=`700 ${land?58:48}px ${serif}`;x.fillText(d.mast.toUpperCase(),W/2,68);
+  x.font=`700 8px ${sans}`;x.textAlign="left";x.fillText((d.c1||"").toUpperCase(),28,100);x.fillText((d.c2||"").toUpperCase(),28,H-40);x.textAlign="right";x.fillText((d.c3||"").toUpperCase(),W-28,H-40);
+}
+document.querySelectorAll(".admin-p-tab").forEach(b=>b.addEventListener("click",()=>{adminPreviewType=b.dataset.p;document.querySelectorAll(".admin-p-tab").forEach(q=>q.classList.toggle("active",q===b));renderAdminPreview();}));
+document.querySelectorAll(".admin-o-tab").forEach(b=>b.addEventListener("click",()=>{adminOrientation=b.dataset.o;document.querySelectorAll(".admin-o-tab").forEach(q=>q.classList.toggle("active",q===b));renderAdminPreview();}));
+["setTitle","setYear","setStripFooter","setTheme","setMagazineMasthead","setMagazineCaption1","setMagazineCaption2","setMagazineCaption3"].forEach(id=>$(id).addEventListener("input",renderAdminPreview));
 
 $("saveSettings").onclick=()=>{
   settings={

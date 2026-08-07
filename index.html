@@ -146,7 +146,21 @@
       <label class="toggle"><input id="setStoryEnabled" type="checkbox"><span>Enable Story</span></label>
     </div>
 
-    <div class="settings-actions">
+    <div class="admin-preview-box">
+  <p class="eyebrow">LIVE PREVIEW</p>
+  <div class="admin-preview-tabs">
+    <button type="button" class="admin-p-tab active" data-p="strip">Strip</button>
+    <button type="button" class="admin-p-tab" data-p="birthday">Birthday Cover</button>
+    <button type="button" class="admin-p-tab" data-p="fashion">Fashion Cover</button>
+  </div>
+  <div class="admin-orientation">
+    <button type="button" class="admin-o-tab active" data-o="landscape">Landscape</button>
+    <button type="button" class="admin-o-tab" data-o="portrait">Portrait</button>
+  </div>
+  <canvas id="adminPreviewCanvas"></canvas>
+  <p class="admin-preview-note">Photo areas are placeholders. Text updates as you type.</p>
+</div>
+<div class="settings-actions">
       <button id="resetSettings" class="retake-btn">Reset defaults</button>
       <button id="saveSettings" class="primary-btn">Save settings</button>
     </div>

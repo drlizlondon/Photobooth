@@ -92,3 +92,13 @@ Keep the iPad on charge.
 - Larger review preview with a smaller control panel
 - Preserves original photo framing
 - All 1.0 guest/admin behaviour retained
+
+
+## 1.2
+- Smart landscape/portrait strip composition
+- Luxury script signature at the bottom of the strip
+- Birthday Cover and Fashion Cover magazine variants
+- Magazine remembers the selected cover photo
+- Live admin previews for Strip, Birthday Cover and Fashion Cover
+- Admin preview can switch between landscape and portrait placeholders
+- Host wording updates the preview live

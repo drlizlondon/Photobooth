@@ -102,3 +102,18 @@ Keep the iPad on charge.
 - Live admin previews for Strip, Birthday Cover and Fashion Cover
 - Admin preview can switch between landscape and portrait placeholders
 - Host wording updates the preview live
+
+
+## Party-ready build
+- New guest always starts on White Strip + Original filter.
+- Magazine never carries over from the previous guest.
+- Magazine uses the three current guest photos and asks them to pick a cover.
+- Birthday Cover and Fashion Cover remember the selected photo within that guest session.
+- Strip uses much broader Daisy & Jack-style photo proportions.
+- No barcode on the strip.
+- Luxury strip signature remains script/cursive at the bottom.
+- Magazine keeps editorial barcode/details.
+- Camera preview uses the full frame with no centre composition box.
+- Session orientation is detected once and locked for all three photographs.
+- Landscape and portrait sessions get different output canvas proportions.
+- Saved/shared output remains high resolution regardless of on-screen preview size.

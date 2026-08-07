@@ -48,6 +48,7 @@ let coverIndex = 0;
 let magazineVariant="birthday";
 let adminPreviewType="strip";
 let adminOrientation="landscape";
+let sessionOrientation="landscape";
 let idleTimer = null;
 let captureSessionId = 0;
 let audioCtx = null;
@@ -106,6 +107,9 @@ async function startCamera(){
   $("video").srcObject=stream;
   $("video").classList.toggle("mirror",settings.mirror);
   await $("video").play();
+  const vw=$("video").videoWidth||window.innerWidth;
+  const vh=$("video").videoHeight||window.innerHeight;
+  sessionOrientation=(vw>=vh)?"landscape":"portrait";
 }
 function stopCamera(){
   if(stream){
@@ -199,6 +203,11 @@ async function beginSession(){
   stripStyle="white";
   filter="original";
   coverIndex=0;
+  magazineVariant="birthday";
+  document.querySelectorAll(".version-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode==="strip"));
+  document.querySelectorAll(".mode-panel").forEach(p=>p.classList.remove("active"));
+  $("stripPanel").classList.add("active");
+  $("reviewHeading").textContent="Your strip";
   initAudio();
   showScreen("camera");
 
@@ -284,7 +293,11 @@ function switchMode(mode){
   document.querySelectorAll(".version-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode===mode));
   document.querySelectorAll(".mode-panel").forEach(p=>p.classList.remove("active"));
   if(mode==="strip")$("stripPanel").classList.add("active");
-  if(mode==="magazine")$("magazinePanel").classList.add("active");
+  if(mode==="magazine"){
+    $("magazinePanel").classList.add("active");
+    const label=$("magazinePanel").querySelector(".panel-label");
+    if(label)label.textContent="Pick your cover";
+  }
 
   $("reviewHeading").textContent=({
     strip:"Your strip",
@@ -356,21 +369,43 @@ function typography(){
   };
 }
 function renderStrip(ctx,c,imgs){
-  const first=imgs[0],landscape=first.width>=first.height,t=typography();
-  const W=landscape?760:620,innerW=W-32,ratio=first.width/first.height;
-  const naturalH=innerW/ratio,photoH=landscape?Math.min(naturalH,285):Math.min(naturalH,410);
-  const gap=9,top=18,sigH=112,H=Math.round(top+photoH*3+gap*2+sigH);
+  const first=imgs[0],landscape=sessionOrientation==="landscape",t=typography();
+
+  /* Broad physical-booth proportions. The photograph is never cropped.
+     The paper dimensions adapt to the session orientation. */
+  const W=landscape?900:680;
+  const side=14;
+  const innerW=W-side*2;
+  const sourceRatio=first.width/first.height;
+  const naturalH=innerW/sourceRatio;
+  const photoH=naturalH;
+  const gap=8;
+  const top=14;
+  const signatureH=landscape?122:112;
+  const H=Math.round(top+photoH*3+gap*2+signatureH);
+
   c.width=W;c.height=H;
   const dark=stripStyle==="black"||stripStyle==="film";
-  const bg=stripStyle==="editorial"?"#f8f2e8":dark?"#090909":"#fff",ink=dark?"#fff":"#111";
+  const bg=stripStyle==="editorial"?"#f8f2e8":dark?"#090909":"#fff";
+  const ink=dark?"#fff":"#111";
   ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
-  imgs.forEach((img,i)=>{ctx.save();ctx.filter=filterCSS();drawContain(ctx,img,16,top+i*(photoH+gap),innerW,photoH,dark?"#111":"#f7f4ef");ctx.restore();});
+
+  imgs.forEach((img,i)=>{
+    const y=top+i*(photoH+gap);
+    ctx.save();
+    ctx.filter=filterCSS();
+    drawContain(ctx,img,side,y,innerW,photoH,dark?"#111":"#f7f4ef");
+    ctx.restore();
+  });
+
   const base=top+photoH*3+gap*2;
   ctx.fillStyle=ink;ctx.textAlign="center";
   const script='Snell Roundhand,"Apple Chancery","Segoe Script",cursive';
-  ctx.font=`400 ${landscape?30:27}px ${settings.theme==="party"?t.sans:script}`;
-  ctx.fillText(settings.stripFooter||settings.title,W/2,base+48);
-  ctx.font=`700 12px ${t.sans}`;ctx.fillText(settings.year,W/2,base+78);
+  const signatureFont=settings.theme==="party"?t.sans:script;
+  ctx.font=`400 ${landscape?34:30}px ${signatureFont}`;
+  ctx.fillText(settings.stripFooter||settings.title,W/2,base+52);
+  ctx.font=`700 12px ${t.sans}`;
+  ctx.fillText(settings.year,W/2,base+82);
 }
 function drawBarcode(ctx,x,y,w,h,font){
   ctx.save();ctx.fillStyle="#fff";ctx.fillRect(x,y,w,h);ctx.strokeStyle="#111";ctx.strokeRect(x,y,w,h);ctx.fillStyle="#111";
@@ -378,28 +413,56 @@ function drawBarcode(ctx,x,y,w,h,font){
   ctx.font=`700 8px ${font}`;ctx.textAlign="center";ctx.fillText("026  2026",x+w/2,y+h-3);ctx.restore();
 }
 function renderMagazine(ctx,c,imgs){
-  const img=imgs[coverIndex],landscape=img.width>=img.height,t=typography();
-  const W=landscape?1100:820,H=landscape?820:1120;c.width=W;c.height=H;
+  const img=imgs[Math.max(0,Math.min(coverIndex,imgs.length-1))];
+  const landscape=sessionOrientation==="landscape";
+  const t=typography();
+  const W=landscape?1200:860,H=landscape?900:1180;
+  c.width=W;c.height=H;
   ctx.fillStyle="#fbf7ef";ctx.fillRect(0,0,W,H);
   const script='Snell Roundhand,"Apple Chancery","Segoe Script",cursive';
 
   if(magazineVariant==="fashion"){
-    ctx.save();ctx.filter=filterCSS();drawContain(ctx,img,28,28,W-56,H-56,"#e8e2d9");ctx.restore();
-    ctx.fillStyle="#111";ctx.textAlign="center";ctx.font=`700 ${landscape?112:104}px ${t.mast}`;
-    ctx.fillText((settings.magazineMasthead||"RAE").toUpperCase(),W/2,112);
-    ctx.font=`700 15px ${t.sans}`;ctx.textAlign="left";ctx.fillText(settings.magazineCaption1.toUpperCase(),48,175);
-    ctx.fillText(settings.magazineCaption2.toUpperCase(),48,H-82);ctx.textAlign="right";ctx.fillText(settings.magazineCaption3.toUpperCase(),W-48,H-82);
-    ctx.textAlign="left";ctx.font=`700 11px ${t.sans}`;ctx.fillText(`THE BIRTHDAY EDIT · ${settings.year}`,48,H-35);
-    drawBarcode(ctx,W-190,H-70,140,45,t.sans);return;
+    /* Fashion cover: photograph dominates, editorial type sits over/around it. */
+    ctx.save();ctx.filter=filterCSS();
+    drawContain(ctx,img,22,22,W-44,H-44,"#e8e2d9");
+    ctx.restore();
+
+    ctx.fillStyle="#111";ctx.textAlign="center";
+    ctx.font=`700 ${landscape?122:112}px ${t.mast}`;
+    ctx.fillText((settings.magazineMasthead||"RAE").toUpperCase(),W/2,120);
+
+    ctx.font=`700 ${landscape?16:15}px ${t.sans}`;
+    ctx.textAlign="left";
+    ctx.fillText(settings.magazineCaption1.toUpperCase(),44,184);
+    ctx.fillText(settings.magazineCaption2.toUpperCase(),44,H-86);
+    ctx.textAlign="right";
+    ctx.fillText(settings.magazineCaption3.toUpperCase(),W-44,H-86);
+
+    ctx.textAlign="left";ctx.font=`700 11px ${t.sans}`;
+    ctx.fillText(`THE BIRTHDAY EDIT · ${settings.year}`,44,H-36);
+    drawBarcode(ctx,W-190,H-72,142,45,t.sans);
+    return;
   }
 
-  const py=landscape?132:142;
-  ctx.save();ctx.filter=filterCSS();drawContain(ctx,img,32,py,W-64,H-py-82,"#e8e2d9");ctx.restore();
-  ctx.fillStyle="#111";ctx.textAlign="center";ctx.font=`700 ${landscape?78:82}px ${t.mast}`;ctx.fillText("BIRTHDAY",W/2,78);
-  ctx.font=`400 ${landscape?31:32}px ${script}`;ctx.fillText(settings.magazineMasthead||"Rae",W/2,113);
-  ctx.font=`700 14px ${t.sans}`;ctx.textAlign="left";ctx.fillText(settings.magazineCaption1.toUpperCase(),50,py+34);
-  ctx.fillText(settings.magazineCaption2.toUpperCase(),50,H-38);ctx.textAlign="right";ctx.fillText(settings.magazineCaption3.toUpperCase(),W-50,H-38);
-  drawBarcode(ctx,W-190,H-74,140,44,t.sans);
+  /* Birthday cover: broad photo, script signature, restrained editorial details. */
+  const photoTop=landscape?136:148;
+  const photoBottom=88;
+  ctx.save();ctx.filter=filterCSS();
+  drawContain(ctx,img,22,photoTop,W-44,H-photoTop-photoBottom,"#e8e2d9");
+  ctx.restore();
+
+  ctx.fillStyle="#111";ctx.textAlign="center";
+  ctx.font=`700 ${landscape?82:78}px ${t.mast}`;
+  ctx.fillText("BIRTHDAY",W/2,78);
+  ctx.font=`400 ${landscape?34:31}px ${script}`;
+  ctx.fillText(settings.magazineMasthead||"Rae",W/2,116);
+
+  ctx.font=`700 14px ${t.sans}`;ctx.textAlign="left";
+  ctx.fillText(settings.magazineCaption1.toUpperCase(),42,photoTop+32);
+  ctx.fillText(settings.magazineCaption2.toUpperCase(),42,H-40);
+  ctx.textAlign="right";
+  ctx.fillText(settings.magazineCaption3.toUpperCase(),W-42,H-40);
+  drawBarcode(ctx,W-190,H-76,142,45,t.sans);
 }
 function renderPolaroid(ctx,c,imgs){
   const W=900,H=1200;c.width=W;c.height=H;
@@ -484,7 +547,7 @@ function resetIdle(){
   clearTimeout(idleTimer);
   if($("review").classList.contains("active")){
     idleTimer=setTimeout(async()=>{
-      photos=[];
+      photos=[];currentMode="strip";stripStyle="white";filter="original";coverIndex=0;magazineVariant="birthday";
       showScreen("timeout");
       await delay(700);
       showScreen("welcome");

@@ -1,5 +1,7 @@
 const DEFAULTS = {
   title:"Rae's 26th Birthday",
+  stripTopLine:"THE BIRTHDAY ISSUE",
+  stripSecondLine:"Rae's 26th Birthday",
   year:"2026",
   stripFooter:"Rae's Birthday • 2026",
   theme:"luxury",
@@ -26,7 +28,7 @@ const FILTERS = [
   ["original","Original"],
   ["bw","B&W"],
   ["warm","Warm"],
-  ["film","Film"],
+  ["vintage","Vintage"],
   ["glow","Glow"],
   ["punchy","Party"]
 ];
@@ -68,6 +70,8 @@ function applySettings(){
   document.documentElement.style.setProperty("--accent",settings.accent);
 
   $("setTitle").value=settings.title;
+  $("setStripTopLine").value=settings.stripTopLine;
+  $("setStripSecondLine").value=settings.stripSecondLine;
   $("setYear").value=settings.year;
   $("setStripFooter").value=settings.stripFooter;
   $("setTheme").value=settings.theme;
@@ -318,7 +322,7 @@ function filterCSS(){
     original:"none",
     bw:"grayscale(1) contrast(1.05)",
     warm:"sepia(.10) saturate(1.12) brightness(1.03)",
-    film:"sepia(.18) saturate(.78) contrast(.97) brightness(1.03)",
+    vintage:"sepia(.18) saturate(.78) contrast(.97) brightness(1.03)",
     glow:"brightness(1.07) contrast(.92) saturate(.95)",
     punchy:"contrast(1.18) saturate(1.16)"
   }[filter]||"none";
@@ -369,20 +373,32 @@ function typography(){
     sans:'"Avenir Next",Arial,sans-serif'
   };
 }
+
+function drawFilmFrameDecor(ctx,W,H,ink){
+  ctx.save();
+  const holeW=18,holeH=12,step=30;
+  ctx.fillStyle=ink;
+  for(let x=18;x<W-18;x+=step){
+    ctx.fillRect(x,6,holeW,holeH);
+    ctx.fillRect(x,H-18,holeW,holeH);
+  }
+  ctx.restore();
+}
+
 function renderStrip(ctx,c,imgs){
   const first=imgs[0],landscape=sessionOrientation==="landscape",t=typography();
 
-  /* Broad physical-booth proportions with a touch more paper around each frame.
+  /* Broad physical-booth proportions with a real editable header zone.
      The photograph itself is never cropped or altered. */
   const W=landscape?900:680;
-  const side=22;
+  const side=24;
   const innerW=W-side*2;
   const sourceRatio=first.width/first.height;
   const photoH=innerW/sourceRatio;
-  const gap=16;
-  const top=28;
-  const signatureH=landscape?132:122;
-  const H=Math.round(top+photoH*3+gap*2+signatureH);
+  const gap=18;
+  const headerH=landscape?118:108;
+  const signatureH=landscape?136:126;
+  const H=Math.round(headerH+photoH*3+gap*2+signatureH);
 
   c.width=W;c.height=H;
   const dark=stripStyle==="black"||stripStyle==="film";
@@ -390,29 +406,43 @@ function renderStrip(ctx,c,imgs){
   const ink=dark?"#fff":"#111";
   ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
 
-  /* restrained top identity */
+  if(stripStyle==="editorial"){
+    ctx.strokeStyle=ink;ctx.globalAlpha=.22;ctx.lineWidth=1;
+    ctx.strokeRect(10,10,W-20,H-20);ctx.globalAlpha=1;
+  }
+  if(stripStyle==="film"){
+    drawFilmFrameDecor(ctx,W,H,ink);
+  }
+
+  /* Editable, art-directed header */
   ctx.fillStyle=ink;ctx.textAlign="center";
+  ctx.font=`700 12px ${t.sans}`;
+  ctx.globalAlpha=.72;
+  ctx.fillText((settings.stripTopLine||"THE BIRTHDAY ISSUE").toUpperCase(),W/2,28);
+  ctx.globalAlpha=1;
+  ctx.font=`400 ${landscape?27:24}px ${t.serif}`;
+  ctx.fillText(settings.stripSecondLine||settings.title,W/2,64);
   ctx.font=`700 11px ${t.sans}`;
-  ctx.globalAlpha=.7;
-  ctx.fillText(settings.title.toUpperCase(),W/2,14);
+  ctx.globalAlpha=.58;
+  ctx.fillText(settings.year,W/2,88);
   ctx.globalAlpha=1;
 
   imgs.forEach((img,i)=>{
-    const y=top+i*(photoH+gap);
+    const y=headerH+i*(photoH+gap);
     ctx.save();
     ctx.filter=filterCSS();
     drawContain(ctx,img,side,y,innerW,photoH,dark?"#111":"#f7f4ef");
     ctx.restore();
   });
 
-  const base=top+photoH*3+gap*2;
+  const base=headerH+photoH*3+gap*2;
   ctx.fillStyle=ink;ctx.textAlign="center";
   const script='Snell Roundhand,"Apple Chancery","Segoe Script",cursive';
   const signatureFont=settings.theme==="party"?t.sans:script;
-  ctx.font=`400 ${landscape?34:30}px ${signatureFont}`;
-  ctx.fillText(settings.stripFooter||settings.title,W/2,base+56);
+  ctx.font=`400 ${landscape?35:31}px ${signatureFont}`;
+  ctx.fillText(settings.stripFooter||settings.title,W/2,base+60);
   ctx.font=`700 12px ${t.sans}`;
-  ctx.fillText(settings.year,W/2,base+88);
+  ctx.fillText(settings.year,W/2,base+94);
 }
 function drawBarcode(ctx,x,y,w,h,font){
   ctx.save();ctx.fillStyle="#fff";ctx.fillRect(x,y,w,h);ctx.strokeStyle="#111";ctx.strokeRect(x,y,w,h);ctx.fillStyle="#111";
@@ -602,7 +632,7 @@ $("closeSettings").onclick=()=>showScreen("welcome");
 
 
 function draft(){
-  return {title:$("setTitle").value||DEFAULTS.title,year:$("setYear").value,stripFooter:$("setStripFooter").value,
+  return {title:$("setTitle").value||DEFAULTS.title,stripTopLine:$("setStripTopLine").value,stripSecondLine:$("setStripSecondLine").value,year:$("setYear").value,stripFooter:$("setStripFooter").value,
   theme:$("setTheme").value,mast:$("setMagazineMasthead").value||"RAE",c1:$("setMagazineCaption1").value,c2:$("setMagazineCaption2").value,c3:$("setMagazineCaption3").value};
 }
 function renderAdminPreview(){
@@ -610,9 +640,19 @@ function renderAdminPreview(){
   const W=land?620:410,H=land?440:600;c.width=W;c.height=H;x.fillStyle="#fbf7ef";x.fillRect(0,0,W,H);
   const serif='Didot,"Bodoni 72",Georgia,serif',sans='"Avenir Next",Arial,sans-serif',script='Snell Roundhand,"Apple Chancery","Segoe Script",cursive';
   if(adminPreviewType==="strip"){
-    const m=15,g=6,top=14,sig=72,ph=(H-top-sig-g*2)/3;
-    for(let i=0;i<3;i++){x.fillStyle="#e2dcd3";x.fillRect(m,top+i*(ph+g),W-m*2,ph);}
-    x.fillStyle="#111";x.textAlign="center";x.font=`400 ${land?23:20}px ${d.theme==="party"?sans:script}`;x.fillText(d.stripFooter||d.title,W/2,H-38);
+    const m=15,g=9,topHeader=60,sig=76,ph=(H-topHeader-sig-g*2)/3;
+    x.fillStyle="#111";x.textAlign="center";
+    x.font=`700 9px ${sans}`;x.fillText((d.stripTopLine||"THE BIRTHDAY ISSUE").toUpperCase(),W/2,20);
+    x.font=`400 ${land?17:15}px ${serif}`;x.fillText(d.stripSecondLine||d.title,W/2,42);
+
+    for(let i=0;i<3;i++){
+      x.fillStyle="#e2dcd3";
+      x.fillRect(m,topHeader+i*(ph+g),W-m*2,ph);
+    }
+
+    x.fillStyle="#111";x.textAlign="center";
+    x.font=`400 ${land?23:20}px ${d.theme==="party"?sans:script}`;
+    x.fillText(d.stripFooter||d.title,W/2,H-38);
     x.font=`700 9px ${sans}`;x.fillText(d.year,W/2,H-18);return;
   }
   if(adminPreviewType==="birthday"){
@@ -632,6 +672,8 @@ $("saveSettings").onclick=()=>{
   settings={
     ...settings,
     title:$("setTitle").value.trim()||DEFAULTS.title,
+    stripTopLine:$("setStripTopLine").value.trim(),
+    stripSecondLine:$("setStripSecondLine").value.trim(),
     year:$("setYear").value.trim(),
     stripFooter:$("setStripFooter").value.trim(),
     theme:$("setTheme").value,

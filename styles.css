@@ -119,3 +119,7 @@ video.mirror{transform:scaleX(-1)}
   to{transform:translateY(46svh) rotate(420deg)}
 }
 .review-grid{position:relative;z-index:3}
+
+/* Header-editable release */
+.settings-grid label{min-width:0}
+.settings-grid input[type="text"]{width:100%}

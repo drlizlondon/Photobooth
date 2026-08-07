@@ -130,3 +130,14 @@ Keep the iPad on charge.
 - Soft confetti appears briefly after the third shot/review reveal.
 - No artificial "Preparing..." delay.
 - No brand-pack download feature.
+
+
+## Header-editable release
+- Adds distinct editable Strip top line and Strip second line.
+- Keeps Event title separate for the welcome screen.
+- Adds more white space above the strip photos for a stronger header.
+- Header preview updates live in Admin.
+- White / Black / Editorial / Film frame styles remain distinct.
+- Film is a frame treatment, while Vintage is the separate filter.
+- Filter list remains independent from frame style.
+- Strip footer remains independently editable in script.

@@ -7,20 +7,23 @@ const DEFAULTS = {
   stripSignature:"Rae's 26th Birthday",
   stripDate:"2026",
 
-  birthdayMasthead:"BIRTHDAY",
-  birthdayScript:"Rae's 26th",
-  birthdayLine1:"THE BIRTHDAY ISSUE",
-  birthdayLine2:"CELEBRATING 26 YEARS OF RAE",
-  birthdayLine3:"ONE NIGHT TO REMEMBER",
-  birthdayIssue:"CELEBRATION EDITION · 2026",
-
-  fashionMasthead:"RAE",
-  fashionTop:"THE BIRTHDAY EDIT",
-  fashionFeature1:"ONE NIGHT ONLY",
-  fashionFeature2:"LONDON · 2026",
-  fashionLarge:"TWENTY SIX",
-  fashionBottom:"THE QUEEN OF HER DAY",
-  fashionIssue:"SPECIAL BIRTHDAY EDITION",
+  /* Cover copy: blank means "generate it from the event title". */
+  coverMasthead:"",
+  coverOccasion:"",
+  coverScript:"",
+  coverSkyline1:"",
+  coverSkyline2:"",
+  coverSkyline3:"",
+  coverF1Title:"",
+  coverF1Dek:"",
+  coverF2Title:"",
+  coverF2Dek:"",
+  coverF3Title:"",
+  coverF3Dek:"",
+  coverBig:"",
+  coverBigDek:"",
+  coverFooter:"",
+  coverBarcode:"",
 
   accent:"#d86c8f",
   countdown:3,
@@ -42,7 +45,7 @@ let currentMode="strip";
 let frameStyle="white";
 let filterStyle="original";
 let coverIndex=null;
-let magazineStyle="fashion";
+let magazineStyle="editorial";
 let sessionOrientation="landscape";
 let captureSessionId=0;
 let idleTimer=null;
@@ -53,8 +56,35 @@ let adminOrientation="landscape";
 const $=id=>document.getElementById(id);
 const screens=["welcome","camera","review","timeout","settings"];
 
+/* Copy written under the old two-cover settings moves to the unified cover
+   model — but only where the host actually edited it. Anything left at an old
+   shipped default becomes blank, so it regenerates from the event title. */
+const LEGACY_COPY=[
+  ["fashionMasthead","coverMasthead","RAE"],
+  ["birthdayMasthead","coverOccasion","BIRTHDAY"],
+  ["birthdayScript","coverScript","Rae's 26th"],
+  ["fashionTop","coverSkyline1","THE BIRTHDAY EDIT"],
+  ["fashionFeature2","coverSkyline2","LONDON · 2026"],
+  ["fashionIssue","coverSkyline3","SPECIAL BIRTHDAY EDITION"],
+  ["fashionFeature1","coverF1Title","ONE NIGHT ONLY"],
+  ["fashionBottom","coverF2Title","THE QUEEN OF HER DAY"],
+  ["birthdayLine2","coverF3Title","CELEBRATING 26 YEARS OF RAE"],
+  ["fashionLarge","coverBig","TWENTY SIX"],
+  ["birthdayLine3","coverBigDek","ONE NIGHT TO REMEMBER"],
+  ["birthdayLine1","coverFooter","THE BIRTHDAY ISSUE"]
+];
+function migrateSettings(raw){
+  const out={...raw};
+  LEGACY_COPY.forEach(([oldKey,newKey,oldDefault])=>{
+    if(typeof out[newKey]==="string")return;
+    const v=String(raw[oldKey]||"").trim();
+    out[newKey]=v&&v!==oldDefault?v:"";
+  });
+  LEGACY_COPY.forEach(([oldKey])=>delete out[oldKey]);
+  return out;
+}
 function loadSettings(){
-  try{return {...DEFAULTS,...JSON.parse(localStorage.getItem("raePhotoBoothLiveSettings")||"{}")};}
+  try{return {...DEFAULTS,...migrateSettings(JSON.parse(localStorage.getItem("raePhotoBoothLiveSettings")||"{}"))};}
   catch{return {...DEFAULTS};}
 }
 
@@ -146,11 +176,11 @@ function fillSettingsUI(){
 
   const map={
     setEventTitle:"eventTitle",setDate:"date",
-    setStripTop:"stripTop",setStripSecond:"stripSecond",setStripSignature:"stripSignature",setStripDate:"stripDate",
-    setBirthdayMasthead:"birthdayMasthead",setBirthdayScript:"birthdayScript",setBirthdayLine1:"birthdayLine1",setBirthdayLine2:"birthdayLine2",setBirthdayLine3:"birthdayLine3",setBirthdayIssue:"birthdayIssue",
-    setFashionMasthead:"fashionMasthead",setFashionTop:"fashionTop",setFashionFeature1:"fashionFeature1",setFashionFeature2:"fashionFeature2",setFashionLarge:"fashionLarge",setFashionBottom:"fashionBottom",setFashionIssue:"fashionIssue"
+    setStripTop:"stripTop",setStripSecond:"stripSecond",setStripSignature:"stripSignature",setStripDate:"stripDate"
   };
+  COVER_FIELDS.forEach(([id,key])=>map[id]=key);
   Object.entries(map).forEach(([id,key])=>$(id).value=settings[key]);
+  refreshCoverPlaceholders();
   $("setAccent").value=settings.accent;
   $("setCountdown").value=String(settings.countdown);
   $("setMirror").checked=settings.mirror;
@@ -160,8 +190,23 @@ function fillSettingsUI(){
   $("setConfetti").checked=settings.confetti;
 }
 
+/* [input id, settings key] for every editable cover line. */
+const COVER_FIELDS=Covers.copyKeys.map(k=>{
+  const key="cover"+k.charAt(0).toUpperCase()+k.slice(1);
+  return ["set"+key.charAt(0).toUpperCase()+key.slice(1),key];
+});
+
+/* Blank fields show what the cover will auto-generate. */
+function refreshCoverPlaceholders(){
+  const derived=Covers.derive({eventTitle:$("setEventTitle").value.trim()||DEFAULTS.eventTitle,date:$("setDate").value.trim()});
+  COVER_FIELDS.forEach(([id,key],i)=>{
+    const el=$(id);if(!el)return;
+    el.placeholder=derived[Covers.copyKeys[i]]||"";
+  });
+}
+
 function draftSettings(){
-  return {
+  const draft={
     ...settings,
     eventTitle:$("setEventTitle").value.trim()||DEFAULTS.eventTitle,
     date:$("setDate").value.trim(),
@@ -169,19 +214,6 @@ function draftSettings(){
     stripSecond:$("setStripSecond").value.trim(),
     stripSignature:$("setStripSignature").value.trim(),
     stripDate:$("setStripDate").value.trim(),
-    birthdayMasthead:$("setBirthdayMasthead").value.trim(),
-    birthdayScript:$("setBirthdayScript").value.trim(),
-    birthdayLine1:$("setBirthdayLine1").value.trim(),
-    birthdayLine2:$("setBirthdayLine2").value.trim(),
-    birthdayLine3:$("setBirthdayLine3").value.trim(),
-    birthdayIssue:$("setBirthdayIssue").value.trim(),
-    fashionMasthead:$("setFashionMasthead").value.trim(),
-    fashionTop:$("setFashionTop").value.trim(),
-    fashionFeature1:$("setFashionFeature1").value.trim(),
-    fashionFeature2:$("setFashionFeature2").value.trim(),
-    fashionLarge:$("setFashionLarge").value.trim(),
-    fashionBottom:$("setFashionBottom").value.trim(),
-    fashionIssue:$("setFashionIssue").value.trim(),
     accent:$("setAccent").value,
     countdown:Number($("setCountdown").value),
     mirror:$("setMirror").checked,
@@ -190,6 +222,8 @@ function draftSettings(){
     flash:$("setFlash").checked,
     confetti:$("setConfetti").checked
   };
+  COVER_FIELDS.forEach(([id,key])=>{draft[key]=$(id).value.trim();});
+  return draft;
 }
 
 async function startCamera(){
@@ -267,7 +301,7 @@ function resetCreativeState(){
   frameStyle="white";
   filterStyle="original";
   coverIndex=null;
-  magazineStyle="fashion";
+  magazineStyle="editorial";
   document.querySelectorAll(".mode-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode==="strip"));
   $("stripControls").classList.add("active");
   $("magazineControls").classList.remove("active");
@@ -367,14 +401,44 @@ function buildReviewControls(){
   });
 
   $("magazineStyleChoices").innerHTML="";
-  [["fashion","Premium Cover"],["birthday","Birthday Edition"]].forEach(([key,label])=>{
+  Covers.TEMPLATES.forEach(tpl=>{
     const b=document.createElement("button");
-    b.className="mag-style-choice"+(magazineStyle===key?" active":"");
-    const pv=document.createElement("div");pv.className="mag-style-preview";pv.textContent=key==="birthday"?"BIRTHDAY":"RAE";
-    const tx=document.createElement("span");tx.textContent=label;
-    b.append(pv,tx);
-    b.onclick=()=>{magazineStyle=key;buildReviewControls();renderWithFade();resetIdle();};
+    b.className="mag-style-choice"+(magazineStyle===tpl.key?" active":"");
+    b.type="button";
+    const cv=document.createElement("canvas");
+    cv.className="mag-style-preview";
+    cv.dataset.template=tpl.key;
+    const tx=document.createElement("span");tx.textContent=tpl.label;
+    const hint=document.createElement("small");hint.textContent=tpl.hint;
+    b.append(cv,tx,hint);
+    b.onclick=()=>{magazineStyle=tpl.key;buildReviewControls();renderWithFade();resetIdle();};
     $("magazineStyleChoices").appendChild(b);
+  });
+  renderStyleThumbs();
+}
+
+/* Live thumbnails of the guest's own chosen photo in every template. */
+let thumbToken=0;
+async function renderStyleThumbs(){
+  const token=++thumbToken;
+  const nodes=[...document.querySelectorAll("canvas.mag-style-preview")];
+  if(!nodes.length)return;
+  let img=null;
+  if(coverIndex!==null&&photos[coverIndex]){
+    try{img=await loadImage(photos[coverIndex]);}catch(e){}
+  }
+  if(token!==thumbToken)return;
+  const copy=Covers.copyFor(settings);
+  const size=Covers.coverSize(sessionOrientation,440);
+  nodes.forEach(cv=>{
+    cv.width=size.width;cv.height=size.height;
+    Covers.render(cv.getContext("2d"),{
+      img:img||Covers.placeholder(),
+      width:size.width,height:size.height,
+      copy,accent:settings.accent,
+      template:cv.dataset.template,
+      photoFilter:filterCSS()
+    });
   });
 }
 
@@ -407,12 +471,6 @@ function drawContain(ctx,img,x,y,w,h,bg="#fff"){
   ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
 }
 
-function drawCover(ctx,img,x,y,w,h){
-  const scale=Math.max(w/img.width,h/img.height);
-  const sw=w/scale,sh=h/scale;
-  const sx=(img.width-sw)/2,sy=(img.height-sh)/2;
-  ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h);
-}
 function fitText(ctx,text,maxWidth,startSize,font,weight=400,minSize=14){
   let size=startSize;
   while(size>minSize){
@@ -464,9 +522,20 @@ async function render(){
   if(!photos.length)return;
   const imgs=await Promise.all(photos.map(loadImage));
   const c=$("mainCanvas"),ctx=c.getContext("2d");
-  if(currentMode==="strip")renderStrip(ctx,c,imgs,settings,sessionOrientation);
-  else if(coverIndex===null)renderStrip(ctx,c,imgs,settings,sessionOrientation);
-  else renderMagazine(ctx,c,imgs,settings,sessionOrientation,magazineStyle,coverIndex);
+  if(currentMode!=="magazine"||coverIndex===null)renderStrip(ctx,c,imgs,settings,sessionOrientation);
+  else renderMagazine(ctx,c,imgs[coverIndex]);
+}
+function renderMagazine(ctx,c,img){
+  const size=Covers.coverSize(sessionOrientation,1200);
+  c.width=size.width;c.height=size.height;
+  Covers.render(ctx,{
+    img,
+    width:size.width,height:size.height,
+    copy:Covers.copyFor(settings),
+    accent:settings.accent,
+    template:magazineStyle,
+    photoFilter:filterCSS()
+  });
 }
 
 function renderStrip(ctx,c,imgs,s,orientation){
@@ -515,72 +584,6 @@ function renderStrip(ctx,c,imgs,s,orientation){
   ctx.fillText(s.stripDate||"",W/2,base+98);
 }
 
-function renderMagazine(ctx,c,imgs,s,orientation,style,index){
-  const t=typography(),img=imgs[index],land=orientation==="landscape";
-  const W=land?1200:900,H=land?900:1200;c.width=W;c.height=H;
-
-  /* Latest premium cover: original photo + transparent graphic layers only. */
-  ctx.fillStyle="#111";ctx.fillRect(0,0,W,H);
-  ctx.save();ctx.filter=filterCSS();drawCover(ctx,img,0,0,W,H);ctx.restore();
-
-  const mast=style==="birthday"?(s.birthdayMasthead||"BIRTHDAY"):(s.fashionMasthead||"RAE");
-  const leftHero=style==="birthday"?(s.birthdayLine3||"ONE NIGHT TO REMEMBER"):(s.fashionFeature1||"ONE NIGHT ONLY");
-  const rightHero=style==="birthday"?(s.birthdayLine2||"THE QUEEN OF HER DAY"):(s.fashionBottom||"CONFIDENCE IS THE BEST OUTFIT");
-  const big=style==="birthday"?(s.birthdayLarge||"26"):(s.fashionLarge||"TWENTY SIX");
-  const issue=style==="birthday"?(s.birthdayIssue||"THE BIRTHDAY ISSUE"):(s.fashionIssue||"SPECIAL BIRTHDAY EDITION");
-
-  function fit(text,maxw,start,font,weight=700,min=14){
-    return fitText(ctx,(text||"").toUpperCase(),maxw,start,font,weight,min);
-  }
-  function rule(x1,y1,x2,y2){
-    ctx.save();ctx.strokeStyle="rgba(255,255,255,.92)";ctx.lineWidth=land?2:1.5;
-    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.restore();
-  }
-  ctx.fillStyle="#fff";
-  ctx.shadowColor="rgba(0,0,0,.32)";ctx.shadowBlur=3;ctx.shadowOffsetY=1;
-
-  rule(land?28:24,land?24:24,W-(land?28:24),land?24:24);
-  rule(land?28:24,H-(land?24:24),W-(land?28:24),H-(land?24:24));
-
-  ctx.textAlign="center";
-  fit(mast,W-(land?70:50),land?230:205,t.serif,700,66);
-  ctx.fillText((mast||"").toUpperCase(),W/2,land?175:180);
-
-  ctx.textAlign="right";ctx.font=`800 ${land?12:10}px ${t.sans}`;
-  wrapText(ctx,(issue||"").toUpperCase(),W-(land?38:30),land?38:34,land?270:220,land?16:14,3,"right");
-  rule(W-(land?185:150),land?90:82,W-(land?38:30),land?90:82);
-
-  ctx.textAlign="left";
-  fit(leftHero,land?310:230,land?48:38,t.serif,700,21);
-  wrapText(ctx,(leftHero||"").toUpperCase(),land?38:28,land?300:330,land?310:230,land?50:40,4,"left");
-  rule(land?38:28,land?470:470,land?205:170,land?470:470);
-
-  ctx.textAlign="right";
-  fit(rightHero,land?320:245,land?39:30,t.serif,700,18);
-  wrapText(ctx,(rightHero||"").toUpperCase(),W-(land?38:28),land?315:330,land?320:245,land?42:33,4,"right");
-  rule(W-(land?220:175),land?490:500,W-(land?38:28),land?490:500);
-
-  ctx.textAlign="right";
-  fit(big,land?600:535,land?128:116,t.serif,700,48);
-  wrapText(ctx,(big||"").toUpperCase(),W-(land?34:28),land?545:690,land?600:535,land?130:118,3,"right");
-  rule(W-(land?300:235),land?805:930,W-(land?34:28),land?805:930);
-
-  ctx.textAlign="left";ctx.font=`400 ${land?11:9}px ${t.sans}`;
-  const detail=style==="birthday"?"CELEBRATE · REMEMBER · REPEAT":"CONFIDENCE · BEAUTY · ENERGY";
-  wrapText(ctx,detail,land?38:30,H-(land?105:150),land?310:250,land?16:14,3,"left");
-
-  if(style==="birthday"&&s.birthdayScript){
-    ctx.font=`400 ${land?25:20}px ${t.script}`;
-    ctx.fillText(s.birthdayScript,land?38:30,H-(land?68:105));
-  }
-
-  ctx.font=`800 ${land?10:8}px ${t.sans}`;
-  wrapText(ctx,(issue||"").toUpperCase(),land?38:30,H-(land?36:42),land?350:280,land?13:12,2,"left");
-
-  ctx.shadowColor="transparent";ctx.shadowBlur=0;ctx.shadowOffsetY=0;
-  drawBarcode(ctx,W-(land?190:170),H-(land?72:76),land?145:138,46,t.sans,true);
-}
-
 async function canvasBlob(){return new Promise(r=>$("mainCanvas").toBlob(r,"image/png",1));}
 async function shareCurrent(){
   resetIdle();
@@ -604,14 +607,16 @@ function resetIdle(){
   }
 }
 
+/* The admin preview runs the real cover renderer against a stand-in photo,
+   so what the host tunes here is exactly what guests get. */
 function renderAdminPreview(){
   const s=draftSettings(),c=$("adminPreviewCanvas"),ctx=c.getContext("2d");
-  const land=adminOrientation==="landscape",W=land?640:430,H=land?470:650;
-  c.width=W;c.height=H;
-  ctx.fillStyle="#fbf7f0";ctx.fillRect(0,0,W,H);
-  const t=typography();
+  const land=adminOrientation==="landscape";
 
   if(adminPreviewType==="strip"){
+    const t=typography(),W=land?640:430,H=land?470:650;
+    c.width=W;c.height=H;
+    ctx.fillStyle="#fbf7f0";ctx.fillRect(0,0,W,H);
     ctx.fillStyle="#111";ctx.textAlign="center";
     fitText(ctx,s.stripTop,W-50,10,t.sans,800,7);ctx.fillText((s.stripTop||"").toUpperCase(),W/2,19);
     fitText(ctx,s.stripSecond,W-50,land?19:16,t.serif,400,11);ctx.fillText(s.stripSecond||"",W/2,43);
@@ -619,26 +624,19 @@ function renderAdminPreview(){
     const mx=14,top=72,g=10,footer=78,ph=(H-top-footer-g*2)/3;
     for(let i=0;i<3;i++){ctx.fillStyle="#dfd8cf";ctx.fillRect(mx,top+i*(ph+g),W-mx*2,ph);}
     ctx.fillStyle="#111";fitText(ctx,s.stripSignature,W-45,land?25:20,t.script,400,12);ctx.fillText(s.stripSignature||"",W/2,H-38);
-    ctx.font=`800 8px ${t.sans}`;ctx.fillText(s.stripDate||"",W/2,H-18);return;
-  }
-
-  if(adminPreviewType==="birthday"){
-    ctx.fillStyle="#fbf3e8";ctx.fillRect(0,0,W,H);
-    ctx.fillStyle="#dfd8cf";ctx.fillRect(land?180:75,land?38:120,land?430:335,land?390:470);
-    ctx.fillStyle="#111";ctx.textAlign="left";fitText(ctx,s.birthdayMasthead,land?310:390,land?48:40,t.serif,700,18);ctx.fillText((s.birthdayMasthead||"").toUpperCase(),18,50);
-    ctx.fillStyle="#c46d47";fitText(ctx,s.birthdayScript,land?180:280,land?24:22,t.script,400,12);ctx.fillText(s.birthdayScript||"",20,77);
-    ctx.fillStyle="#111";ctx.font=`800 8px ${t.sans}`;wrapText(ctx,(s.birthdayLine1||"").toUpperCase(),20,120,land?135:120,11,3,"left");
-    ctx.font=`800 9px ${t.sans}`;wrapText(ctx,(s.birthdayLine2||"").toUpperCase(),20,220,land?140:120,12,4,"left");
+    ctx.font=`800 8px ${t.sans}`;ctx.fillText(s.stripDate||"",W/2,H-18);
     return;
   }
 
-  ctx.fillStyle="#303030";ctx.fillRect(0,0,W,H);
-  ctx.fillStyle="#e1d9cf";ctx.fillRect(0,0,W,H);
-  ctx.fillStyle="rgba(0,0,0,.18)";ctx.fillRect(0,0,W,H);
-  ctx.fillStyle="#fff";ctx.textAlign="center";fitText(ctx,s.fashionMasthead,W-30,land?70:58,t.serif,700,24);ctx.fillText((s.fashionMasthead||"").toUpperCase(),W/2,70);
-  ctx.textAlign="right";ctx.font=`800 8px ${t.sans}`;wrapText(ctx,(s.fashionTop||"").toUpperCase(),W-18,28,land?150:120,10,3,"right");
-  ctx.textAlign="left";ctx.font=`800 10px ${t.sans}`;wrapText(ctx,(s.fashionFeature1||"").toUpperCase(),18,190,land?115:100,13,4,"left");
-  ctx.textAlign="right";ctx.font=`800 ${land?17:15}px ${t.serif}`;wrapText(ctx,(s.fashionLarge||"").toUpperCase(),W-18,300,land?150:120,20,3,"right");
+  const size=Covers.coverSize(adminOrientation,land?520:600);
+  c.width=size.width;c.height=size.height;
+  Covers.render(ctx,{
+    img:Covers.placeholder(),
+    width:size.width,height:size.height,
+    copy:Covers.copyFor(s),
+    accent:s.accent,
+    template:adminPreviewType
+  });
 }
 
 $("startBtn").onclick=beginSession;
@@ -665,7 +663,10 @@ document.querySelectorAll(".admin-orientation-tab").forEach(b=>b.onclick=()=>{
   document.querySelectorAll(".admin-orientation-tab").forEach(x=>x.classList.toggle("active",x===b));
   renderAdminPreview();
 });
-document.querySelectorAll("#settings input,#settings select").forEach(el=>el.addEventListener("input",renderAdminPreview));
+document.querySelectorAll("#settings input,#settings select").forEach(el=>el.addEventListener("input",()=>{
+  refreshCoverPlaceholders();
+  renderAdminPreview();
+}));
 
 fillSettingsUI();
 if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));

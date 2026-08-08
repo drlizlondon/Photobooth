@@ -1,7 +1,7 @@
 # Rae's Photo Booth — Live Build
 
 ## Guest flow
-Start → 3 photos → Strip → optionally try frame/filter → Magazine → pick one of the 3 photos → choose Birthday or Fashion cover → Share / Save → Next guest.
+Start → 3 photos → Strip → optionally try frame/filter → Magazine → pick one of the 3 photos → choose one of four cover styles → Share / Save → Next guest.
 
 Every new guest resets to:
 - Strip
@@ -26,23 +26,29 @@ Filters:
 Frame and filter are separate systems.
 
 ## Magazine
-Two deliberately different covers:
-- Birthday Cover
-- Fashion Cover
+Four cover styles, each laid out separately for portrait and landscape sessions:
+- **Editorial** — full-bleed high-fashion cover: oversized didone masthead, three feature columns, huge cover line bottom-right.
+- **Noir** — deep monochrome, centred masthead and cover line, heavy contrast.
+- **Celebration** — warm grade, occasion masthead with a script line, cover line in the event accent colour.
+- **Press** — solid sidebar carrying the masthead, accent issue chip, name and standfirst on the photo.
 
-Magazine always asks the guest to pick Photo 1 / 2 / 3 before showing the finished cover.
+Magazine always asks the guest to pick Photo 1 / 2 / 3 before showing the finished cover, then shows a live thumbnail of that photo in each of the four styles.
 
-All wording is editable in Admin. The renderer uses text slots and automatic fitting/wrapping, so layout does not depend on any specific wording.
+Cover copy lives in one set of slots shared by all four styles (`covers.js`). Every slot is editable in Admin; **leaving a slot blank generates it from the event title** — masthead, age in words, issue lines, script line and barcode all follow "Rae's 26th Birthday" / "Sam's 30th" / "Aisha & Tom's Wedding" without any admin work.
+
+Legibility is measured, not assumed: the renderer samples the photo behind each block of type and deepens the scrim where the photo is bright, so white type never washes out on a pale wall.
 
 ## Admin
-Live previews:
+Live previews (using the real cover renderer with a stand-in photo):
 - Strip
-- Birthday
-- Fashion
+- Editorial
+- Noir
+- Celebration
+- Press
 - Landscape
 - Portrait
 
-All event, strip and magazine copy is editable.
+All event, strip and cover copy is editable; blank cover fields show their auto-generated value as a placeholder.
 
 ## Behaviour
 - No backend.
@@ -96,8 +102,10 @@ B. Local Event Gallery
 - Text auto-fits its semantic zone.
 
 
-## Latest build
-- Incorporates the latest premium magazine hierarchy.
-- Original photograph remains untouched apart from full-bleed crop.
-- Transparent typography and graphic layers only.
-- Existing strips, gallery, capture, sharing and guest flow retained.
+## Latest build — editorial cover engine
+- Cover rendering moved to `covers.js`: four templates over one copy model.
+- Portrait covers are 1200 × 1560, landscape 1560 × 1200 (magazine trim, not the old 4:3 / 3:4).
+- Layout is measured from the canvas — masthead, columns and cover line re-flow rather than collide when copy is long.
+- Photos now get a per-template grade, adaptive scrims, vignette and print grain.
+- Cover copy auto-generates from the event title; old Birthday/Fashion copy is migrated on load where it was customised.
+- Strips, capture, gallery, sharing and guest flow are unchanged.

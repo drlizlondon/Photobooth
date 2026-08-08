@@ -58,11 +58,11 @@ video.mirror{transform:scaleX(-1)}
 .photo-choice img{width:100%;height:100%;object-fit:contain;background:#111}
 .photo-choice.active{border-color:#111}
 .mag-style-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
-.mag-style-choice{border:1px solid var(--line);background:#fff;padding:8px}
+.mag-style-choice{border:1px solid var(--line);background:#fff;padding:8px;display:block;text-align:left}
 .mag-style-choice.active{outline:2px solid #111}
-.mag-style-preview{aspect-ratio:3/4;background:#e9e2d8;display:flex;align-items:center;justify-content:center;font-family:Didot,serif;font-size:20px;margin-bottom:7px}
-.mag-style-choice:last-child .mag-style-preview{background:#222;color:#fff}
-.mag-style-choice span{font-size:11px}
+canvas.mag-style-preview{display:block;width:100%;height:auto;background:#e9e2d8;margin-bottom:7px}
+.mag-style-choice span{display:block;font-size:11px;font-weight:800;letter-spacing:.04em}
+.mag-style-choice small{display:block;font-size:10px;color:var(--muted);margin-top:2px}
 .share-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:24px}
 .primary-btn,.secondary-btn,.next-btn{min-height:54px;border:1px solid #111;font-weight:800}
 .primary-btn{background:#111;color:#fff}
@@ -85,7 +85,9 @@ video.mirror{transform:scaleX(-1)}
 .admin-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(360px,.85fr);gap:28px;align-items:start}
 .settings-fields h3{font-size:28px;margin:24px 0 12px;padding-top:18px;border-top:1px solid var(--line)}
 .settings-fields h3:first-child{margin-top:0;padding-top:0;border-top:0}
+.field-help{margin:-4px 0 14px;font-size:11px;color:var(--muted);max-width:56ch}
 .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.field-grid input::placeholder{color:#b3aca3;font-style:italic}
 .field-grid label{display:flex;flex-direction:column;gap:7px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
 .field-grid input,.field-grid select{width:100%;min-height:46px;border:1px solid var(--line);background:#fff;padding:0 11px;border-radius:0}
 .field-grid input[type="color"]{padding:5px}

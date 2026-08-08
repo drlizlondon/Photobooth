@@ -71,7 +71,7 @@
         </div>
 
         <div id="magazineStyleStep" hidden>
-          <p class="control-label">CHOOSE YOUR COVER</p>
+          <p class="control-label">CHOOSE A STYLE</p>
           <div id="magazineStyleChoices" class="mag-style-grid"></div>
           <button id="changeCoverPhoto" class="text-action" type="button">Choose a different photo</button>
         </div>
@@ -121,25 +121,25 @@
           <label>Bottom date<input id="setStripDate" type="text" maxlength="40"></label>
         </div>
 
-        <h3>Birthday Cover</h3>
+        <h3>Magazine Cover</h3>
+        <p class="field-help">One set of cover lines drives all four styles. Leave a field blank and it is written for you from the event title.</p>
         <div class="field-grid">
-          <label>Masthead<input id="setBirthdayMasthead" type="text" maxlength="28"></label>
-          <label>Script line<input id="setBirthdayScript" type="text" maxlength="36"></label>
-          <label>Cover line 1<input id="setBirthdayLine1" type="text" maxlength="52"></label>
-          <label>Cover line 2<input id="setBirthdayLine2" type="text" maxlength="52"></label>
-          <label>Cover line 3<input id="setBirthdayLine3" type="text" maxlength="52"></label>
-          <label>Issue detail<input id="setBirthdayIssue" type="text" maxlength="52"></label>
-        </div>
-
-        <h3>Fashion Cover</h3>
-        <div class="field-grid">
-          <label>Masthead<input id="setFashionMasthead" type="text" maxlength="28"></label>
-          <label>Top line<input id="setFashionTop" type="text" maxlength="52"></label>
-          <label>Feature 1<input id="setFashionFeature1" type="text" maxlength="52"></label>
-          <label>Feature 2<input id="setFashionFeature2" type="text" maxlength="52"></label>
-          <label>Large feature<input id="setFashionLarge" type="text" maxlength="42"></label>
-          <label>Bottom line<input id="setFashionBottom" type="text" maxlength="52"></label>
-          <label>Issue detail<input id="setFashionIssue" type="text" maxlength="52"></label>
+          <label>Masthead<input id="setCoverMasthead" type="text" maxlength="28"></label>
+          <label>Occasion word<input id="setCoverOccasion" type="text" maxlength="28"></label>
+          <label>Script line<input id="setCoverScript" type="text" maxlength="36"></label>
+          <label>Top right 1<input id="setCoverSkyline1" type="text" maxlength="34"></label>
+          <label>Top right 2<input id="setCoverSkyline2" type="text" maxlength="34"></label>
+          <label>Top right 3<input id="setCoverSkyline3" type="text" maxlength="34"></label>
+          <label>Feature 1 headline<input id="setCoverF1Title" type="text" maxlength="46"></label>
+          <label>Feature 1 sub-line<input id="setCoverF1Dek" type="text" maxlength="64"></label>
+          <label>Feature 2 headline<input id="setCoverF2Title" type="text" maxlength="46"></label>
+          <label>Feature 2 sub-line<input id="setCoverF2Dek" type="text" maxlength="64"></label>
+          <label>Feature 3 headline<input id="setCoverF3Title" type="text" maxlength="46"></label>
+          <label>Feature 3 sub-line<input id="setCoverF3Dek" type="text" maxlength="64"></label>
+          <label>Cover line (big)<input id="setCoverBig" type="text" maxlength="26"></label>
+          <label>Cover line sub<input id="setCoverBigDek" type="text" maxlength="64"></label>
+          <label>Footer line<input id="setCoverFooter" type="text" maxlength="52"></label>
+          <label>Barcode text<input id="setCoverBarcode" type="text" maxlength="18"></label>
         </div>
 
         <h3>Booth</h3>
@@ -177,21 +177,24 @@
       <aside class="admin-preview">
         <div class="admin-preview-tabs">
           <button class="admin-preview-tab active" data-preview="strip" type="button">Strip</button>
-          <button class="admin-preview-tab" data-preview="birthday" type="button">Birthday</button>
-          <button class="admin-preview-tab" data-preview="fashion" type="button">Fashion</button>
+          <button class="admin-preview-tab" data-preview="editorial" type="button">Editorial</button>
+          <button class="admin-preview-tab" data-preview="noir" type="button">Noir</button>
+          <button class="admin-preview-tab" data-preview="celebration" type="button">Celebration</button>
+          <button class="admin-preview-tab" data-preview="press" type="button">Press</button>
         </div>
         <div class="admin-preview-tabs orientation-tabs">
           <button class="admin-orientation-tab active" data-orientation="landscape" type="button">Landscape</button>
           <button class="admin-orientation-tab" data-orientation="portrait" type="button">Portrait</button>
         </div>
         <canvas id="adminPreviewCanvas"></canvas>
-        <p class="preview-note">Live preview. Grey areas represent photos.</p>
+        <p class="preview-note">Live preview with a stand-in photo.</p>
       </aside>
     </div>
   </div>
 </section>
 
 </main>
+<script src="covers.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -525,7 +525,6 @@ async function renderStyleThumbs(){
       width:size.width,height:size.height,
       copy,accent:settings.accent,
       template:cv.dataset.template,
-      photoFilter:filterCSS(),
       edition:{no:sessionEdition}
     });
   });
@@ -614,6 +613,8 @@ async function render(){
   if(currentMode!=="magazine"||coverIndex===null)renderStrip(ctx,c,imgs,settings,sessionOrientation);
   else renderMagazine(ctx,c,imgs[coverIndex]);
 }
+/* No `photoFilter`: the guest's filter choice is a strip-only system. Covers
+   carry the editorial finish instead, so every cover from a booth matches. */
 function renderMagazine(ctx,c,img){
   const size=Covers.coverSize(sessionOrientation,1200);
   c.width=size.width;c.height=size.height;
@@ -623,7 +624,6 @@ function renderMagazine(ctx,c,img){
     copy:Covers.copyFor(settings),
     accent:settings.accent,
     template:magazineStyle,
-    photoFilter:filterCSS(),
     edition:{no:sessionEdition}
   });
 }

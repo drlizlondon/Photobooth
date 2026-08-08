@@ -23,7 +23,7 @@ Filters:
 - Warm
 - Glow
 
-Frame and filter are separate systems.
+Frame and filter are separate systems. **Both apply to the strip only** — filters are not carried over to magazine covers, which have their own finish (below).
 
 ## Magazine
 Four cover styles, each laid out separately for portrait and landscape sessions:
@@ -33,6 +33,10 @@ Four cover styles, each laid out separately for portrait and landscape sessions:
 - **Press** — solid sidebar carrying the masthead, accent issue chip, name and standfirst on the photo.
 
 Magazine always asks the guest to pick Photo 1 / 2 / 3 before showing the finished cover, then shows a live thumbnail of that photo in each of the four styles.
+
+**Editorial finish.** Every magazine cover — all four styles — puts a luxury print pass on the photograph: +2% exposure, +6% contrast, −4% saturation, then ultra-fine print grain. No fake lighting, no glow, no beauty work. It runs on the photo rectangle only, so type, scrims and the barcode are never graded, and it runs before the scrims are measured so they still adapt to the finished picture. The grain is baked once into a repeating tile, so a preview and the saved file are identical.
+
+The finish is automatic and is the **only** grade a cover photo gets beyond its template's own. The guest's filter choice is deliberately switched off for magazine — a cover has one house look, so every cover from the booth matches whatever the guest was playing with on their strip. Strips keep all five filters and are unaffected by the finish.
 
 Cover copy lives in one set of slots shared by all four styles (`covers.js`). Every slot is editable in Admin; **leaving a slot blank generates it from the event title** — masthead, age in words, issue lines, script line and barcode all follow "Rae's 26th Birthday" / "Sam's 30th" / "Aisha & Tom's Wedding" without any admin work.
 
@@ -112,6 +116,7 @@ B. Local Event Gallery
 - Portrait covers are 1200 × 1560, landscape 1560 × 1200 (magazine trim, not the old 4:3 / 3:4).
 - Layout is measured from the canvas — masthead, columns and cover line re-flow rather than collide when copy is long.
 - Photos now get a per-template grade, adaptive scrims, vignette and print grain.
+- Every cover photo then gets the **editorial finish** on top of its template grade (see Magazine).
 - Cover copy auto-generates from the event title; old Birthday/Fashion copy is migrated on load where it was customised.
 - Strips, capture, gallery, sharing and guest flow are unchanged.
 

@@ -276,15 +276,85 @@ function wash(ctx,W,H,color,alpha,mode){
   ctx.save();ctx.globalAlpha=alpha;ctx.globalCompositeOperation=mode||"overlay";
   ctx.fillStyle=color;ctx.fillRect(0,0,W,H);ctx.restore();
 }
+/* ---------- editorial finish ---------- */
+/* A luxury print pass on the photograph itself: +2% exposure, +6% contrast,
+   -4% saturation, then ultra-fine print grain. No fake lighting, no glow,
+   no beauty work. Runs on the photo rectangle only — never over type — and
+   before the scrims are measured, so `edgeLuma` reads the finished picture.
+
+   This is the *only* grade a cover photo gets beyond its template's own.
+   The guest's B&W / Vintage / Warm / Glow filters are a strip system and are
+   deliberately not plumbed in here: a magazine cover has one house look. */
+
+const FINISH={exposure:1.02,contrast:1.06,saturation:0.96,grain:0.015};
+
+/* Exposure and contrast are per-channel and identical across R/G/B, so they
+   collapse into one 256-entry table. Unclamped on purpose: the original
+   clamps once at the end, after saturation, and clamping early would change
+   how highlights desaturate. */
+let finishLut=null;
+function editorialLut(){
+  if(finishLut)return finishLut;
+  finishLut=new Float64Array(256);
+  for(let v=0;v<256;v++)finishLut[v]=((v*FINISH.exposure-128)*FINISH.contrast)+128;
+  return finishLut;
+}
+
+/* Sparse black dots on a 6px grid, baked once into a tile whose side is a
+   multiple of the grid so it repeats seamlessly. Deterministic, unlike
+   re-rolling the dots per render — the preview and the saved file match. */
+let printTile=null;
+function printGrainTile(){
+  if(printTile)return printTile;
+  printTile=document.createElement("canvas");
+  printTile.width=printTile.height=120;
+  const g=printTile.getContext("2d");
+  g.fillStyle="#000";
+  for(let y=0;y<120;y+=6)for(let x=0;x<120;x+=6)if(Math.random()>0.65)g.fillRect(x,y,1,1);
+  return printTile;
+}
+
+function editorialFinish(ctx,x,y,w,h){
+  /* getImageData wants integers, and putImageData ignores the clip — so round
+     inward. A sub-pixel sliver of the photo edge going ungraded is invisible;
+     writing graded pixels outside the photo would not be. */
+  const ix=Math.max(0,Math.ceil(x)),iy=Math.max(0,Math.ceil(y));
+  const iw=Math.min(ctx.canvas.width,Math.floor(x+w))-ix;
+  const ih=Math.min(ctx.canvas.height,Math.floor(y+h))-iy;
+  if(iw<=0||ih<=0)return;
+  try{
+    const lut=editorialLut(),sat=FINISH.saturation;
+    const image=ctx.getImageData(ix,iy,iw,ih),d=image.data;
+    for(let i=0;i<d.length;i+=4){
+      const r=lut[d[i]],g=lut[d[i+1]],b=lut[d[i+2]];
+      const grey=(r+g+b)/3;
+      /* The backing Uint8ClampedArray does the 0-255 clamp on assignment. */
+      d[i]=grey+(r-grey)*sat;
+      d[i+1]=grey+(g-grey)*sat;
+      d[i+2]=grey+(b-grey)*sat;
+    }
+    ctx.putImageData(image,ix,iy);
+
+    const p=ctx.createPattern(printGrainTile(),"repeat");
+    if(!p)return;
+    ctx.save();
+    /* The photo grade is still on the context; a filtered grain fill would
+       be graded twice. */
+    ctx.filter="none";
+    ctx.globalAlpha=FINISH.grain;
+    ctx.fillStyle=p;ctx.fillRect(x,y,w,h);
+    ctx.restore();
+  }catch(e){}
+}
+
 function paintPhoto(L,x,y,w,h,grade,anchorY){
   const {ctx}=L;
   ctx.save();
   ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
   ctx.fillStyle="#0d0d0d";ctx.fillRect(x,y,w,h);
-  const extra=L.photoFilter&&L.photoFilter!=="none"?L.photoFilter:"";
-  const f=[grade,extra].filter(Boolean).join(" ");
-  if(f)ctx.filter=f;
+  if(grade)ctx.filter=grade;
   if(L.img)drawPhotoCover(ctx,L.img,x,y,w,h,anchorY);
+  if(L.img)editorialFinish(ctx,x,y,w,h);
   ctx.restore();
 }
 function hairline(ctx,x,y,w,thick,alpha){
@@ -799,7 +869,6 @@ function render(ctx,opts){
     img:opts.img||null,
     copy:opts.copy,
     accent:opts.accent||"#d86c8f",
-    photoFilter:opts.photoFilter||"none",
     edition:opts.edition||{no:1}
   };
   ctx.save();

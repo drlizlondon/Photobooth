@@ -37,12 +37,25 @@ const DEFAULTS = {
   coverEditionWord:"",
   coverOfWord:"",
 
+  /* Living Polaroid: four handwritten lines, blank meaning "write it for me". */
+  polaroidLine1:"",
+  polaroidLine2:"",
+  polaroidLine3:"",
+  polaroidLine4:"",
+  polaroidHand:"marker",
+  polaroidTransition:"crossfade",
+  polaroidBusyLabel:"",
+  polaroidReadyLabel:"",
+  polaroidStillLabel:"",
+
   welcomeEyebrow:"",
   startLabel:"",
   startHint:"",
   cancelLabel:"",
   stripTabLabel:"",
   magazineTabLabel:"",
+  polaroidTabLabel:"",
+  polaroidLabel:"",
   frameLabel:"",
   filterLabel:"",
   pickLabel:"",
@@ -79,6 +92,8 @@ const SCREEN_TEXT = [
   ["cancelLabel","CANCEL","cancelCapture"],
   ["stripTabLabel","Strip","stripTab"],
   ["magazineTabLabel","Magazine","magazineTab"],
+  ["polaroidTabLabel","Polaroid","polaroidTab"],
+  ["polaroidLabel","LIVING POLAROID","polaroidLabelText"],
   ["frameLabel","FRAME","frameLabelText"],
   ["filterLabel","FILTER","filterLabelText"],
   ["pickLabel","PICK YOUR COVER","pickLabelText"],
@@ -91,9 +106,20 @@ const SCREEN_TEXT = [
   ["endEyebrow","SESSION COMPLETE","endEyebrow"],
   ["endMessage","Thank you ♡","endMessage"]
 ];
-/* Not tied to an element: used while the camera is running. */
-const SHOT_LABEL_DEFAULT = "PHOTO {n} / {total}";
-const PROMPTS_DEFAULT = "Everyone in!, Squash together!, One more!";
+/* Guest-facing wording with no fixed element: either it is used while the
+   camera is running, or several strings take turns in one slot. Same blank
+   means default contract; listed here so the admin placeholders stay honest. */
+const LOOSE_TEXT = [
+  ["shotLabelFormat","PHOTO {n} / {total}"],
+  ["promptLines","Everyone in!, Squash together!, One more!"],
+  ["polaroidBusyLabel","Bringing it to life…"],
+  ["polaroidReadyLabel","Tap Share to send the video ♡"],
+  ["polaroidStillLabel","Save the print — video needs a newer iPad"]
+];
+const looseText=key=>{
+  const row=LOOSE_TEXT.find(([k])=>k===key);
+  return String(settings[key]||"").trim()||(row?row[1]:"");
+};
 
 function applyScreenText(){
   SCREEN_TEXT.forEach(([key,def,id])=>{
@@ -103,12 +129,10 @@ function applyScreenText(){
 }
 /* `prompts` is the on/off toggle; `promptLines` is the wording. */
 function capturePrompts(){
-  const raw=String(settings.promptLines||"").trim()||PROMPTS_DEFAULT;
-  return raw.split(/\s*[,|]\s*/).filter(Boolean);
+  return looseText("promptLines").split(/\s*[,|]\s*/).filter(Boolean);
 }
 function shotLabel(n,total){
-  const fmt=String(settings.shotLabelFormat||"").trim()||SHOT_LABEL_DEFAULT;
-  return fmt.replace(/\{n\}/gi,n).replace(/\{total\}/gi,total);
+  return looseText("shotLabelFormat").replace(/\{n\}/gi,n).replace(/\{total\}/gi,total);
 }
 
 let settings=loadSettings();
@@ -257,10 +281,12 @@ function fillSettingsUI(){
     setEventTitle:"eventTitle",setDate:"date",
     setStripTop:"stripTop",setStripSecond:"stripSecond",setStripSignature:"stripSignature",setStripDate:"stripDate"
   };
-  COVER_FIELDS.concat(TEXT_FIELDS).forEach(([id,key])=>map[id]=key);
+  COVER_FIELDS.concat(TEXT_FIELDS,POLAROID_FIELDS).forEach(([id,key])=>map[id]=key);
   Object.entries(map).forEach(([id,key])=>{if($(id))$(id).value=settings[key];});
   refreshCoverPlaceholders();
   $("setAccent").value=settings.accent;
+  $("setPolaroidHand").value=settings.polaroidHand;
+  $("setPolaroidTransition").value=settings.polaroidTransition;
   $("setCountdown").value=String(settings.countdown);
   $("setMirror").checked=settings.mirror;
   $("setPrompts").checked=settings.prompts;
@@ -277,7 +303,12 @@ const COVER_FIELDS=Covers.copyKeys.map(k=>{
 });
 /* Same contract for the guest-facing screen wording. */
 const TEXT_FIELDS=SCREEN_TEXT.map(([key])=>[inputId(key),key])
-  .concat([[inputId("shotLabelFormat"),"shotLabelFormat"],[inputId("promptLines"),"promptLines"]]);
+  .concat(LOOSE_TEXT.map(([key])=>[inputId(key),key]));
+/* And for the four handwritten lines under the Polaroid. */
+const POLAROID_FIELDS=Polaroid.copyKeys.map(k=>{
+  const key="polaroid"+k.charAt(0).toUpperCase()+k.slice(1);
+  return [inputId(key),key];
+});
 
 /* Blank fields show what the cover will auto-generate. */
 function refreshCoverPlaceholders(){
@@ -286,9 +317,13 @@ function refreshCoverPlaceholders(){
     const el=$(id);if(!el)return;
     el.placeholder=derived[Covers.copyKeys[i]]||"";
   });
-  SCREEN_TEXT.forEach(([key,def])=>{const el=$(inputId(key));if(el)el.placeholder=def;});
-  if($(inputId("shotLabelFormat")))$(inputId("shotLabelFormat")).placeholder=SHOT_LABEL_DEFAULT;
-  if($(inputId("promptLines")))$(inputId("promptLines")).placeholder=PROMPTS_DEFAULT;
+  SCREEN_TEXT.concat(LOOSE_TEXT).forEach(([key,def])=>{
+    const el=$(inputId(key));if(el)el.placeholder=def;
+  });
+  const hand=Polaroid.derive({eventTitle:$("setEventTitle").value.trim()||DEFAULTS.eventTitle,date:$("setDate").value.trim()});
+  POLAROID_FIELDS.forEach(([id],i)=>{
+    const el=$(id);if(el)el.placeholder=hand[Polaroid.copyKeys[i]]||"";
+  });
 }
 
 function draftSettings(){
@@ -301,6 +336,8 @@ function draftSettings(){
     stripSignature:$("setStripSignature").value.trim(),
     stripDate:$("setStripDate").value.trim(),
     accent:$("setAccent").value,
+    polaroidHand:$("setPolaroidHand").value,
+    polaroidTransition:$("setPolaroidTransition").value,
     countdown:Number($("setCountdown").value),
     mirror:$("setMirror").checked,
     prompts:$("setPrompts").checked,
@@ -308,7 +345,7 @@ function draftSettings(){
     flash:$("setFlash").checked,
     confetti:$("setConfetti").checked
   };
-  COVER_FIELDS.concat(TEXT_FIELDS).forEach(([id,key])=>{if($(id))draft[key]=$(id).value.trim();});
+  COVER_FIELDS.concat(TEXT_FIELDS,POLAROID_FIELDS).forEach(([id,key])=>{if($(id))draft[key]=$(id).value.trim();});
   return draft;
 }
 
@@ -388,9 +425,11 @@ function resetCreativeState(){
   filterStyle="original";
   coverIndex=null;
   magazineStyle="keepsake";
+  invalidatePolaroid();
   document.querySelectorAll(".mode-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode==="strip"));
   $("stripControls").classList.add("active");
   $("magazineControls").classList.remove("active");
+  $("polaroidControls").classList.remove("active");
   $("magazinePickStep").hidden=false;
   $("magazineStyleStep").hidden=true;
 }
@@ -535,10 +574,15 @@ function setMode(mode){
   document.querySelectorAll(".mode-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode===mode));
   $("stripControls").classList.toggle("active",mode==="strip");
   $("magazineControls").classList.toggle("active",mode==="magazine");
+  $("polaroidControls").classList.toggle("active",mode==="polaroid");
   if(mode==="magazine"){
     $("magazinePickStep").hidden=coverIndex!==null;
     $("magazineStyleStep").hidden=coverIndex===null;
   }
+  /* The Polaroid drives its own canvas on a rAF loop, so it skips the
+     fade-and-redraw the still modes use — that would flash mid-animation. */
+  if(mode==="polaroid"){enterPolaroid();resetIdle();return;}
+  leavePolaroid();
   renderWithFade();resetIdle();
 }
 document.querySelectorAll(".mode-tab").forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
@@ -607,7 +651,7 @@ async function renderWithFade(){
   $("mainCanvas").classList.remove("changing");
 }
 async function render(){
-  if(!photos.length)return;
+  if(!photos.length||currentMode==="polaroid")return;
   const imgs=await Promise.all(photos.map(loadImage));
   const c=$("mainCanvas"),ctx=c.getContext("2d");
   if(currentMode!=="magazine"||coverIndex===null)renderStrip(ctx,c,imgs,settings,sessionOrientation);
@@ -626,6 +670,136 @@ function renderMagazine(ctx,c,img){
     template:magazineStyle,
     edition:{no:sessionEdition}
   });
+}
+
+/* ---------- living polaroid ---------- */
+
+/* The video is authored at 1080 wide and the print at 1400: an MP4 that has
+   to encode on an iPad between one guest and the next wants fewer pixels
+   than a keepsake PNG does, and nothing about the layout is resolution
+   dependent. 25fps divides the muxer's timescale exactly. */
+const POLAROID_VIDEO_BASE=1080;
+const POLAROID_PRINT_BASE=1400;
+const POLAROID_FPS=25;
+
+let polaroidJob=null;
+let polaroidRaf=0;
+let polaroidToken=0;
+let polaroidVideoBlob=null;
+let polaroidVideoUrl=null;
+let polaroidState="idle";
+
+function polaroidOptions(images){
+  return {
+    images,
+    copy:Polaroid.copyFor(settings),
+    hand:settings.polaroidHand||"marker",
+    transition:settings.polaroidTransition||"crossfade"
+  };
+}
+/* Bumping the token orphans any in-flight build or encode, so a settings
+   save mid-render can never drop a stale video on the next guest. */
+function invalidatePolaroid(){
+  polaroidToken++;
+  stopPolaroidLoop();
+  polaroidJob=null;
+  polaroidVideoBlob=null;
+  polaroidState="idle";
+  if(polaroidVideoUrl){URL.revokeObjectURL(polaroidVideoUrl);polaroidVideoUrl=null;}
+  const v=$("polaroidVideo");
+  if(v){
+    /* Drop the handlers first — the resume-on-pause nudge would otherwise
+       fight this teardown. */
+    v.onloadeddata=v.onplaying=v.onpause=null;
+    v.pause();v.removeAttribute("src");v.load();v.hidden=true;
+  }
+  const c=$("mainCanvas");if(c)c.hidden=false;
+}
+function stopPolaroidLoop(){if(polaroidRaf){cancelAnimationFrame(polaroidRaf);polaroidRaf=0;}}
+function leavePolaroid(){
+  stopPolaroidLoop();
+  const v=$("polaroidVideo");
+  if(v&&!v.hidden){v.pause();v.hidden=true;}
+  $("mainCanvas").hidden=false;
+}
+function polaroidStatus(){
+  const el=$("polaroidStatus");if(!el)return;
+  el.textContent=looseText(
+    polaroidState==="ready"?"polaroidReadyLabel":
+    polaroidState==="unsupported"?"polaroidStillLabel":"polaroidBusyLabel");
+  el.classList.toggle("ready",polaroidState==="ready");
+}
+
+async function enterPolaroid(){
+  const token=++polaroidToken;
+  polaroidStatus();
+  const imgs=await Promise.all(photos.map(loadImage));
+  if(token!==polaroidToken||currentMode!=="polaroid")return;
+  polaroidJob=Polaroid.compose(Object.assign({base:POLAROID_VIDEO_BASE},polaroidOptions(imgs)));
+
+  /* Animate the canvas straight away rather than making the guest watch a
+     spinner: the loop and the MP4 share one drawFrame, so the preview is
+     already the deliverable. The video swaps in when the encoder is done. */
+  const c=$("mainCanvas"),ctx=c.getContext("2d");
+  c.width=polaroidJob.geo.W;c.height=polaroidJob.geo.H;
+  c.hidden=false;
+  const started=performance.now();
+  (function step(){
+    if(token!==polaroidToken||!polaroidJob)return;
+    polaroidJob.drawAt(ctx,(performance.now()-started)/1000);
+    polaroidRaf=requestAnimationFrame(step);
+  })();
+
+  encodePolaroid(token);
+}
+
+async function encodePolaroid(token){
+  if(!MP4.isSupported()){polaroidState="unsupported";polaroidStatus();return;}
+  polaroidState="working";polaroidStatus();
+  const job=polaroidJob;
+  try{
+    const blob=await MP4.encode({
+      width:job.geo.W,height:job.geo.H,fps:POLAROID_FPS,
+      frameCount:job.frameCount(POLAROID_FPS),
+      renderFrame:(ctx,i)=>job.drawFrame(ctx,i,POLAROID_FPS),
+      shouldAbort:()=>token!==polaroidToken
+    });
+    if(token!==polaroidToken)return;
+    polaroidVideoBlob=blob;
+    if(polaroidVideoUrl)URL.revokeObjectURL(polaroidVideoUrl);
+    polaroidVideoUrl=URL.createObjectURL(blob);
+    polaroidState="ready";polaroidStatus();
+    if(currentMode!=="polaroid")return;
+    const v=$("polaroidVideo");
+    v.src=polaroidVideoUrl;
+    v.hidden=false;
+    /* Only stop the canvas once the video has a frame to show, so a slow
+       first decode never leaves the guest looking at an empty stage. Both
+       events, because a video that is blocked from autoplaying still decodes
+       — and showing its first frame beats showing it beside the canvas. */
+    const swap=()=>{if(currentMode==="polaroid"){stopPolaroidLoop();$("mainCanvas").hidden=true;}};
+    v.onloadeddata=swap;
+    v.onplaying=swap;
+    /* iOS pauses inline video when the booth is backgrounded and does not
+       resume on return. Nothing in the UI can pause it deliberately, so any
+       pause while the guest is still here is one to undo. */
+    v.onpause=()=>{if(currentMode==="polaroid"&&!v.hidden)v.play().catch(()=>{});};
+    v.play().catch(()=>{});
+  }catch(e){
+    if(token!==polaroidToken)return;
+    polaroidState="unsupported";polaroidStatus();
+  }
+}
+
+/* The still export, rendered fresh at print size rather than read back off
+   the preview — the canvas is very likely sitting mid-crossfade. */
+async function polaroidPrintBlob(){
+  const imgs=await Promise.all(photos.map(loadImage));
+  const job=Polaroid.compose(Object.assign({base:POLAROID_PRINT_BASE},polaroidOptions(imgs)));
+  const c=document.createElement("canvas");
+  c.width=job.geo.W;c.height=job.geo.H;
+  job.drawStill(c.getContext("2d"),coverIndex===null?0:coverIndex);
+  return new Promise(r=>c.toBlob(r,"image/png",1));
 }
 
 function renderStrip(ctx,c,imgs,s,orientation){
@@ -675,18 +849,35 @@ function renderStrip(ctx,c,imgs,s,orientation){
 }
 
 async function canvasBlob(){return new Promise(r=>$("mainCanvas").toBlob(r,"image/png",1));}
+/* Save is always the print. Share prefers the MP4 on the Polaroid tab —
+   the moving version is the thing worth sending — and falls back to the
+   print everywhere else and whenever the encoder could not run. */
+async function stillBlob(){
+  return currentMode==="polaroid"?polaroidPrintBlob():canvasBlob();
+}
+function download(blob,ext){
+  const url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download=`photo-booth-${currentMode}-${Date.now()}.${ext}`;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
 async function shareCurrent(){
   resetIdle();
-  const blob=await canvasBlob(),file=new File([blob],`photo-booth-${currentMode}-${Date.now()}.png`,{type:"image/png"});
+  const video=currentMode==="polaroid"&&polaroidVideoBlob;
+  const blob=video?polaroidVideoBlob:await stillBlob();
+  const name=`photo-booth-${currentMode}-${Date.now()}.${video?"mp4":"png"}`;
+  const file=new File([blob],name,{type:video?"video/mp4":"image/png"});
   try{
-    if(navigator.canShare&&navigator.canShare({files:[file]}))await navigator.share({files:[file],title:settings.eventTitle,text:settings.eventTitle});
-    else await saveCurrent();
-  }catch(e){}
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:settings.eventTitle,text:settings.eventTitle});
+      return;
+    }
+  }catch(e){return;/* the guest cancelled the sheet — not a reason to download */}
+  download(blob,video?"mp4":"png");
 }
 async function saveCurrent(){
   resetIdle();
-  const blob=await canvasBlob(),url=URL.createObjectURL(blob),a=document.createElement("a");
-  a.href=url;a.download=`photo-booth-${currentMode}-${Date.now()}.png`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  download(await stillBlob(),"png");
 }
 function resetIdle(){
   clearTimeout(idleTimer);
@@ -718,6 +909,20 @@ function renderAdminPreview(){
     return;
   }
 
+  /* Instant film has one shape, so the Polaroid preview ignores the
+     landscape/portrait tabs — a session's orientation changes the crop
+     inside the window, never the print. */
+  if(adminPreviewType==="polaroid"){
+    const geo=Polaroid.size(430);
+    c.width=geo.W;c.height=geo.H;
+    Polaroid.render(ctx,{
+      width:430,img:Covers.placeholder(),
+      copy:Polaroid.copyFor(s),
+      hand:s.polaroidHand,transition:s.polaroidTransition
+    });
+    return;
+  }
+
   const size=Covers.coverSize(adminOrientation,land?520:600);
   c.width=size.width;c.height=size.height;
   Covers.render(ctx,{
@@ -740,7 +945,7 @@ $("changeCoverPhoto").onclick=()=>{coverIndex=null;$("magazinePickStep").hidden=
 
 $("openSettings").onclick=()=>{fillSettingsUI();showScreen("settings");setTimeout(()=>{renderAdminPreview();renderEventGallery();},0);};
 $("closeSettings").onclick=()=>showScreen("welcome");
-$("saveSettings").onclick=()=>{settings=draftSettings();persistSettings();fillSettingsUI();buildReviewControls();showScreen("welcome");};
+$("saveSettings").onclick=()=>{settings=draftSettings();persistSettings();fillSettingsUI();invalidatePolaroid();buildReviewControls();showScreen("welcome");};
 $("resetSettings").onclick=()=>{settings={...DEFAULTS};persistSettings();fillSettingsUI();renderAdminPreview();};
 $("clearGallery").onclick=async()=>{await clearGallerySessions();await renderEventGallery();};
 

@@ -896,5 +896,10 @@ function placeholder(){
   return c;
 }
 
-global.Covers={TEMPLATES,RATIO,coverSize,derive,copyFor,copyKeys:COPY_KEYS,render,placeholder,FONT};
+/* `editorialFinish`, `drawPhotoCover` and the title parsers are shared with
+   the Living Polaroid. The finish in particular is exported rather than
+   copied: one house grade for every keepsake the booth prints, changed in
+   one place. */
+global.Covers={TEMPLATES,RATIO,coverSize,derive,copyFor,copyKeys:COPY_KEYS,render,placeholder,FONT,
+  editorialFinish,drawPhotoCover,firstName,eventAge,ordinal,heartPath};
 })(window);

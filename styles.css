@@ -43,6 +43,14 @@ video.mirror{transform:scaleX(-1)}
 .preview-stage{min-height:88svh;display:flex;align-items:center;justify-content:center;overflow:hidden}
 #mainCanvas{display:block;max-width:100%;max-height:88svh;width:auto;box-shadow:0 26px 70px rgba(50,40,30,.2);transition:opacity .14s ease,transform .14s ease}
 #mainCanvas.changing{opacity:.3;transform:scale(.994)}
+/* The Living Polaroid preview: the canvas animates first, then the encoded
+   MP4 takes its place in the same slot at the same size. */
+.polaroid-video{display:block;max-width:100%;max-height:88svh;width:auto;box-shadow:0 26px 70px rgba(50,40,30,.2)}
+/* An author `display:block` outranks the UA rule for [hidden], so both of
+   these need saying out loud or the canvas sits beside its own video. */
+#mainCanvas[hidden],.polaroid-video[hidden]{display:none}
+.polaroid-status{margin:10px 0 0;font-size:12px;letter-spacing:.02em;opacity:.6}
+.polaroid-status.ready{opacity:1}
 .review-panel{background:#fbf9f5;border:1px solid rgba(0,0,0,.05);padding:22px 20px;max-height:92svh;overflow:auto}
 .review-nav{display:flex;gap:8px;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:18px}
 .mode-tab{border:1px solid var(--line);background:#fff;padding:10px 14px;font-size:12px}
@@ -107,7 +115,7 @@ canvas.mag-style-preview{display:block;width:100%;height:auto;background:#e9e2d8
 @media(max-width:920px){
   .review-grid{grid-template-columns:1fr;gap:10px}
   .preview-stage{min-height:auto}
-  #mainCanvas{max-height:58svh;max-width:92vw}
+  #mainCanvas,.polaroid-video{max-height:58svh;max-width:92vw}
   .review-panel{max-height:none}
   .admin-grid{grid-template-columns:1fr}
   .admin-preview{position:static}

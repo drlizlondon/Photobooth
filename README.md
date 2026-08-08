@@ -1,13 +1,14 @@
 # Rae's Photo Booth — Live Build
 
 ## Guest flow
-Start → 3 photos → Strip → optionally try frame/filter → Magazine → pick one of the 3 photos → choose one of four cover styles → Share / Save → Next guest.
+Start → 3 photos → Strip → optionally try frame/filter → Magazine → pick one of the 3 photos → choose one of four cover styles → Polaroid → Share / Save → Next guest.
 
 Every new guest resets to:
 - Strip
 - White frame
 - Original filter
 - no magazine photo selected
+- no Living Polaroid built
 
 ## Strip
 Frames:
@@ -42,6 +43,61 @@ Cover copy lives in one set of slots shared by all four styles (`covers.js`). Ev
 
 Legibility is measured, not assumed: the renderer samples the photo behind each block of type and deepens the scrim where the photo is bright, so white type never washes out on a pale wall.
 
+## Living Polaroid
+A third keepsake next to Strip and Magazine: one instant-film print whose
+photograph loops, exported as a genuine H.264 MP4.
+
+**The print.** Real Polaroid 600 geometry — 3.5in × 4.233in overall, a nearly
+square image area, equal borders on the sides and top and the rest falling to
+the bottom. Warm white paper with a gradient and fine grain, small corner
+radius, soft drop shadow. Because the photo window is near-square, a wide
+group shot is cropped in from the sides; that is the format, and it is why the
+Polaroid supplements the strip rather than replacing it.
+
+**The handwriting.** Four lines under the photograph in `Marker Felt` (an iOS
+and macOS system face, so the booth needs no web font and works offline),
+widened with a same-ink stroke so it reads as a thick felt tip rather than a
+thin handwriting font. Hearts are drawn as paths, not typed: no handwriting
+face carries ♡, so the glyph would fall back to a symbol font at half the
+weight of the letters beside it. Cursive is available as an alternative in
+Admin. Each line gets a tiny tilt and offset derived from a hash of its own
+text — deterministic, so the animated preview and the exported file agree.
+
+**The animation.** Only the photograph changes. Frame, paper, shadow and
+handwriting are rendered once into a chrome layer with the window punched out,
+so they cannot drift; each video frame is the photo plates composited under
+that one layer. Four seconds at 25fps:
+
+`P1 0.6s │ fade 0.2s │ P2 1.2s │ fade │ P3 1.2s │ fade │ P1 0.6s`
+
+The clip **starts and ends halfway through Photo 1's hold**. iOS does not loop
+`<video>` gaplessly — there is a hitch at the seam whatever the pixels do — so
+the seam is placed between two identical *still* frames, where a dropped
+millisecond is invisible. Seaming mid-transition, the obvious way to write
+this, would put the hitch exactly where the eye is tracking movement.
+Measured: the difference across the seam is 0.95, against 0.83 for two
+adjacent frames sitting still and 26.6 for a genuine photo change.
+
+Admin can switch the crossfade for a hard cut; the holds lengthen to 1.4s so
+the clip stays 4.2 seconds either way.
+
+**Exports.** Share sends the MP4 (H.264 Baseline, 1080 wide, `autoplay muted
+playsinline loop` in the preview); Save writes the still PNG at 1400 wide.
+Where no encoder exists, Share falls back to the PNG and the panel says so.
+
+**The photograph** gets the booth's editorial finish and nothing else — the
+same `editorialFinish` the covers use, imported rather than reimplemented, so
+one house grade covers every keepsake. No beautifying, no relighting, no glow,
+no bloom. The finish runs once per photo rather than once per frame: it is a
+pass on the photograph, not on the film.
+
+**Not yet built — the motion capture.** The far better version of this records
+the ~0.9s *before* each shutter, so each panel holds real movement (people
+settling, a laugh) and resolves into the still that appears on the strip and
+the cover. That wants a hard cut, not a crossfade — dissolves over moving
+footage look dated. It also means recording during the countdown, which
+touches the capture path, so it is deliberately deferred.
+
 ## Admin
 Live previews (using the real cover renderer with a stand-in photo):
 - Strip
@@ -49,13 +105,15 @@ Live previews (using the real cover renderer with a stand-in photo):
 - Editorial
 - Noir
 - Press
+- Polaroid (instant film has one shape, so this one ignores the orientation tabs)
 - Landscape
 - Portrait
 
-**Every word a guest can see is editable.** Three groups of fields:
+**Every word a guest can see is editable.** Four groups of fields:
 - *Magazine Cover* / *Keepsake Cover* — all copy printed on the covers, including the badge's own "edition" / "of" wording.
 - *Strip* — the strip's header, signature and date lines.
-- *Screen Text* — welcome eyebrow, start button and hint, cancel, shot counter (`{n}` / `{total}`), camera prompts (comma-separated, one per shot), the Strip/Magazine tabs, every control label, Share / Save / Next guest / Retake, and the end-screen wording.
+- *Living Polaroid* — the four handwritten lines, felt tip or cursive, crossfade or hard cut, and the three status lines the panel shows while rendering, when ready, and when video is unavailable.
+- *Screen Text* — welcome eyebrow, start button and hint, cancel, shot counter (`{n}` / `{total}`), camera prompts (comma-separated, one per shot), the Strip/Magazine/Polaroid tabs, every control label, Share / Save / Next guest / Retake, and the end-screen wording.
 
 The contract is the same everywhere: **leave a field blank and you get the default**, which the field shows in grey as its placeholder. Defaults are written to be good enough to run the night untouched; the fields are there for when something needs amending.
 
@@ -71,6 +129,7 @@ The contract is the same everywhere: **leave a field blank and you get the defau
 - Two-minute review timeout.
 - Share uses the iOS Share sheet where supported.
 - Save exports a high-resolution PNG.
+- The Living Polaroid also exports a looping H.264 MP4, encoded on the device.
 
 ## New Vercel project
 This is a plain static site.
@@ -120,5 +179,35 @@ B. Local Event Gallery
 - Cover copy auto-generates from the event title; old Birthday/Fashion copy is migrated on load where it was customised.
 - Strips, capture, gallery, sharing and guest flow are unchanged.
 
+## Video encoding
+`mp4.js` is a self-contained H.264 MP4 writer — one video track, constant
+frame duration, every sample in one chunk. That is enough for a four-second
+keepsake and small enough to hand-write, which beats vendoring a minified
+muxer into a repo that has no build step and no `node_modules`.
+
+Two encoders, probed in order:
+1. **WebCodecs** (`VideoEncoder`, Safari 17+). Deterministic — frame N gets
+   exactly the timestamp we ask for, so the loop lands on the authored frame.
+   Baseline profile is preferred, and not only for decoder reach: baseline has
+   no B-frames, so encoder output order matches input order and a loop cannot
+   come back re-ordered.
+2. **MediaRecorder** with an MP4 mime type (Safari only; Chrome emits WebM).
+   Real time, variable frame rate, so the seam is approximate — which is
+   exactly why the timeline seams on a still frame rather than a transition.
+
+Neither available means no video, and Share falls back to the PNG.
+
+Two things that are load-bearing and easy to undo by accident:
+- The frame loop yields with **`MessageChannel`, never `setTimeout(0)`**.
+  `setTimeout` is floored at ~4ms and throttled to whole seconds whenever the
+  page is not foreground; that alone took one encode from 1.5s to 13.3s.
+- Every frame checks `shouldAbort`. A guest flicking between tabs would
+  otherwise leave a stack of encoders all running to completion on one iPad.
+
+Measured on this build: 105 frames at 1080 × 1294 encode in ~1.5s to a ~550KB
+MP4 (~410KB with hard cuts), with the animated preview running throughout.
+
 ## Service worker
+Cache `v5` — bumped when `polaroid.js` and `mp4.js` joined the asset list.
+
 `sw.js` is **network first, cache as offline fallback**, and deletes old caches on activate. The previous cache-first worker meant an installed booth iPad kept serving whatever build it first saw, no matter how many times the site was redeployed. Set the booth up with signal once and it will always be on the current build; it still runs fine offline on the night.

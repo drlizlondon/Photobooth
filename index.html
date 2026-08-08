@@ -48,12 +48,14 @@
   <div class="review-grid">
     <div class="preview-stage">
       <canvas id="mainCanvas"></canvas>
+      <video id="polaroidVideo" class="polaroid-video" autoplay muted playsinline loop hidden></video>
     </div>
 
     <aside class="review-panel">
       <div class="review-nav">
         <button class="mode-tab active" id="stripTab" data-mode="strip" type="button">Strip</button>
         <button class="mode-tab" id="magazineTab" data-mode="magazine" type="button">Magazine</button>
+        <button class="mode-tab" id="polaroidTab" data-mode="polaroid" type="button">Polaroid</button>
       </div>
 
       <div id="stripControls" class="mode-controls active">
@@ -75,6 +77,11 @@
           <div id="magazineStyleChoices" class="mag-style-grid"></div>
           <button id="changeCoverPhoto" class="text-action" type="button">Choose a different photo</button>
         </div>
+      </div>
+
+      <div id="polaroidControls" class="mode-controls">
+        <p class="control-label" id="polaroidLabelText">LIVING POLAROID</p>
+        <p id="polaroidStatus" class="polaroid-status"></p>
       </div>
 
       <div class="share-row">
@@ -159,6 +166,30 @@
           <label>Badge word "of"<input id="setCoverOfWord" type="text" maxlength="10"></label>
         </div>
 
+        <h3>Living Polaroid</h3>
+        <p class="field-help">The four handwritten lines under the photograph. Same contract as the covers: leave one blank and it is written for you from the event title; leave one blank on purpose to print fewer lines.</p>
+        <div class="field-grid">
+          <label>Handwritten line 1<input id="setPolaroidLine1" type="text" maxlength="30"></label>
+          <label>Handwritten line 2<input id="setPolaroidLine2" type="text" maxlength="40"></label>
+          <label>Handwritten line 3<input id="setPolaroidLine3" type="text" maxlength="46"></label>
+          <label>Handwritten line 4<input id="setPolaroidLine4" type="text" maxlength="46"></label>
+          <label>Handwriting
+            <select id="setPolaroidHand">
+              <option value="marker">Felt tip</option>
+              <option value="cursive">Cursive</option>
+            </select>
+          </label>
+          <label>Between photos
+            <select id="setPolaroidTransition">
+              <option value="crossfade">Crossfade</option>
+              <option value="cut">Hard cut</option>
+            </select>
+          </label>
+          <label>While it renders<input id="setPolaroidBusyLabel" type="text" maxlength="40"></label>
+          <label>When it is ready<input id="setPolaroidReadyLabel" type="text" maxlength="46"></label>
+          <label>If video is unavailable<input id="setPolaroidStillLabel" type="text" maxlength="52"></label>
+        </div>
+
         <h3>Screen Text</h3>
         <p class="field-help">Every word a guest sees. Blank uses the shipped wording shown in grey. The shot counter accepts {n} and {total}; camera prompts are comma-separated, one per shot.</p>
         <div class="field-grid">
@@ -170,6 +201,8 @@
           <label>Camera prompts<input id="setPromptLines" type="text" maxlength="120"></label>
           <label>Strip tab<input id="setStripTabLabel" type="text" maxlength="20"></label>
           <label>Magazine tab<input id="setMagazineTabLabel" type="text" maxlength="20"></label>
+          <label>Polaroid tab<input id="setPolaroidTabLabel" type="text" maxlength="20"></label>
+          <label>Polaroid label<input id="setPolaroidLabel" type="text" maxlength="24"></label>
           <label>Frame label<input id="setFrameLabel" type="text" maxlength="24"></label>
           <label>Filter label<input id="setFilterLabel" type="text" maxlength="24"></label>
           <label>Pick-photo label<input id="setPickLabel" type="text" maxlength="34"></label>
@@ -222,6 +255,7 @@
           <button class="admin-preview-tab" data-preview="editorial" type="button">Editorial</button>
           <button class="admin-preview-tab" data-preview="noir" type="button">Noir</button>
           <button class="admin-preview-tab" data-preview="press" type="button">Press</button>
+          <button class="admin-preview-tab" data-preview="polaroid" type="button">Polaroid</button>
         </div>
         <div class="admin-preview-tabs orientation-tabs">
           <button class="admin-orientation-tab active" data-orientation="landscape" type="button">Landscape</button>
@@ -236,6 +270,8 @@
 
 </main>
 <script src="covers.js"></script>
+<script src="polaroid.js"></script>
+<script src="mp4.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

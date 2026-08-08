@@ -20,7 +20,7 @@ const FONT={
 const TEMPLATES=[
   {key:"keepsake",  label:"Keepsake",  hint:"Numbered guest edition"},
   {key:"editorial", label:"Editorial", hint:"Full-bleed fashion"},
-  {key:"noir",      label:"Noir",      hint:"Deep mono drama"},
+  {key:"noir",      label:"Noir",      hint:"Deep tonal drama"},
   {key:"press",     label:"Press",     hint:"Bold sidebar"}
 ];
 
@@ -237,24 +237,6 @@ function vignette(ctx,W,H,a){
   g.addColorStop(1,`rgba(0,0,0,${a})`);
   ctx.save();ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.restore();
 }
-let grainTile=null;
-function grain(ctx,W,H,alpha){
-  try{
-    if(!grainTile){
-      grainTile=document.createElement("canvas");grainTile.width=grainTile.height=110;
-      const g=grainTile.getContext("2d"),d=g.createImageData(110,110);
-      for(let i=0;i<d.data.length;i+=4){
-        const v=128+(Math.random()*2-1)*54;
-        d.data[i]=d.data[i+1]=d.data[i+2]=v;d.data[i+3]=255;
-      }
-      g.putImageData(d,0,0);
-    }
-    const p=ctx.createPattern(grainTile,"repeat");
-    if(!p)return;
-    ctx.save();ctx.globalAlpha=alpha;ctx.globalCompositeOperation="overlay";
-    ctx.fillStyle=p;ctx.fillRect(0,0,W,H);ctx.restore();
-  }catch(e){}
-}
 /* A feathered pool of shade behind one block of type. Reads as lighting
    falloff rather than a box, and rescues display type that lands on a
    bright part of the photo. */
@@ -362,70 +344,337 @@ function applyGrade(ctx,x,y,w,h,spec){
 }
 
 /* ---------- editorial finish ---------- */
-/* A luxury print pass on the photograph itself: +2% exposure, +6% contrast,
-   -4% saturation, then ultra-fine print grain. No fake lighting, no glow,
-   no beauty work. Runs on the photo rectangle only — never over type — and
-   before the scrims are measured, so `edgeLuma` reads the finished picture.
+/* The magazine finish is an adaptive, print-minded pixel pass. It never
+   detects or reconstructs a face, isolates a background, changes geometry,
+   paints light, or touches the typography. The only spatial operations are
+   tiny luminance-only detail passes, so skin, hair, fabric and the original
+   scene remain photographic rather than becoming generated or airbrushed.
 
-   This is the *only* grade a cover photo gets beyond its template's own.
-   The guest's B&W / Vintage / Warm / Glow filters are a strip system and are
-   deliberately not plumbed in here: a magazine cover has one house look. */
+   Template colour is folded into the same floating-point pass and clamped
+   once at the very end. That matters in white clothing and bright venues:
+   the old sequence clipped a template grade before highlight recovery had a
+   chance to see it. */
 
-const FINISH={exposure:1.02,contrast:1.06,saturation:0.96,grain:0.015};
-
-/* Exposure and contrast are per-channel and identical across R/G/B, so they
-   collapse into one 256-entry table. Unclamped on purpose: the original
-   clamps once at the end, after saturation, and clamping early would change
-   how highlights desaturate. */
-let finishLut=null;
-function editorialLut(){
-  if(finishLut)return finishLut;
-  finishLut=new Float64Array(256);
-  for(let v=0;v<256;v++)finishLut[v]=((v*FINISH.exposure-128)*FINISH.contrast)+128;
-  return finishLut;
+const EDITORIAL_FINISH={
+  targetMid:0.46,exposureAdapt:0.18,minEV:-0.10,maxEV:0.12,
+  wbDeadband:0.035,wbFullCast:0.14,wbStrength:0.60,wbMin:0.94,wbMax:1.06,
+  sCurve:0.052,shadowLift:0.007,highlightShoulder:0.018,
+  blackDensity:0.005,whiteClean:0.008,matte:0.004,
+  saturation:0.96,vibrance:0.07,
+  noiseLight:0.06,noiseShadow:0.12,clarity:0.11,
+  microContrast:0.06,preSharpen:0.10,finalSharpen:0.05,
+  grainOpacity:0.025,grainRange:0.35,
+  floor:2.5/255,ceiling:253/255
+};
+function clamp01(v){return v<0?0:(v>1?1:v);}
+function smoothstep(a,b,v){
+  if(v<=a)return 0;if(v>=b)return 1;
+  const t=(v-a)/(b-a);return t*t*(3-2*t);
 }
 
-/* Sparse black dots on a 6px grid, baked once into a tile whose side is a
-   multiple of the grid so it repeats seamlessly. Deterministic, unlike
-   re-rolling the dots per render — the preview and the saved file match. */
-let printTile=null;
-function printGrainTile(){
-  if(printTile)return printTile;
-  printTile=document.createElement("canvas");
-  printTile.width=printTile.height=120;
-  const g=printTile.getContext("2d");
-  g.fillStyle="#000";
-  for(let y=0;y<120;y+=6)for(let x=0;x<120;x+=6)if(Math.random()>0.65)g.fillRect(x,y,1,1);
-  return printTile;
+/* `applyGrade` above keeps CSS's between-step clamping because strips depend
+   on that exact behaviour. Covers use the same recipes as one affine float
+   transform so the editorial shoulder can retain the grade's highlight
+   headroom until the final output clamp. */
+const floatGradeCache={};
+function compileFloatGrade(spec){
+  const key=String(spec||"");
+  if(floatGradeCache[key]!==undefined)return floatGradeCache[key];
+  const steps=compileGrade(key);
+  if(!steps||!steps.length){floatGradeCache[key]=null;return null;}
+  let m=identity(),o=[0,0,0];
+  for(const step of steps){
+    const a=step.m,b=m,p=o;
+    m=[
+      a[0]*b[0]+a[1]*b[3]+a[2]*b[6],a[0]*b[1]+a[1]*b[4]+a[2]*b[7],a[0]*b[2]+a[1]*b[5]+a[2]*b[8],
+      a[3]*b[0]+a[4]*b[3]+a[5]*b[6],a[3]*b[1]+a[4]*b[4]+a[5]*b[7],a[3]*b[2]+a[4]*b[5]+a[5]*b[8],
+      a[6]*b[0]+a[7]*b[3]+a[8]*b[6],a[6]*b[1]+a[7]*b[4]+a[8]*b[7],a[6]*b[2]+a[7]*b[5]+a[8]*b[8]
+    ];
+    o=[
+      a[0]*p[0]+a[1]*p[1]+a[2]*p[2]+step.o,
+      a[3]*p[0]+a[4]*p[1]+a[5]*p[2]+step.o,
+      a[6]*p[0]+a[7]*p[1]+a[8]*p[2]+step.o
+    ];
+  }
+  return floatGradeCache[key]={m,o};
 }
 
-function editorialFinish(ctx,x,y,w,h){
-  /* getImageData wants integers, and putImageData ignores the clip — so round
-     inward. A sub-pixel sliver of the photo edge going ungraded is invisible;
-     writing graded pixels outside the photo would not be. */
+const ANALYSIS_BINS=512,ANALYSIS_MAX=1.5;
+function histogramValue(hist,total,q){
+  const wanted=Math.max(1,total*q);let seen=0;
+  for(let i=0;i<hist.length;i++){
+    seen+=hist[i];if(seen>=wanted)return i/(hist.length-1)*ANALYSIS_MAX;
+  }
+  return 1;
+}
+/* About fifty thousand regularly spaced samples are enough for a stable
+   exposure/WB decision and keep four chooser thumbnails responsive. White
+   balance listens mainly to low-chroma midtones and has a deadband, so a red
+   dress or blue wall cannot make the whole photograph swing the other way. */
+function analyseEditorial(d,grade){
+  const pixels=d.length/4,stride=Math.max(1,Math.floor(pixels/50000));
+  const hist=new Uint32Array(ANALYSIS_BINS);
+  let sampled=0,nWeight=0,nr=0,ng=0,nb=0;
+  const gm=grade&&grade.m,go=grade&&grade.o;
+  for(let p=0;p<pixels;p+=stride){
+    const i=p*4;let r=d[i],g=d[i+1],b=d[i+2];
+    if(gm){
+      const rr=gm[0]*r+gm[1]*g+gm[2]*b+go[0];
+      const gg=gm[3]*r+gm[4]*g+gm[5]*b+go[1];
+      const bb=gm[6]*r+gm[7]*g+gm[8]*b+go[2];
+      r=rr;g=gg;b=bb;
+    }
+    const y=(LUMA[0]*r+LUMA[1]*g+LUMA[2]*b)/255;
+    const bin=Math.max(0,Math.min(ANALYSIS_BINS-1,Math.round(y/ANALYSIS_MAX*(ANALYSIS_BINS-1))));
+    hist[bin]++;sampled++;
+
+    const cr=clamp255(r),cg=clamp255(g),cb=clamp255(b);
+    const cy=LUMA[0]*cr+LUMA[1]*cg+LUMA[2]*cb;
+    if(cy>31&&cy<237){
+      const hi=Math.max(cr,cg,cb),lo=Math.min(cr,cg,cb);
+      const chroma=(hi-lo)/Math.max(20,hi);
+      /* A strong tungsten or blue cast can push an actually neutral surface
+         past 0.28 chroma. The faint extended window only accepts the channel
+         order of those casts; ordinary warm skin (whose red-green gap is
+         larger than its green-blue gap) cannot masquerade as a grey card. */
+      const blueCast=cb>cg&&cg>cr;
+      const yellowCast=cr>cg&&cg>cb&&(cg-cb)>(cr-cg)*0.8;
+      const skinSlope=cr>cg&&cg>cb&&(cr-cg)>(cg-cb)*1.2;
+      const core=chroma<0.28&&!skinSlope,extended=chroma<0.50&&(blueCast||yellowCast);
+      if(core||extended){
+        const chromaWeight=core?1-smoothstep(0.04,0.28,chroma):
+          0.18*(1-smoothstep(0.28,0.50,chroma));
+        const weight=chromaWeight*smoothstep(31,72,cy)*(1-smoothstep(205,237,cy));
+        nWeight+=weight;nr+=cr*weight;ng+=cg*weight;nb+=cb*weight;
+      }
+    }
+  }
+  const median=Math.max(0.025,histogramValue(hist,sampled,0.5));
+  const ev=Math.max(EDITORIAL_FINISH.minEV,Math.min(EDITORIAL_FINISH.maxEV,
+    EDITORIAL_FINISH.exposureAdapt*Math.log2(EDITORIAL_FINISH.targetMid/median)));
+  const sceneWhite=Math.max(1,histogramValue(hist,sampled,0.99));
+  let gainR=1,gainG=1,gainB=1;
+  if(nWeight>Math.max(24,sampled*0.0025)){
+    const mr=nr/nWeight,mg=ng/nWeight,mb=nb/nWeight;
+    const target=(mr+mg+mb)/3;
+    const cast=(Math.max(mr,mg,mb)-Math.min(mr,mg,mb))/Math.max(1,target);
+    const ramp=smoothstep(EDITORIAL_FINISH.wbDeadband,EDITORIAL_FINISH.wbFullCast,cast)*EDITORIAL_FINISH.wbStrength;
+    if(ramp>0){
+      gainR=1+(target/Math.max(1,mr)-1)*ramp;
+      gainG=1+(target/Math.max(1,mg)-1)*ramp;
+      gainB=1+(target/Math.max(1,mb)-1)*ramp;
+      gainR=Math.max(EDITORIAL_FINISH.wbMin,Math.min(EDITORIAL_FINISH.wbMax,gainR));
+      gainG=Math.max(EDITORIAL_FINISH.wbMin,Math.min(EDITORIAL_FINISH.wbMax,gainG));
+      gainB=Math.max(EDITORIAL_FINISH.wbMin,Math.min(EDITORIAL_FINISH.wbMax,gainB));
+      const preserve=LUMA[0]*gainR+LUMA[1]*gainG+LUMA[2]*gainB;
+      gainR/=preserve;gainG/=preserve;gainB/=preserve;
+    }
+  }
+  return {ev,sceneWhite,gainR,gainG,gainB};
+}
+
+/* A per-render LUT keeps the expensive curve math out of the full pixel
+   loop. Exposure adapts the midtones while protecting the opposite end of
+   the range; the remaining moves are deliberately tiny. Over-range values
+   left by a bright template grade are compressed back into the white point
+   before the curve, rather than being clipped. */
+const TONE_STEPS=4096;
+function editorialToneLut(analysis){
+  const lut=new Float32Array(TONE_STEPS),f=EDITORIAL_FINISH;
+  const e=Math.pow(2,analysis.ev)-1;
+  const effectiveWhite=Math.max(1,analysis.sceneWhite*(1+Math.min(0,e)));
+  for(let i=0;i<TONE_STEPS;i++){
+    let x=i/(TONE_STEPS-1)*ANALYSIS_MAX;
+    const unit=clamp01(x);
+    if(e>=0)x+=e*x*(1-smoothstep(0.72,1,unit));
+    else x+=e*x*smoothstep(0.02,0.25,unit)*
+      (1-0.9*smoothstep(0.72,0.98,unit));
+    if(x>0.70&&effectiveWhite>1.001){
+      x=0.70+(x-0.70)*(0.30/Math.max(0.30,effectiveWhite-0.70));
+    }
+    x=clamp01(x);
+    x+=f.shadowLift*(1-smoothstep(0.02,0.20,x));
+    x+=f.sCurve*(x-0.5)*4*x*(1-x);
+    x-=f.highlightShoulder*smoothstep(0.70,1,x);
+    x-=f.blackDensity*smoothstep(0.04,0.12,x)*(1-smoothstep(0.24,0.42,x));
+    x+=f.whiteClean*smoothstep(0.78,0.96,x);
+    x=f.matte+(1-f.matte)*x;
+    lut[i]=Math.max(f.floor,Math.min(f.ceiling,x));
+  }
+  return lut;
+}
+
+function boxBlurMap(src,w,h,radius){
+  const tmp=new Float32Array(src.length),out=new Float32Array(src.length);
+  for(let y=0;y<h;y++){
+    const row=y*w;let sum=0,left=0,right=-1;
+    for(let x=0;x<w;x++){
+      const want=Math.min(w-1,x+radius);
+      while(right<want)sum+=src[row+(++right)];
+      const drop=x-radius;
+      while(left<drop)sum-=src[row+(left++)];
+      tmp[row+x]=sum/(right-left+1);
+    }
+  }
+  for(let x=0;x<w;x++){
+    let sum=0,top=0,bottom=-1;
+    for(let y=0;y<h;y++){
+      const want=Math.min(h-1,y+radius);
+      while(bottom<want)sum+=tmp[(++bottom)*w+x];
+      const drop=y-radius;
+      while(top<drop)sum-=tmp[(top++)*w+x];
+      out[y*w+x]=sum/(bottom-top+1);
+    }
+  }
+  return out;
+}
+function localLumaMap(luma,w,h){
+  const step=Math.max(2,Math.min(4,Math.round(Math.min(w,h)/300)));
+  const mw=Math.ceil(w/step),mh=Math.ceil(h/step),small=new Float32Array(mw*mh);
+  for(let by=0;by<mh;by++)for(let bx=0;bx<mw;bx++){
+    let sum=0,n=0;
+    const y0=by*step,y1=Math.min(h,y0+step),x0=bx*step,x1=Math.min(w,x0+step);
+    for(let yy=y0;yy<y1;yy++)for(let xx=x0;xx<x1;xx++){sum+=luma[yy*w+xx];n++;}
+    small[by*mw+bx]=sum/Math.max(1,n);
+  }
+  return {data:boxBlurMap(small,mw,mh,2),width:mw,step};
+}
+
+/* Zero-mean triangular noise, seeded once and repeated on a 128px tile.
+   It is mixed as a 2.5% monochrome texture with a deliberately narrow tonal
+   range: about one code value RMS, visible in a comparison but not as an
+   effect. */
+const GRAIN_SIZE=128;
+let editorialGrain=null;
+function editorialGrainTile(){
+  if(editorialGrain)return editorialGrain;
+  const tile=new Float32Array(GRAIN_SIZE*GRAIN_SIZE);let seed=0x6d2b79f5,mean=0,max=0;
+  function random(){
+    seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;
+    return (seed>>>0)/4294967296;
+  }
+  for(let i=0;i<tile.length;i++){const v=random()+random()-1;tile[i]=v;mean+=v;}
+  mean/=tile.length;
+  for(let i=0;i<tile.length;i++){tile[i]-=mean;max=Math.max(max,Math.abs(tile[i]));}
+  for(let i=0;i<tile.length;i++)tile[i]/=max||1;
+  editorialGrain=tile;return tile;
+}
+
+function editorialFinish(ctx,x,y,w,h,gradeSpec){
   const ix=Math.max(0,Math.ceil(x)),iy=Math.max(0,Math.ceil(y));
   const iw=Math.min(ctx.canvas.width,Math.floor(x+w))-ix;
   const ih=Math.min(ctx.canvas.height,Math.floor(y+h))-iy;
   if(iw<=0||ih<=0)return;
   try{
-    const lut=editorialLut(),sat=FINISH.saturation;
     const image=ctx.getImageData(ix,iy,iw,ih),d=image.data;
-    for(let i=0;i<d.length;i+=4){
-      const r=lut[d[i]],g=lut[d[i+1]],b=lut[d[i+2]];
-      const grey=(r+g+b)/3;
-      /* The backing Uint8ClampedArray does the 0-255 clamp on assignment. */
-      d[i]=grey+(r-grey)*sat;
-      d[i+1]=grey+(g-grey)*sat;
-      d[i+2]=grey+(b-grey)*sat;
+    const grade=compileFloatGrade(gradeSpec),analysis=analyseEditorial(d,grade);
+    const tone=editorialToneLut(analysis),luma=new Uint8Array(iw*ih),f=EDITORIAL_FINISH;
+    const gm=grade&&grade.m,go=grade&&grade.o;
+
+    /* Tone and colour. Chroma is always rebuilt around luminance, and any
+       out-of-gamut colour is pulled back toward that luminance as one vector;
+       channels are never clipped independently, so hue stays put. */
+    for(let p=0,i=0;i<d.length;i+=4,p++){
+      let r=d[i],g=d[i+1],b=d[i+2];
+      if(gm){
+        const rr=gm[0]*r+gm[1]*g+gm[2]*b+go[0];
+        const gg=gm[3]*r+gm[4]*g+gm[5]*b+go[1];
+        const bb=gm[6]*r+gm[7]*g+gm[8]*b+go[2];
+        r=rr;g=gg;b=bb;
+      }
+      r=r/255*analysis.gainR;g=g/255*analysis.gainG;b=b/255*analysis.gainB;
+      const sourceY=LUMA[0]*r+LUMA[1]*g+LUMA[2]*b;
+      const ti=Math.max(0,Math.min(TONE_STEPS-1,Math.round(sourceY/ANALYSIS_MAX*(TONE_STEPS-1))));
+      const targetY=tone[ti];
+      const hi=Math.max(r,g,b),lo=Math.min(r,g,b);
+      const satMetric=clamp01((hi-lo)/Math.max(0.08,Math.abs(hi)));
+      const chromaScale=f.saturation*(1+f.vibrance*(1-satMetric));
+      let dr=(r-sourceY)*chromaScale,dg=(g-sourceY)*chromaScale,db=(b-sourceY)*chromaScale,k=1;
+      if(dr>0)k=Math.min(k,(f.ceiling-targetY)/dr);else if(dr<0)k=Math.min(k,(f.floor-targetY)/dr);
+      if(dg>0)k=Math.min(k,(f.ceiling-targetY)/dg);else if(dg<0)k=Math.min(k,(f.floor-targetY)/dg);
+      if(db>0)k=Math.min(k,(f.ceiling-targetY)/db);else if(db<0)k=Math.min(k,(f.floor-targetY)/db);
+      if(k<1){dr*=k;dg*=k;db*=k;}
+      d[i]=(targetY+dr)*255;d[i+1]=(targetY+dg)*255;d[i+2]=(targetY+db)*255;
+      luma[p]=Math.round(targetY*255);
+    }
+
+    const broad=localLumaMap(luma,iw,ih),noise=editorialGrainTile();
+    for(let py=0,p=0;py<ih;py++)for(let px=0;px<iw;px++,p++){
+      const i=p*4,c=luma[p],xl=px?px-1:px,xr=px+1<iw?px+1:px;
+      const yu=py?py-1:py,yd=py+1<ih?py+1:py;
+      const n=luma[yu*iw+px],s=luma[yd*iw+px],e=luma[py*iw+xr],ww=luma[py*iw+xl];
+      const nw=luma[yu*iw+xl],ne=luma[yu*iw+xr],sw=luma[yd*iw+xl],se=luma[yd*iw+xr];
+      const gaussian=(4*c+2*(n+s+e+ww)+nw+ne+sw+se)/16;
+      const cross=(n+s+e+ww)/4;
+      const y0=c/255,gaussDetail=(c-gaussian)/255,crossDetail=(c-cross)/255;
+      const tonal=smoothstep(0.035,0.18,y0)*(1-0.7*smoothstep(0.82,0.985,y0));
+      const nrStrength=f.noiseLight+(f.noiseShadow-f.noiseLight)*(1-smoothstep(0.22,0.62,y0));
+      const nrDelta=-gaussDetail*nrStrength*(1-smoothstep(0.018,0.075,Math.abs(gaussDetail)));
+      const local=(broad.data[Math.floor(py/broad.step)*broad.width+Math.floor(px/broad.step)]-c)/-255;
+      const clarity=f.clarity*Math.max(-0.06,Math.min(0.06,local))*
+        (1-smoothstep(0.06,0.14,Math.abs(local)))*tonal;
+      const micro=f.microContrast*Math.max(-0.025,Math.min(0.025,gaussDetail))*tonal;
+      const edgeGate=smoothstep(0.006,0.028,Math.abs(crossDetail));
+      const pre=f.preSharpen*Math.max(-0.035,Math.min(0.035,crossDetail))*edgeGate*tonal;
+      let cleanY=y0+nrDelta+clarity+micro+pre;
+      const localMin=Math.min(c,n,s,e,ww,nw,ne,sw,se)/255-1.5/255;
+      const localMax=Math.max(c,n,s,e,ww,nw,ne,sw,se)/255+1.5/255;
+      cleanY=Math.max(localMin,Math.min(localMax,cleanY));
+
+      const grain=noise[((py+iy)&(GRAIN_SIZE-1))*GRAIN_SIZE+((px+ix)&(GRAIN_SIZE-1))];
+      const grainWeight=0.55+0.45*4*clamp01(cleanY)*(1-clamp01(cleanY));
+      const grainDelta=grain*f.grainOpacity*f.grainRange*grainWeight;
+      /* Added after grain, but based on the clean edge map: this restores
+         output definition without turning the grain or colour noise brittle. */
+      const finalSharp=f.finalSharpen*Math.max(-0.03,Math.min(0.03,crossDetail))*edgeGate*tonal;
+      const targetY=Math.max(f.floor,Math.min(f.ceiling,cleanY+grainDelta+finalSharp));
+
+      const r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255;
+      const baseY=LUMA[0]*r+LUMA[1]*g+LUMA[2]*b;
+      let dr=r-baseY,dg=g-baseY,db=b-baseY,k=1;
+      if(dr>0)k=Math.min(k,(f.ceiling-targetY)/dr);else if(dr<0)k=Math.min(k,(f.floor-targetY)/dr);
+      if(dg>0)k=Math.min(k,(f.ceiling-targetY)/dg);else if(dg<0)k=Math.min(k,(f.floor-targetY)/dg);
+      if(db>0)k=Math.min(k,(f.ceiling-targetY)/db);else if(db<0)k=Math.min(k,(f.floor-targetY)/db);
+      if(k<1){dr*=k;dg*=k;db*=k;}
+      d[i]=(targetY+dr)*255;d[i+1]=(targetY+dg)*255;d[i+2]=(targetY+db)*255;
     }
     ctx.putImageData(image,ix,iy);
+  }catch(e){}
+}
 
+/* Living Polaroid is outside this magazine-only request. Preserve its
+   existing lightweight fixed pass so the change cannot unexpectedly alter
+   already-authored video plates. */
+const POLAROID_FINISH={exposure:1.02,contrast:1.06,saturation:0.96,grain:0.015};
+let polaroidLut=null,printTile=null;
+function polaroidToneLut(){
+  if(polaroidLut)return polaroidLut;
+  polaroidLut=new Float64Array(256);
+  for(let v=0;v<256;v++)polaroidLut[v]=((v*POLAROID_FINISH.exposure-128)*POLAROID_FINISH.contrast)+128;
+  return polaroidLut;
+}
+function printGrainTile(){
+  if(printTile)return printTile;
+  printTile=document.createElement("canvas");printTile.width=printTile.height=120;
+  const g=printTile.getContext("2d");g.fillStyle="#000";
+  for(let yy=0;yy<120;yy+=6)for(let xx=0;xx<120;xx+=6)if(Math.random()>0.65)g.fillRect(xx,yy,1,1);
+  return printTile;
+}
+function polaroidFinish(ctx,x,y,w,h){
+  const ix=Math.max(0,Math.ceil(x)),iy=Math.max(0,Math.ceil(y));
+  const iw=Math.min(ctx.canvas.width,Math.floor(x+w))-ix;
+  const ih=Math.min(ctx.canvas.height,Math.floor(y+h))-iy;
+  if(iw<=0||ih<=0)return;
+  try{
+    const lut=polaroidToneLut(),sat=POLAROID_FINISH.saturation;
+    const image=ctx.getImageData(ix,iy,iw,ih),d=image.data;
+    for(let i=0;i<d.length;i+=4){
+      const r=lut[d[i]],g=lut[d[i+1]],b=lut[d[i+2]],grey=(r+g+b)/3;
+      d[i]=grey+(r-grey)*sat;d[i+1]=grey+(g-grey)*sat;d[i+2]=grey+(b-grey)*sat;
+    }
+    ctx.putImageData(image,ix,iy);
     const p=ctx.createPattern(printGrainTile(),"repeat");
-    if(!p)return;
-    ctx.save();
-    ctx.globalAlpha=FINISH.grain;
-    ctx.fillStyle=p;ctx.fillRect(x,y,w,h);
-    ctx.restore();
+    if(p){ctx.save();ctx.globalAlpha=POLAROID_FINISH.grain;ctx.fillStyle=p;ctx.fillRect(x,y,w,h);ctx.restore();}
   }catch(e){}
 }
 
@@ -436,11 +685,9 @@ function paintPhoto(L,x,y,w,h,grade,anchorY){
   ctx.fillStyle="#0d0d0d";ctx.fillRect(x,y,w,h);
   if(L.img){
     drawPhotoCover(ctx,L.img,x,y,w,h,anchorY);
-    /* Template grade first, then the house finish on top of it — the order
-       the covers were designed in, and the order the scrims are measured
-       against. Both are pixel passes now, so both survive an old iPad. */
-    if(grade)applyGrade(ctx,x,y,w,h,grade);
-    editorialFinish(ctx,x,y,w,h);
+    /* Template tone and the house finish share one float pass so bright detail
+       is not clipped between them. Scrims still measure the finished photo. */
+    editorialFinish(ctx,x,y,w,h,grade);
   }
   ctx.restore();
 }
@@ -596,7 +843,6 @@ function tplEditorial(L){
   bandScrim(L,"left",W*0.36,adapt(edgeLuma(L,"left",W*0.32),0.1,0.4));
   bandScrim(L,"right",W*0.32,adapt(edgeLuma(L,"right",W*0.3),0.06,0.36));
   vignette(ctx,W,H,0.26);
-  grain(ctx,W,H,0.045);
   ctx.fillStyle=ink;
 
   /* Masthead fills the measure; a short one leaves room for the skyline. */
@@ -671,13 +917,14 @@ function tplEditorial(L){
 function tplNoir(L){
   const {ctx,W,H,u,M,land,copy}=L;
   const ink="#f5f1ea";
-  paintPhoto(L,0,0,W,H,"grayscale(1) contrast(1.28) brightness(0.86)",land?0.42:0.34);
+  /* Noir keeps the photographed hues intact. Its drama comes from restrained
+     tonal density, the layout and its scrims — never a clothing recolour. */
+  paintPhoto(L,0,0,W,H,"contrast(1.10) saturate(0.94) brightness(0.98)",land?0.42:0.34);
   bandScrim(L,"top",H*0.36,adapt(edgeLuma(L,"top",H*0.26),0.3,0.66));
   bandScrim(L,"bottom",H*0.46,adapt(edgeLuma(L,"bottom",H*0.42),0.34,0.74));
   bandScrim(L,"left",W*0.34,adapt(edgeLuma(L,"left",W*0.3),0.12,0.46));
   bandScrim(L,"right",W*0.34,adapt(edgeLuma(L,"right",W*0.3),0.12,0.46));
   vignette(ctx,W,H,0.5);
-  grain(ctx,W,H,0.06);
   ctx.fillStyle=ink;
 
   const mSize=fitTracked(ctx,copy.masthead,W-2*M-(land?W*0.16:W*0.1),land?H*0.14:H*0.13,FONT.serif,700,0.09,24*u);
@@ -726,7 +973,6 @@ function tplKeepsake(L){
   bandScrim(L,"top",H*0.3,adapt(edgeLuma(L,"top",H*0.2),0.2,0.52));
   bandScrim(L,"bottom",H*0.44,adapt(edgeLuma(L,"bottom",H*0.36),0.3,0.68));
   vignette(ctx,W,H,0.34);
-  grain(ctx,W,H,0.045);
 
   /* Printed frame */
   const fi=M*0.5;
@@ -888,7 +1134,6 @@ function tplPress(L){
   ctx.fillStyle=g;ctx.fillRect(px,py,pw,ph);
   ctx.restore();
   plateIfBright(L,px+M*0.4,py+ph-ph*0.36,Math.min(pw*0.82,pw-M),ph*0.32,0.55);
-  grain(ctx,W,H,0.04);
 
   ctx.fillStyle=card;ctx.fillRect(0,0,barW,barH);
 
@@ -984,10 +1229,8 @@ function placeholder(){
   return c;
 }
 
-/* `editorialFinish`, `drawPhotoCover` and the title parsers are shared with
-   the Living Polaroid. The finish in particular is exported rather than
-   copied: one house grade for every keepsake the booth prints, changed in
-   one place. */
+/* The Polaroid keeps its existing lightweight finish; the adaptive editorial
+   pass is exported separately for cover tests and future magazine layouts. */
 global.Covers={TEMPLATES,RATIO,coverSize,derive,copyFor,copyKeys:COPY_KEYS,render,placeholder,FONT,
-  editorialFinish,applyGrade,drawPhotoCover,firstName,eventAge,ordinal,heartPath};
+  editorialFinish,polaroidFinish,applyGrade,drawPhotoCover,firstName,eventAge,ordinal,heartPath};
 })(window);

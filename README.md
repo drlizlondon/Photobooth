@@ -283,6 +283,23 @@ Measured on this build: 105 frames at 1080 × 1408 encode in ~1.4s to a ~640KB
 MP4, with the animated preview running throughout.
 
 ## Service worker
-Cache `v6` — bumped when `fonts.js` joined the asset list.
+Cache `v7` is the one-time bridge away from every shipped cache-first worker.
+When it finds one of those legacy booth caches it deletes only this app's old
+caches, takes control, and reloads the open booth page once. Settings and the
+saved gallery survive; photos in the middle of an unfinished session do not, so
+deploy this migration between booth sessions.
 
-`sw.js` is **network first, cache as offline fallback**, and deletes old caches on activate. The previous cache-first worker meant an installed booth iPad kept serving whatever build it first saw, no matter how many times the site was redeployed. Set the booth up with signal once and it will always be on the current build; it still runs fine offline on the night.
+`sw.js` is **network first, cache as offline fallback**. Its network requests
+explicitly bypass the browser HTTP cache, successful responses are fully written
+before the worker can be suspended, and `index.html` is used only for an offline
+page navigation — never as a fake response for a missing script or stylesheet.
+
+`app.js` registers with `updateViaCache: "none"` and checks again when the PWA
+comes online or returns to the foreground. After the v7 migration, a future
+worker update reloads immediately on the welcome screen or waits until the next
+between-guests boundary if a session is active.
+
+When the app shell or its asset list changes, update `ASSETS` and bump `CACHE` in
+`sw.js`. Before the event, open the installed booth once with a signal and let
+the migration reload finish; it will then keep the current build available
+offline.

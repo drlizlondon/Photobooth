@@ -156,6 +156,8 @@ let idleTimer=null;
 let audioCtx=null;
 let adminPreviewType="strip";
 let adminOrientation="landscape";
+let serviceWorkerRefreshPending=false;
+let serviceWorkerRefreshStarted=false;
 
 const $=id=>document.getElementById(id);
 const screens=["welcome","camera","review","timeout","settings"];
@@ -277,7 +279,20 @@ async function renderEventGallery(){
 }
 
 function persistSettings(){localStorage.setItem("raePhotoBoothLiveSettings",JSON.stringify(settings));}
-function showScreen(id){screens.forEach(s=>$(s).classList.toggle("active",s===id));}
+function applyServiceWorkerRefreshIfSafe(){
+  if(!serviceWorkerRefreshPending||serviceWorkerRefreshStarted||!$("welcome").classList.contains("active"))return false;
+  serviceWorkerRefreshStarted=true;
+  location.reload();
+  return true;
+}
+function requestServiceWorkerRefresh(){
+  serviceWorkerRefreshPending=true;
+  applyServiceWorkerRefreshIfSafe();
+}
+function showScreen(id){
+  screens.forEach(s=>$(s).classList.toggle("active",s===id));
+  if(id==="welcome")applyServiceWorkerRefreshIfSafe();
+}
 function delay(ms){return new Promise(r=>setTimeout(r,ms));}
 
 function fillSettingsUI(){
@@ -544,6 +559,9 @@ function resetCreativeState(){
 }
 
 async function beginSession(){
+  /* A newly activated worker waits until the previous guest is finished. The
+     next Start/Retake/Next guest tap is a safe boundary to load the new app. */
+  if(serviceWorkerRefreshPending){showScreen("welcome");return;}
   clearTimeout(idleTimer);
   captureSessionId++;
   const sid=captureSessionId;
@@ -1078,4 +1096,39 @@ document.querySelectorAll("#settings input,#settings select").forEach(el=>el.add
 }));
 
 fillSettingsUI();
-if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+if("serviceWorker" in navigator){
+  let hasServiceWorkerController=Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{
+    /* A first install does not need a reload; this page already came from the
+       network. A changed controller does, but never during a guest's session. */
+    const replacesExistingController=hasServiceWorkerController;
+    hasServiceWorkerController=Boolean(navigator.serviceWorker.controller);
+    if(replacesExistingController&&hasServiceWorkerController)requestServiceWorkerRefresh();
+  });
+
+  window.addEventListener("load",async()=>{
+    let registration;
+    let updateInFlight=false;
+    try{
+      registration=await navigator.serviceWorker.register("./sw.js",{updateViaCache:"none"});
+    }catch(error){
+      console.warn("Offline mode could not start.",error);
+      return;
+    }
+
+    const checkForUpdate=async()=>{
+      if(updateInFlight)return;
+      updateInFlight=true;
+      try{await registration.update();}
+      catch(error){if(navigator.onLine)console.warn("Could not check for a Photo Booth update.",error);}
+      finally{updateInFlight=false;}
+    };
+
+    window.addEventListener("online",checkForUpdate);
+    window.addEventListener("pageshow",checkForUpdate);
+    document.addEventListener("visibilitychange",()=>{
+      if(document.visibilityState==="visible")checkForUpdate();
+    });
+    await checkForUpdate();
+  });
+}

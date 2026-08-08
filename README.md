@@ -27,9 +27,9 @@ Frame and filter are separate systems.
 
 ## Magazine
 Four cover styles, each laid out separately for portrait and landscape sessions:
+- **Keepsake** (default) — the party cover: framed, didone masthead over condensed stacked lines, left rail of event detail, script + condensed hero line, hearts and an icon strip. Each guest gets their own **numbered edition** ("EDITION 14 OF 63") counted from the booth's local gallery; set the expected headcount in Admin.
 - **Editorial** — full-bleed high-fashion cover: oversized didone masthead, three feature columns, huge cover line bottom-right.
 - **Noir** — deep monochrome, centred masthead and cover line, heavy contrast.
-- **Celebration** — warm grade, occasion masthead with a script line, cover line in the event accent colour.
 - **Press** — solid sidebar carrying the masthead, accent issue chip, name and standfirst on the photo.
 
 Magazine always asks the guest to pick Photo 1 / 2 / 3 before showing the finished cover, then shows a live thumbnail of that photo in each of the four styles.
@@ -41,9 +41,9 @@ Legibility is measured, not assumed: the renderer samples the photo behind each 
 ## Admin
 Live previews (using the real cover renderer with a stand-in photo):
 - Strip
+- Keepsake
 - Editorial
 - Noir
-- Celebration
 - Press
 - Landscape
 - Portrait
@@ -109,3 +109,6 @@ B. Local Event Gallery
 - Photos now get a per-template grade, adaptive scrims, vignette and print grain.
 - Cover copy auto-generates from the event title; old Birthday/Fashion copy is migrated on load where it was customised.
 - Strips, capture, gallery, sharing and guest flow are unchanged.
+
+## Service worker
+`sw.js` is **network first, cache as offline fallback**, and deletes old caches on activate. The previous cache-first worker meant an installed booth iPad kept serving whatever build it first saw, no matter how many times the site was redeployed. Set the booth up with signal once and it will always be on the current build; it still runs fine offline on the night.

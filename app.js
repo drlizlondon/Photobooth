@@ -24,6 +24,16 @@ const DEFAULTS = {
   coverBigDek:"",
   coverFooter:"",
   coverBarcode:"",
+  coverEyebrow:"",
+  coverStack:"",
+  coverDateLine:"",
+  coverScriptSmall:"",
+  coverHeroScript:"",
+  coverHero:"",
+  coverThanks:"",
+  coverHashtag:"",
+  coverIcons:"",
+  coverEditionOf:"",
 
   accent:"#d86c8f",
   countdown:3,
@@ -45,7 +55,8 @@ let currentMode="strip";
 let frameStyle="white";
 let filterStyle="original";
 let coverIndex=null;
-let magazineStyle="editorial";
+let magazineStyle="keepsake";
+let sessionEdition=1;
 let sessionOrientation="landscape";
 let captureSessionId=0;
 let idleTimer=null;
@@ -129,6 +140,9 @@ async function getGallerySessions(){
     return all.sort((a,b)=>b.id-a.id);
   }catch(e){return [];}
 }
+async function countGallerySessions(){
+  try{return (await getGallerySessions()).length||1;}catch(e){return 1;}
+}
 async function clearGallerySessions(){
   try{
     const db=await openGalleryDB();
@@ -155,6 +169,7 @@ async function renderEventGallery(){
     btn.onclick=async()=>{
       photos=[...session.photos];
       sessionOrientation=session.orientation||"landscape";
+      sessionEdition=sessions.length-sessions.indexOf(session);
       resetCreativeState();
       buildReviewControls();
       showScreen("review");
@@ -179,7 +194,7 @@ function fillSettingsUI(){
     setStripTop:"stripTop",setStripSecond:"stripSecond",setStripSignature:"stripSignature",setStripDate:"stripDate"
   };
   COVER_FIELDS.forEach(([id,key])=>map[id]=key);
-  Object.entries(map).forEach(([id,key])=>$(id).value=settings[key]);
+  Object.entries(map).forEach(([id,key])=>{if($(id))$(id).value=settings[key];});
   refreshCoverPlaceholders();
   $("setAccent").value=settings.accent;
   $("setCountdown").value=String(settings.countdown);
@@ -222,7 +237,7 @@ function draftSettings(){
     flash:$("setFlash").checked,
     confetti:$("setConfetti").checked
   };
-  COVER_FIELDS.forEach(([id,key])=>{draft[key]=$(id).value.trim();});
+  COVER_FIELDS.forEach(([id,key])=>{if($(id))draft[key]=$(id).value.trim();});
   return draft;
 }
 
@@ -301,7 +316,7 @@ function resetCreativeState(){
   frameStyle="white";
   filterStyle="original";
   coverIndex=null;
-  magazineStyle="editorial";
+  magazineStyle="keepsake";
   document.querySelectorAll(".mode-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode==="strip"));
   $("stripControls").classList.add("active");
   $("magazineControls").classList.remove("active");
@@ -338,6 +353,7 @@ async function beginSession(){
     }
     stopCamera();
     await saveSessionToGallery(photos,sessionOrientation);
+    sessionEdition=await countGallerySessions();
     buildReviewControls();
     showScreen("review");
     await renderWithFade();
@@ -437,7 +453,8 @@ async function renderStyleThumbs(){
       width:size.width,height:size.height,
       copy,accent:settings.accent,
       template:cv.dataset.template,
-      photoFilter:filterCSS()
+      photoFilter:filterCSS(),
+      edition:{no:sessionEdition}
     });
   });
 }
@@ -534,7 +551,8 @@ function renderMagazine(ctx,c,img){
     copy:Covers.copyFor(settings),
     accent:settings.accent,
     template:magazineStyle,
-    photoFilter:filterCSS()
+    photoFilter:filterCSS(),
+    edition:{no:sessionEdition}
   });
 }
 
@@ -635,7 +653,8 @@ function renderAdminPreview(){
     width:size.width,height:size.height,
     copy:Covers.copyFor(s),
     accent:s.accent,
-    template:adminPreviewType
+    template:adminPreviewType,
+    edition:{no:14}
   });
 }
 

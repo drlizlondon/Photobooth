@@ -18,12 +18,12 @@
 <section id="welcome" class="screen active welcome-screen">
   <button id="openSettings" class="settings-link" type="button">SETTINGS</button>
   <div class="welcome-inner">
-    <p class="eyebrow">PHOTO BOOTH</p>
+    <p class="eyebrow" id="welcomeEyebrow">PHOTO BOOTH</p>
     <h1 id="welcomeTitle">Rae's 26th Birthday</h1>
     <p id="welcomeDate" class="welcome-date">2026</p>
     <button id="startBtn" class="round-start" type="button">
-      <span>START</span>
-      <small>tap to begin</small>
+      <span id="startLabelText">START</span>
+      <small id="startHintText">tap to begin</small>
     </button>
   </div>
 </section>
@@ -52,26 +52,26 @@
 
     <aside class="review-panel">
       <div class="review-nav">
-        <button class="mode-tab active" data-mode="strip" type="button">Strip</button>
-        <button class="mode-tab" data-mode="magazine" type="button">Magazine</button>
+        <button class="mode-tab active" id="stripTab" data-mode="strip" type="button">Strip</button>
+        <button class="mode-tab" id="magazineTab" data-mode="magazine" type="button">Magazine</button>
       </div>
 
       <div id="stripControls" class="mode-controls active">
-        <p class="control-label">FRAME</p>
+        <p class="control-label" id="frameLabelText">FRAME</p>
         <div id="frameChoices" class="choice-row"></div>
 
-        <p class="control-label">FILTER</p>
+        <p class="control-label" id="filterLabelText">FILTER</p>
         <div id="filterChoices" class="choice-row"></div>
       </div>
 
       <div id="magazineControls" class="mode-controls">
         <div id="magazinePickStep">
-          <p class="control-label">PICK YOUR COVER</p>
+          <p class="control-label" id="pickLabelText">PICK YOUR COVER</p>
           <div id="coverPhotoChoices" class="photo-choice-grid"></div>
         </div>
 
         <div id="magazineStyleStep" hidden>
-          <p class="control-label">CHOOSE A STYLE</p>
+          <p class="control-label" id="styleLabelText">CHOOSE A STYLE</p>
           <div id="magazineStyleChoices" class="mag-style-grid"></div>
           <button id="changeCoverPhoto" class="text-action" type="button">Choose a different photo</button>
         </div>
@@ -90,8 +90,8 @@
 
 <section id="timeout" class="screen timeout-screen">
   <div>
-    <p class="eyebrow">SESSION COMPLETE</p>
-    <h2>Thank you ♡</h2>
+    <p class="eyebrow" id="endEyebrow">SESSION COMPLETE</p>
+    <h2 id="endMessage">Thank you ♡</h2>
   </div>
 </section>
 
@@ -155,6 +155,32 @@
           <label>Hashtag<input id="setCoverHashtag" type="text" maxlength="32"></label>
           <label>Icon labels<input id="setCoverIcons" type="text" maxlength="80"></label>
           <label>Guests expected<input id="setCoverEditionOf" type="text" maxlength="5"></label>
+          <label>Badge word "edition"<input id="setCoverEditionWord" type="text" maxlength="16"></label>
+          <label>Badge word "of"<input id="setCoverOfWord" type="text" maxlength="10"></label>
+        </div>
+
+        <h3>Screen Text</h3>
+        <p class="field-help">Every word a guest sees. Blank uses the shipped wording shown in grey. The shot counter accepts {n} and {total}; camera prompts are comma-separated, one per shot.</p>
+        <div class="field-grid">
+          <label>Welcome eyebrow<input id="setWelcomeEyebrow" type="text" maxlength="32"></label>
+          <label>Start button<input id="setStartLabel" type="text" maxlength="20"></label>
+          <label>Start button hint<input id="setStartHint" type="text" maxlength="28"></label>
+          <label>Cancel button<input id="setCancelLabel" type="text" maxlength="20"></label>
+          <label>Shot counter<input id="setShotLabelFormat" type="text" maxlength="30"></label>
+          <label>Camera prompts<input id="setPromptLines" type="text" maxlength="120"></label>
+          <label>Strip tab<input id="setStripTabLabel" type="text" maxlength="20"></label>
+          <label>Magazine tab<input id="setMagazineTabLabel" type="text" maxlength="20"></label>
+          <label>Frame label<input id="setFrameLabel" type="text" maxlength="24"></label>
+          <label>Filter label<input id="setFilterLabel" type="text" maxlength="24"></label>
+          <label>Pick-photo label<input id="setPickLabel" type="text" maxlength="34"></label>
+          <label>Choose-style label<input id="setStyleLabel" type="text" maxlength="34"></label>
+          <label>Change-photo link<input id="setChangePhotoLabel" type="text" maxlength="34"></label>
+          <label>Share button<input id="setShareLabel" type="text" maxlength="20"></label>
+          <label>Save button<input id="setSaveLabel" type="text" maxlength="20"></label>
+          <label>Next-guest button<input id="setNextLabel" type="text" maxlength="24"></label>
+          <label>Retake link<input id="setRetakeLabel" type="text" maxlength="24"></label>
+          <label>End-screen eyebrow<input id="setEndEyebrow" type="text" maxlength="32"></label>
+          <label>End-screen message<input id="setEndMessage" type="text" maxlength="40"></label>
         </div>
 
         <h3>Booth</h3>

@@ -94,11 +94,13 @@ function derive(s){
     thanks:"Thank you for being part of something special",
     hashtag:("#"+name+occTitle+((year.match(/\d{4}/)||[""])[0])).replace(/[^\w#]/g,""),
     icons:"Captured memories, Shared moments, Made magic",
-    editionOf:""
+    editionOf:"",
+    editionWord:"Edition",
+    ofWord:"of"
   };
 }
 const COPY_KEYS=["masthead","occasion","script","skyline1","skyline2","skyline3","f1Title","f1Dek","f2Title","f2Dek","f3Title","f3Dek","big","bigDek","footer","barcode",
-  "eyebrow","stack","dateLine","scriptSmall","heroScript","hero","thanks","hashtag","icons","editionOf"];
+  "eyebrow","stack","dateLine","scriptSmall","heroScript","hero","thanks","hashtag","icons","editionOf","editionWord","ofWord"];
 function copyFor(s){
   const d=derive(s),out={};
   COPY_KEYS.forEach(k=>{
@@ -369,20 +371,20 @@ function brushStroke(ctx,x,y,w,color){
   ctx.closePath();ctx.fill();ctx.restore();
 }
 /* "EDITION 14 OF 63" roundel — the guest's own numbered copy. */
-function editionBadge(L,cx,cy,r,no,of,color,ink){
+function editionBadge(L,cx,cy,r,no,of,color,ink,words){
   const {ctx,u}=L;
   ctx.save();
   ctx.strokeStyle=rgba(color,0.75);ctx.lineWidth=1.6*u;
   ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();
   ctx.fillStyle=ink;
   setFont(ctx,700,r*0.19,FONT.sans);
-  drawTracked(ctx,"EDITION",cx,cy-r*0.34,r*0.19*0.18,"center");
+  drawTracked(ctx,String((words&&words.edition)||"EDITION").toUpperCase(),cx,cy-r*0.34,r*0.19*0.18,"center");
   ctx.fillStyle=color;
   const nSize=fitTracked(ctx,String(no),r*1.1,r*0.62,FONT.serif,700,0.01,r*0.2);
   drawTracked(ctx,String(no),cx,cy+nSize*0.3,nSize*0.01,"center");
   ctx.fillStyle=ink;
   setFont(ctx,700,r*0.17,FONT.sans);
-  if(of)drawTracked(ctx,"OF "+of,cx,cy+r*0.56,r*0.17*0.18,"center");
+  if(of)drawTracked(ctx,(String((words&&words.of)||"OF")+" "+of).toUpperCase(),cx,cy+r*0.56,r*0.17*0.18,"center");
   strokeHeart(ctx,cx,cy+r*0.76,r*0.2,r*0.18,rgba(color,0.85),1.4*u);
   ctx.restore();
 }
@@ -609,7 +611,7 @@ function tplKeepsake(L){
 
   /* Edition roundel */
   const bR=land?H*0.13:W*0.105;
-  editionBadge(L,W-M-bR,M+bR*0.9,bR,edition&&edition.no||1,copy.editionOf,accent,ink);
+  editionBadge(L,W-M-bR,M+bR*0.9,bR,edition&&edition.no||1,copy.editionOf,accent,ink,{edition:copy.editionWord,of:copy.ofWord});
 
   /* Left rail */
   const railTop=y+(land?34*u:48*u);

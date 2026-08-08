@@ -34,6 +34,28 @@ const DEFAULTS = {
   coverHashtag:"",
   coverIcons:"",
   coverEditionOf:"",
+  coverEditionWord:"",
+  coverOfWord:"",
+
+  welcomeEyebrow:"",
+  startLabel:"",
+  startHint:"",
+  cancelLabel:"",
+  stripTabLabel:"",
+  magazineTabLabel:"",
+  frameLabel:"",
+  filterLabel:"",
+  pickLabel:"",
+  styleLabel:"",
+  changePhotoLabel:"",
+  shareLabel:"",
+  saveLabel:"",
+  nextLabel:"",
+  retakeLabel:"",
+  endEyebrow:"",
+  endMessage:"",
+  shotLabelFormat:"",
+  promptLines:"",
 
   accent:"#d86c8f",
   countdown:3,
@@ -46,7 +68,48 @@ const DEFAULTS = {
 
 const FRAMES = [["white","White"],["black","Black"],["editorial","Editorial"],["film","Film"]];
 const FILTERS = [["original","Original"],["bw","B&W"],["vintage","Vintage"],["warm","Warm"],["glow","Glow"]];
-const PROMPTS = ["Everyone in!","Squash together!","One more!"];
+
+/* Every word a guest can see. [settings key, shipped default, element id].
+   Blank in settings means "use the default", which is what the admin field
+   shows as its placeholder — same contract as the cover copy. */
+const SCREEN_TEXT = [
+  ["welcomeEyebrow","PHOTO BOOTH","welcomeEyebrow"],
+  ["startLabel","START","startLabelText"],
+  ["startHint","tap to begin","startHintText"],
+  ["cancelLabel","CANCEL","cancelCapture"],
+  ["stripTabLabel","Strip","stripTab"],
+  ["magazineTabLabel","Magazine","magazineTab"],
+  ["frameLabel","FRAME","frameLabelText"],
+  ["filterLabel","FILTER","filterLabelText"],
+  ["pickLabel","PICK YOUR COVER","pickLabelText"],
+  ["styleLabel","CHOOSE A STYLE","styleLabelText"],
+  ["changePhotoLabel","Choose a different photo","changeCoverPhoto"],
+  ["shareLabel","Share","shareBtn"],
+  ["saveLabel","Save","saveBtn"],
+  ["nextLabel","Next guest →","nextGuestBtn"],
+  ["retakeLabel","Retake photos","retakeBtn"],
+  ["endEyebrow","SESSION COMPLETE","endEyebrow"],
+  ["endMessage","Thank you ♡","endMessage"]
+];
+/* Not tied to an element: used while the camera is running. */
+const SHOT_LABEL_DEFAULT = "PHOTO {n} / {total}";
+const PROMPTS_DEFAULT = "Everyone in!, Squash together!, One more!";
+
+function applyScreenText(){
+  SCREEN_TEXT.forEach(([key,def,id])=>{
+    const el=$(id);
+    if(el)el.textContent=String(settings[key]||"").trim()||def;
+  });
+}
+/* `prompts` is the on/off toggle; `promptLines` is the wording. */
+function capturePrompts(){
+  const raw=String(settings.promptLines||"").trim()||PROMPTS_DEFAULT;
+  return raw.split(/\s*[,|]\s*/).filter(Boolean);
+}
+function shotLabel(n,total){
+  const fmt=String(settings.shotLabelFormat||"").trim()||SHOT_LABEL_DEFAULT;
+  return fmt.replace(/\{n\}/gi,n).replace(/\{total\}/gi,total);
+}
 
 let settings=loadSettings();
 let stream=null;
@@ -188,12 +251,13 @@ function fillSettingsUI(){
   $("welcomeTitle").textContent=settings.eventTitle;
   $("welcomeDate").textContent=settings.date;
   document.documentElement.style.setProperty("--accent",settings.accent);
+  applyScreenText();
 
   const map={
     setEventTitle:"eventTitle",setDate:"date",
     setStripTop:"stripTop",setStripSecond:"stripSecond",setStripSignature:"stripSignature",setStripDate:"stripDate"
   };
-  COVER_FIELDS.forEach(([id,key])=>map[id]=key);
+  COVER_FIELDS.concat(TEXT_FIELDS).forEach(([id,key])=>map[id]=key);
   Object.entries(map).forEach(([id,key])=>{if($(id))$(id).value=settings[key];});
   refreshCoverPlaceholders();
   $("setAccent").value=settings.accent;
@@ -205,11 +269,15 @@ function fillSettingsUI(){
   $("setConfetti").checked=settings.confetti;
 }
 
+const inputId=key=>"set"+key.charAt(0).toUpperCase()+key.slice(1);
 /* [input id, settings key] for every editable cover line. */
 const COVER_FIELDS=Covers.copyKeys.map(k=>{
   const key="cover"+k.charAt(0).toUpperCase()+k.slice(1);
-  return ["set"+key.charAt(0).toUpperCase()+key.slice(1),key];
+  return [inputId(key),key];
 });
+/* Same contract for the guest-facing screen wording. */
+const TEXT_FIELDS=SCREEN_TEXT.map(([key])=>[inputId(key),key])
+  .concat([[inputId("shotLabelFormat"),"shotLabelFormat"],[inputId("promptLines"),"promptLines"]]);
 
 /* Blank fields show what the cover will auto-generate. */
 function refreshCoverPlaceholders(){
@@ -218,6 +286,9 @@ function refreshCoverPlaceholders(){
     const el=$(id);if(!el)return;
     el.placeholder=derived[Covers.copyKeys[i]]||"";
   });
+  SCREEN_TEXT.forEach(([key,def])=>{const el=$(inputId(key));if(el)el.placeholder=def;});
+  if($(inputId("shotLabelFormat")))$(inputId("shotLabelFormat")).placeholder=SHOT_LABEL_DEFAULT;
+  if($(inputId("promptLines")))$(inputId("promptLines")).placeholder=PROMPTS_DEFAULT;
 }
 
 function draftSettings(){
@@ -237,7 +308,7 @@ function draftSettings(){
     flash:$("setFlash").checked,
     confetti:$("setConfetti").checked
   };
-  COVER_FIELDS.forEach(([id,key])=>{if($(id))draft[key]=$(id).value.trim();});
+  COVER_FIELDS.concat(TEXT_FIELDS).forEach(([id,key])=>{if($(id))draft[key]=$(id).value.trim();});
   return draft;
 }
 
@@ -333,14 +404,15 @@ async function beginSession(){
   initAudio();
   showScreen("camera");
 
+  const promptList=capturePrompts();
   try{
     await startCamera();
     await delay(400);
     for(let i=0;i<3;i++){
       if(sid!==captureSessionId)return;
-      $("shotLabel").textContent=`PHOTO ${i+1} / 3`;
+      $("shotLabel").textContent=shotLabel(i+1,3);
       if(settings.prompts){
-        $("promptText").textContent=PROMPTS[i];
+        $("promptText").textContent=promptList[i]||"";
         $("promptText").classList.add("show");
         await delay(650);
         if(sid!==captureSessionId)return;
@@ -668,7 +740,7 @@ $("changeCoverPhoto").onclick=()=>{coverIndex=null;$("magazinePickStep").hidden=
 
 $("openSettings").onclick=()=>{fillSettingsUI();showScreen("settings");setTimeout(()=>{renderAdminPreview();renderEventGallery();},0);};
 $("closeSettings").onclick=()=>showScreen("welcome");
-$("saveSettings").onclick=()=>{settings=draftSettings();persistSettings();fillSettingsUI();showScreen("welcome");};
+$("saveSettings").onclick=()=>{settings=draftSettings();persistSettings();fillSettingsUI();buildReviewControls();showScreen("welcome");};
 $("resetSettings").onclick=()=>{settings={...DEFAULTS};persistSettings();fillSettingsUI();renderAdminPreview();};
 $("clearGallery").onclick=async()=>{await clearGallerySessions();await renderEventGallery();};
 

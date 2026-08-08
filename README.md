@@ -48,7 +48,12 @@ Live previews (using the real cover renderer with a stand-in photo):
 - Landscape
 - Portrait
 
-All event, strip and cover copy is editable; blank cover fields show their auto-generated value as a placeholder.
+**Every word a guest can see is editable.** Three groups of fields:
+- *Magazine Cover* / *Keepsake Cover* — all copy printed on the covers, including the badge's own "edition" / "of" wording.
+- *Strip* — the strip's header, signature and date lines.
+- *Screen Text* — welcome eyebrow, start button and hint, cancel, shot counter (`{n}` / `{total}`), camera prompts (comma-separated, one per shot), the Strip/Magazine tabs, every control label, Share / Save / Next guest / Retake, and the end-screen wording.
+
+The contract is the same everywhere: **leave a field blank and you get the default**, which the field shows in grey as its placeholder. Defaults are written to be good enough to run the night untouched; the fields are there for when something needs amending.
 
 ## Behaviour
 - No backend.

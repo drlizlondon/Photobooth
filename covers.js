@@ -5,10 +5,15 @@
 (function(global){
 "use strict";
 
+/* The four faces every template draws with. Mutated in place by render() from
+   whatever the organiser picked in Admin, so a template only ever asks for
+   "the serif" and never for a specific family. The values here are the
+   shipped defaults and match fonts.js — this object is what gets used if a
+   caller renders without passing fonts at all. */
 const FONT={
-  serif:'Didot,"Bodoni 72","Bodoni MT","Playfair Display",Georgia,"Times New Roman",serif',
+  serif:'Didot,"Bodoni 72","Playfair Display",Georgia,"Times New Roman",serif',
   sans:'"Avenir Next",Avenir,"Helvetica Neue",Helvetica,Arial,sans-serif',
-  condensed:'"Avenir Next Condensed","Arial Narrow",Impact,Haettenschweiler,"Avenir Next",sans-serif',
+  condensed:'"Avenir Next Condensed","Arial Narrow",Impact,"Avenir Next",sans-serif',
   script:'"Snell Roundhand","Apple Chancery","Segoe Script","Brush Script MT",cursive'
 };
 
@@ -276,6 +281,86 @@ function wash(ctx,W,H,color,alpha,mode){
   ctx.save();ctx.globalAlpha=alpha;ctx.globalCompositeOperation=mode||"overlay";
   ctx.fillStyle=color;ctx.fillRect(0,0,W,H);ctx.restore();
 }
+/* ---------- grading ---------- */
+
+/* Canvas `ctx.filter` only shipped in Safari 17 and fails *silently* before
+   it: on an older booth iPad every strip filter and every cover's template
+   grade simply did nothing, while the pixel-based editorial finish carried
+   on working — which is why the magazine looked right and the filter buttons
+   looked broken. So grades are pixels here too, and nothing in the booth
+   depends on `ctx.filter` any more.
+
+   Every function used — brightness, contrast, saturate, grayscale, sepia —
+   is affine in sRGB, so each compiles to a 3x3 matrix and an offset. They are
+   applied in sequence rather than multiplied into one matrix, because CSS
+   clamps between filter functions: brightness(1.07) hits white before the
+   next function sees it. Collapsing the chain drifts by up to 13/255 in blown
+   highlights, which is exactly where Warm and Glow live. */
+
+const LUMA=[0.2126,0.7152,0.0722];
+const SEPIA=[0.393,0.769,0.189, 0.349,0.686,0.168, 0.272,0.534,0.131];
+function identity(){return [1,0,0, 0,1,0, 0,0,1];}
+/* grayscale(g) is exactly saturate(1-g), so one matrix serves both. */
+function saturateM(s){
+  const r=LUMA[0],g=LUMA[1],b=LUMA[2];
+  return [r+(1-r)*s, g-g*s,     b-b*s,
+          r-r*s,     g+(1-g)*s, b-b*s,
+          r-r*s,     g-g*s,     b+(1-b)*s];
+}
+function sepiaM(x){
+  const I=identity(),m=new Array(9);
+  for(let i=0;i<9;i++)m[i]=I[i]*(1-x)+SEPIA[i]*x;
+  return m;
+}
+const gradeCache={};
+function compileGrade(spec){
+  const key=String(spec||"");
+  if(gradeCache[key]!==undefined)return gradeCache[key];
+  const re=/(brightness|contrast|saturate|grayscale|greyscale|sepia)\(\s*(-?[\d.]+)(%?)\s*\)/gi;
+  const steps=[];
+  let hit;
+  while((hit=re.exec(key))){
+    let v=parseFloat(hit[2]);
+    if(hit[3]==="%")v/=100;
+    if(!Number.isFinite(v))continue;
+    const fn=hit[1].toLowerCase();
+    if(fn==="brightness")steps.push({m:[v,0,0, 0,v,0, 0,0,v],o:0});
+    else if(fn==="contrast")steps.push({m:[v,0,0, 0,v,0, 0,0,v],o:127.5*(1-v)});
+    else if(fn==="saturate")steps.push({m:saturateM(v),o:0});
+    else if(fn==="grayscale"||fn==="greyscale")steps.push({m:saturateM(1-v),o:0});
+    else if(fn==="sepia")steps.push({m:sepiaM(v),o:0});
+  }
+  gradeCache[key]=steps.length?steps:null;
+  return gradeCache[key];
+}
+function clamp255(v){return v<0?0:(v>255?255:v);}
+/* Grades a rectangle in place. Rounds inward for the same reason the finish
+   does: putImageData ignores the clip, so a sub-pixel sliver left ungraded
+   is invisible where graded pixels outside the photo would not be. */
+function applyGrade(ctx,x,y,w,h,spec){
+  const steps=typeof spec==="string"?compileGrade(spec):spec;
+  if(!steps||!steps.length)return;
+  const ix=Math.max(0,Math.ceil(x)),iy=Math.max(0,Math.ceil(y));
+  const iw=Math.min(ctx.canvas.width,Math.floor(x+w))-ix;
+  const ih=Math.min(ctx.canvas.height,Math.floor(y+h))-iy;
+  if(iw<=0||ih<=0)return;
+  try{
+    const image=ctx.getImageData(ix,iy,iw,ih),d=image.data,n=steps.length;
+    for(let i=0;i<d.length;i+=4){
+      let r=d[i],g=d[i+1],b=d[i+2];
+      for(let s=0;s<n;s++){
+        const m=steps[s].m,o=steps[s].o;
+        const nr=m[0]*r+m[1]*g+m[2]*b+o;
+        const ng=m[3]*r+m[4]*g+m[5]*b+o;
+        const nb=m[6]*r+m[7]*g+m[8]*b+o;
+        r=clamp255(nr);g=clamp255(ng);b=clamp255(nb);
+      }
+      d[i]=r;d[i+1]=g;d[i+2]=b;
+    }
+    ctx.putImageData(image,ix,iy);
+  }catch(e){}
+}
+
 /* ---------- editorial finish ---------- */
 /* A luxury print pass on the photograph itself: +2% exposure, +6% contrast,
    -4% saturation, then ultra-fine print grain. No fake lighting, no glow,
@@ -338,9 +423,6 @@ function editorialFinish(ctx,x,y,w,h){
     const p=ctx.createPattern(printGrainTile(),"repeat");
     if(!p)return;
     ctx.save();
-    /* The photo grade is still on the context; a filtered grain fill would
-       be graded twice. */
-    ctx.filter="none";
     ctx.globalAlpha=FINISH.grain;
     ctx.fillStyle=p;ctx.fillRect(x,y,w,h);
     ctx.restore();
@@ -352,9 +434,14 @@ function paintPhoto(L,x,y,w,h,grade,anchorY){
   ctx.save();
   ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
   ctx.fillStyle="#0d0d0d";ctx.fillRect(x,y,w,h);
-  if(grade)ctx.filter=grade;
-  if(L.img)drawPhotoCover(ctx,L.img,x,y,w,h,anchorY);
-  if(L.img)editorialFinish(ctx,x,y,w,h);
+  if(L.img){
+    drawPhotoCover(ctx,L.img,x,y,w,h,anchorY);
+    /* Template grade first, then the house finish on top of it — the order
+       the covers were designed in, and the order the scrims are measured
+       against. Both are pixel passes now, so both survive an old iPad. */
+    if(grade)applyGrade(ctx,x,y,w,h,grade);
+    editorialFinish(ctx,x,y,w,h);
+  }
   ctx.restore();
 }
 function hairline(ctx,x,y,w,thick,alpha){
@@ -860,6 +947,7 @@ function tplPress(L){
 const RENDERERS={keepsake:tplKeepsake,editorial:tplEditorial,noir:tplNoir,press:tplPress};
 
 function render(ctx,opts){
+  if(opts.fonts)Object.assign(FONT,opts.fonts);
   const W=opts.width,H=opts.height;
   const L={
     ctx,W,H,
@@ -901,5 +989,5 @@ function placeholder(){
    copied: one house grade for every keepsake the booth prints, changed in
    one place. */
 global.Covers={TEMPLATES,RATIO,coverSize,derive,copyFor,copyKeys:COPY_KEYS,render,placeholder,FONT,
-  editorialFinish,drawPhotoCover,firstName,eventAge,ordinal,heartPath};
+  editorialFinish,applyGrade,drawPhotoCover,firstName,eventAge,ordinal,heartPath};
 })(window);

@@ -19,13 +19,18 @@
 
 /* Real instant film: 3.5in x 4.233in overall, image area 3.108in x 3.024in,
    equal borders on the sides and top, the rest falling to the bottom. Those
-   ratios are the whole reason a Polaroid reads as a Polaroid, so they are
-   measured off the print rather than styled by eye. */
-const PRINT_RATIO=4.233/3.5;
-const SIDE=0.196/3.5;      /* of print width  */
-const TOP=0.196/4.233;     /* of print height */
-const IMG_W=3.108/3.5;
-const IMG_H=3.024/4.233;
+   ratios are the whole reason a Polaroid reads as a Polaroid, so everything
+   is measured off the print rather than styled by eye.
+
+   The one deliberate departure: the bottom border is deepened from the true
+   0.289 of print width to 0.40. On real film that space is empty and reads as
+   a margin; here it is carrying four lines of handwriting, and at the true
+   depth the writing fills it wall to wall and stops looking written on. The
+   photo, the sides and the top stay exactly to the film. */
+const SIDE=0.196/3.5;      /* of print width, from the film */
+const IMG_W=3.108/3.5;     /* of print width, from the film */
+const IMG_RATIO=3.108/3.024;
+const BOTTOM=0.40;         /* of print width — deepened from the film's 0.289 */
 const MARGIN=0.026;        /* backdrop around the print, so the shadow reads */
 const CORNER=0.014;
 
@@ -33,29 +38,25 @@ function size(base){
   const W=Math.round(base)+(Math.round(base)&1?1:0);
   const margin=Math.round(W*MARGIN);
   const printW=W-margin*2;
-  let printH=Math.round(printW*PRINT_RATIO);
+  const side=Math.round(printW*SIDE);
+  const imgW=Math.round(printW*IMG_W);
+  const imgH=Math.round(imgW/IMG_RATIO);
+  let printH=side+imgH+Math.round(printW*BOTTOM);
   if((printH+margin*2)&1)printH++;
   const H=printH+margin*2;
-  const photo={
-    x:Math.round(margin+printW*SIDE),
-    y:Math.round(margin+printH*TOP),
-    w:Math.round(printW*IMG_W),
-    h:Math.round(printH*IMG_H)
+  return {
+    W,H,margin,printW,printH,
+    photo:{x:margin+side,y:margin+side,w:imgW,h:imgH},
+    corner:Math.round(printW*CORNER)
   };
-  return {W,H,margin,printW,printH,photo,corner:Math.round(printW*CORNER)};
 }
 
 /* ---------- copy ---------- */
 
 const COPY_KEYS=["line1","line2","line3","line4"];
-const HANDS=[["marker","Felt tip"],["cursive","Cursive"]];
-const HAND_FONT={
-  /* Marker Felt ships on iOS and macOS and is an actual felt-tip face, so
-     the booth needs no web font — which matters for a device that runs the
-     night from a service-worker cache. */
-  marker:'"Marker Felt","Bradley Hand","Segoe Print","Comic Sans MS",cursive',
-  cursive:'"Snell Roundhand","Apple Chancery","Segoe Script","Brush Script MT",cursive'
-};
+/* The handwriting face arrives as a resolved stack from fonts.js — the
+   Polaroid does not get to have an opinion about which faces exist. */
+const HAND_FALLBACK='"Marker Felt","Bradley Hand","Segoe Print",cursive';
 const INK="#16130f";
 
 function derive(s){
@@ -186,8 +187,34 @@ function fitHand(ctx,parts,maxW,startSize,family,minSize){
   ctx.font=`400 ${s}px ${family}`;
   return s;
 }
-/* Fill plus a stroke of the same ink. System handwriting faces are drawn far
-   too thin to pass as a Sharpie; widening the glyph outline is what sells it. */
+/* A felt tip laid on paper does two things a font does not: it puts down a
+   stroke much heavier than any digital handwriting face draws, and the ink
+   creeps a little way into the paper fibres around it. So each line is drawn
+   three times — a wide, very faint bleed, then the widened outline, then the
+   fill. Without the bleed the letters look stamped; without the widening they
+   look like a font pretending. */
+const BLEED=0.052;
+/* The heart is stroked at the marker's own stem width, not at the outline
+   width used to fatten the glyphs. A felt tip cannot draw a hairline next to
+   letters this heavy, and a delicate heart beside them is the giveaway. */
+const HEART_STEM=0.115;
+function markLine(ctx,parts,fontSize,lw,draw){
+  let x=-handWidth(ctx,parts,fontSize)/2;
+  for(const part of parts){
+    if(HEART.test(part)){
+      /* Sized to the marker's cap height, not to the em: a heart that
+         matches the letters beside it is the whole point of drawing it. */
+      Covers.heartPath(ctx,x+fontSize*HEART_ADVANCE/2,-fontSize*0.33,fontSize*0.40,fontSize*0.76);
+      ctx.lineWidth=Math.max(1,fontSize*HEART_STEM+(lw-fontSize*BLEED));
+      ctx.stroke();
+      ctx.lineWidth=lw;
+      x+=fontSize*HEART_ADVANCE;
+    }else{
+      draw(part,x);
+      x+=ctx.measureText(part).width;
+    }
+  }
+}
 function inkLine(ctx,parts,cx,y,fontSize,tilt,family){
   ctx.save();
   ctx.translate(cx,y);
@@ -198,29 +225,20 @@ function inkLine(ctx,parts,cx,y,fontSize,tilt,family){
   ctx.strokeStyle=INK;
   ctx.fillStyle=INK;
   ctx.font=`400 ${fontSize}px ${family}`;
-  const lw=Math.max(0.6,fontSize*0.055);
+  const lw=Math.max(0.8,fontSize*BLEED);
+
+  ctx.globalAlpha=0.055;
+  ctx.lineWidth=lw*2.7;
+  markLine(ctx,parts,fontSize,lw*2.7,(t,x)=>ctx.strokeText(t,x,0));
+
+  ctx.globalAlpha=1;
   ctx.lineWidth=lw;
-  let x=-handWidth(ctx,parts,fontSize)/2;
-  for(const part of parts){
-    if(HEART.test(part)){
-      ctx.save();
-      ctx.lineWidth=lw*1.25;
-      /* Sized to the marker's cap height, not to the em: a heart that
-         matches the letters beside it is the whole point of drawing it. */
-      Covers.heartPath(ctx,x+fontSize*HEART_ADVANCE/2,-fontSize*0.33,fontSize*0.42,fontSize*0.80);
-      ctx.stroke();
-      ctx.restore();
-      x+=fontSize*HEART_ADVANCE;
-    }else{
-      ctx.strokeText(part,x,0);
-      ctx.fillText(part,x,0);
-      x+=ctx.measureText(part).width;
-    }
-  }
+  markLine(ctx,parts,fontSize,lw,(t,x)=>{ctx.strokeText(t,x,0);ctx.fillText(t,x,0);});
+
   ctx.restore();
 }
 function drawHand(ctx,geo,copy,hand){
-  const family=HAND_FONT[hand]||HAND_FONT.marker;
+  const family=hand||HAND_FALLBACK;
   const lines=COPY_KEYS.map(k=>String(copy[k]||"").trim()).filter(Boolean);
   if(!lines.length)return;
 
@@ -231,11 +249,14 @@ function drawHand(ctx,geo,copy,hand){
 
   /* First line is the title, the rest are detail. One line on its own gets
      the title treatment and the whole border to itself. */
+  /* Sized off the print's width, not its height: the bottom border is the
+     one dimension that is a design choice rather than the film's, so pinning
+     type to it would make the writing grow every time the border deepens. */
   const measured=lines.map((text,i)=>{
-    const start=i===0?geo.printH*0.047:geo.printH*0.0250;
+    const start=i===0?geo.printW*0.072:geo.printW*0.037;
     const parts=handParts(text);
-    const s=fitHand(ctx,parts,zoneW,start,family,geo.printH*0.014);
-    return {text,parts,size:s,lead:s*(i===0?1.30:1.56)};
+    const s=fitHand(ctx,parts,zoneW,start,family,geo.printW*0.020);
+    return {text,parts,size:s,lead:s*(i===0?1.34:1.60)};
   });
   /* Centre the ink, not the leading: the trailing lead below the last line
      is space the eye does not see, and counting it drops the block low. */
@@ -328,7 +349,7 @@ function buildPlate(img,geo){
 function compose(o){
   const geo=size(o.base||1296);
   const images=(o.images||[]).filter(Boolean);
-  const chrome=buildChrome(geo,o.copy||{},o.hand||"marker",o.backdrop);
+  const chrome=buildChrome(geo,o.copy||{},o.hand||HAND_FALLBACK,o.backdrop);
   const plates=images.map(img=>buildPlate(img,geo));
   const t=timing(o.transition);
   const line=timeline({count:plates.length||1,fade:t.fade,hold:t.hold});
@@ -368,6 +389,6 @@ function render(ctx,opts){
   return job.geo;
 }
 
-global.Polaroid={size,derive,copyFor,copyKeys:COPY_KEYS,HANDS,timeline,timing,compose,render};
+global.Polaroid={size,derive,copyFor,copyKeys:COPY_KEYS,timeline,timing,compose,render};
 
 })(window);

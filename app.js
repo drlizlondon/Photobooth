@@ -42,8 +42,14 @@ const DEFAULTS = {
   polaroidLine2:"",
   polaroidLine3:"",
   polaroidLine4:"",
-  polaroidHand:"marker",
   polaroidTransition:"crossfade",
+
+  /* Typography. Blank means the shipped face, same as every other field. */
+  fontDisplay:"",
+  fontText:"",
+  fontCondensed:"",
+  fontScript:"",
+  fontHand:"",
   polaroidBusyLabel:"",
   polaroidReadyLabel:"",
   polaroidStillLabel:"",
@@ -182,7 +188,10 @@ function migrateSettings(raw){
   return out;
 }
 function loadSettings(){
-  try{return {...DEFAULTS,...migrateSettings(JSON.parse(localStorage.getItem("raePhotoBoothLiveSettings")||"{}"))};}
+  try{
+    const raw=JSON.parse(localStorage.getItem("raePhotoBoothLiveSettings")||"{}");
+    return {...DEFAULTS,...Fonts.migrate(migrateSettings(raw))};
+  }
   catch{return {...DEFAULTS};}
 }
 
@@ -281,11 +290,10 @@ function fillSettingsUI(){
     setEventTitle:"eventTitle",setDate:"date",
     setStripTop:"stripTop",setStripSecond:"stripSecond",setStripSignature:"stripSignature",setStripDate:"stripDate"
   };
-  COVER_FIELDS.concat(TEXT_FIELDS,POLAROID_FIELDS).forEach(([id,key])=>map[id]=key);
+  COVER_FIELDS.concat(TEXT_FIELDS,POLAROID_FIELDS,FONT_FIELDS).forEach(([id,key])=>map[id]=key);
   Object.entries(map).forEach(([id,key])=>{if($(id))$(id).value=settings[key];});
   refreshCoverPlaceholders();
   $("setAccent").value=settings.accent;
-  $("setPolaroidHand").value=settings.polaroidHand;
   $("setPolaroidTransition").value=settings.polaroidTransition;
   $("setCountdown").value=String(settings.countdown);
   $("setMirror").checked=settings.mirror;
@@ -309,6 +317,8 @@ const POLAROID_FIELDS=Polaroid.copyKeys.map(k=>{
   const key="polaroid"+k.charAt(0).toUpperCase()+k.slice(1);
   return [inputId(key),key];
 });
+/* And one per typographic role. */
+const FONT_FIELDS=Fonts.ROLES.map(([role,key])=>[inputId(key),key]);
 
 /* Blank fields show what the cover will auto-generate. */
 function refreshCoverPlaceholders(){
@@ -326,6 +336,106 @@ function refreshCoverPlaceholders(){
   });
 }
 
+/* ---------- font specimens ---------- */
+
+/* Sample wording per role, taken from the organiser's own event so a specimen
+   shows the words that will actually be printed — a face that carries "RAE"
+   beautifully can fall apart on "Aisha & Tom's Wedding". */
+function fontSamples(s){
+  const cover=Covers.copyFor(s),hand=Polaroid.copyFor(s);
+  return {
+    display:cover.masthead||"RAE",
+    text:cover.footer||"GOOD PEOPLE",
+    condensed:(cover.stack||"BIRTHDAY EDITION").toUpperCase(),
+    script:cover.script||"Rae's 26th",
+    /* Hearts are stripped from the handwriting specimen: the print draws them
+       as paths, so showing the font's own glyph would be the one thing on
+       this page that is not what a guest gets. */
+    hand:(hand.line1||"Rae's 26th").replace(/[♡♥❤]/g,"").trim()
+  };
+}
+/* Specimens are drawn on canvas, not styled in HTML. Canvas resolves a font
+   stack differently from the DOM and lays type out differently, so an HTML
+   preview would be a promise the covers might not keep. */
+function drawSpecimen(cv,role,option,sample,selected){
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  const w=cv.clientWidth||190,h=54;
+  cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);
+  const ctx=cv.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+
+  const missing=!Fonts.available(option[2]);
+  ctx.fillStyle=selected?"#111":"#fff";
+  ctx.fillRect(0,0,w,h);
+  ctx.fillStyle=missing?(selected?"#8a8a8a":"#b6b0a8"):(selected?"#fff":"#151515");
+
+  const stack=option[3],pad=12;
+  let size=role==="hand"||role==="script"?26:22;
+  while(size>9){
+    ctx.font=`400 ${size}px ${stack}`;
+    if(ctx.measureText(sample).width<=w-pad*2)break;
+    size-=1;
+  }
+  ctx.textAlign="center";
+  ctx.textBaseline="middle";
+  ctx.fillText(sample,w/2,h/2+1);
+  return missing;
+}
+
+function buildFontRoles(){
+  const host=$("fontRoles");if(!host)return;
+  host.innerHTML="";
+  Fonts.ROLES.forEach(([role,key,label,what])=>{
+    const block=document.createElement("div");
+    block.className="font-role";
+    const head=document.createElement("p");
+    head.className="control-label";
+    head.textContent=label;
+    const note=document.createElement("small");
+    note.className="font-role-note";
+    note.textContent=what;
+    const grid=document.createElement("div");
+    grid.className="font-specimens";
+    grid.dataset.role=role;
+    Fonts.optionsFor(role).forEach(option=>{
+      const btn=document.createElement("button");
+      btn.type="button";
+      btn.className="font-specimen";
+      btn.dataset.role=role;btn.dataset.key=option[0];
+      const cv=document.createElement("canvas");
+      const name=document.createElement("small");
+      name.textContent=option[1];
+      btn.append(cv,name);
+      btn.onclick=()=>{
+        $(inputId(key)).value=option[0];
+        refreshFontSpecimens();
+        renderAdminPreview();
+      };
+      grid.appendChild(btn);
+    });
+    block.append(head,note,grid);
+    host.appendChild(block);
+  });
+  refreshFontSpecimens();
+}
+/* Redrawn whenever the event wording or the selection changes — the specimen
+   is only honest if it is showing the current words. */
+function refreshFontSpecimens(){
+  const s=draftSettings(),samples=fontSamples(s);
+  document.querySelectorAll(".font-specimen").forEach(btn=>{
+    const role=btn.dataset.role;
+    const option=Fonts.find(role,btn.dataset.key);
+    if(!option)return;
+    const chosen=Fonts.find(role,String(s[Fonts.ROLES.find(r=>r[0]===role)[1]]||"").trim());
+    const selected=chosen&&chosen[0]===option[0];
+    btn.classList.toggle("active",!!selected);
+    const missing=drawSpecimen(btn.querySelector("canvas"),role,option,samples[role],!!selected);
+    btn.classList.toggle("missing",missing);
+    btn.title=missing?option[1]+" is not installed on this device":option[1];
+  });
+}
+
 function draftSettings(){
   const draft={
     ...settings,
@@ -336,7 +446,6 @@ function draftSettings(){
     stripSignature:$("setStripSignature").value.trim(),
     stripDate:$("setStripDate").value.trim(),
     accent:$("setAccent").value,
-    polaroidHand:$("setPolaroidHand").value,
     polaroidTransition:$("setPolaroidTransition").value,
     countdown:Number($("setCountdown").value),
     mirror:$("setMirror").checked,
@@ -345,7 +454,7 @@ function draftSettings(){
     flash:$("setFlash").checked,
     confetti:$("setConfetti").checked
   };
-  COVER_FIELDS.concat(TEXT_FIELDS,POLAROID_FIELDS).forEach(([id,key])=>{if($(id))draft[key]=$(id).value.trim();});
+  COVER_FIELDS.concat(TEXT_FIELDS,POLAROID_FIELDS,FONT_FIELDS).forEach(([id,key])=>{if($(id))draft[key]=$(id).value.trim();});
   return draft;
 }
 
@@ -561,6 +670,7 @@ async function renderStyleThumbs(){
     cv.width=size.width;cv.height=size.height;
     Covers.render(cv.getContext("2d"),{
       img:img||Covers.placeholder(),
+      fonts:Fonts.faces(settings),
       width:size.width,height:size.height,
       copy,accent:settings.accent,
       template:cv.dataset.template,
@@ -627,12 +737,11 @@ function wrapText(ctx,text,x,y,maxWidth,lineHeight,maxLines=3,align="left"){
   ctx.textAlign=align;
   lines.forEach((ln,i)=>ctx.fillText(ln,x,y+i*lineHeight));
 }
-function typography(){
-  return {
-    serif:'Didot,"Bodoni 72","Bodoni MT",Georgia,serif',
-    sans:'"Avenir Next",Avenir,Arial,sans-serif',
-    script:'Snell Roundhand,"Apple Chancery","Segoe Script",cursive'
-  };
+/* The strip's faces, from the same five roles the covers use. Takes a
+   settings object so the admin preview can render the draft, not the saved. */
+function typography(s){
+  const f=Fonts.faces(s||settings);
+  return {serif:f.serif,sans:f.sans,script:f.script};
 }
 function drawBarcode(ctx,x,y,w,h,font,light=false){
   ctx.save();
@@ -666,6 +775,7 @@ function renderMagazine(ctx,c,img){
     img,
     width:size.width,height:size.height,
     copy:Covers.copyFor(settings),
+    fonts:Fonts.faces(settings),
     accent:settings.accent,
     template:magazineStyle,
     edition:{no:sessionEdition}
@@ -693,7 +803,7 @@ function polaroidOptions(images){
   return {
     images,
     copy:Polaroid.copyFor(settings),
-    hand:settings.polaroidHand||"marker",
+    hand:Fonts.stack("hand",settings),
     transition:settings.polaroidTransition||"crossfade"
   };
 }
@@ -803,7 +913,7 @@ async function polaroidPrintBlob(){
 }
 
 function renderStrip(ctx,c,imgs,s,orientation){
-  const t=typography(),land=orientation==="landscape",first=imgs[0];
+  const t=typography(s),land=orientation==="landscape",first=imgs[0];
   const W=land?900:690,side=26,innerW=W-side*2;
   const ratio=first.width/first.height,photoH=innerW/ratio;
   const gap=20,headerH=130,footerH=142,H=Math.round(headerH+photoH*3+gap*2+footerH);
@@ -835,9 +945,10 @@ function renderStrip(ctx,c,imgs,s,orientation){
 
   imgs.forEach((img,i)=>{
     const y=headerH+i*(photoH+gap);
-    ctx.save();ctx.filter=filterCSS();
     drawContain(ctx,img,side,y,innerW,photoH,photoBg);
-    ctx.restore();
+    /* Graded in pixels, not with ctx.filter — see covers.js. This is the one
+       that guests notice, because the filter buttons sit right there. */
+    Covers.applyGrade(ctx,side,y,innerW,photoH,filterCSS());
   });
 
   const base=headerH+photoH*3+gap*2;
@@ -895,7 +1006,7 @@ function renderAdminPreview(){
   const land=adminOrientation==="landscape";
 
   if(adminPreviewType==="strip"){
-    const t=typography(),W=land?640:430,H=land?470:650;
+    const t=typography(s),W=land?640:430,H=land?470:650;
     c.width=W;c.height=H;
     ctx.fillStyle="#fbf7f0";ctx.fillRect(0,0,W,H);
     ctx.fillStyle="#111";ctx.textAlign="center";
@@ -918,7 +1029,7 @@ function renderAdminPreview(){
     Polaroid.render(ctx,{
       width:430,img:Covers.placeholder(),
       copy:Polaroid.copyFor(s),
-      hand:s.polaroidHand,transition:s.polaroidTransition
+      hand:Fonts.stack("hand",s),transition:s.polaroidTransition
     });
     return;
   }
@@ -929,6 +1040,7 @@ function renderAdminPreview(){
     img:Covers.placeholder(),
     width:size.width,height:size.height,
     copy:Covers.copyFor(s),
+    fonts:Fonts.faces(s),
     accent:s.accent,
     template:adminPreviewType,
     edition:{no:14}
@@ -943,7 +1055,7 @@ $("shareBtn").onclick=shareCurrent;
 $("saveBtn").onclick=saveCurrent;
 $("changeCoverPhoto").onclick=()=>{coverIndex=null;$("magazinePickStep").hidden=false;$("magazineStyleStep").hidden=true;buildReviewControls();renderWithFade();resetIdle();};
 
-$("openSettings").onclick=()=>{fillSettingsUI();showScreen("settings");setTimeout(()=>{renderAdminPreview();renderEventGallery();},0);};
+$("openSettings").onclick=()=>{fillSettingsUI();showScreen("settings");setTimeout(()=>{buildFontRoles();renderAdminPreview();renderEventGallery();},0);};
 $("closeSettings").onclick=()=>showScreen("welcome");
 $("saveSettings").onclick=()=>{settings=draftSettings();persistSettings();fillSettingsUI();invalidatePolaroid();buildReviewControls();showScreen("welcome");};
 $("resetSettings").onclick=()=>{settings={...DEFAULTS};persistSettings();fillSettingsUI();renderAdminPreview();};
@@ -961,6 +1073,7 @@ document.querySelectorAll(".admin-orientation-tab").forEach(b=>b.onclick=()=>{
 });
 document.querySelectorAll("#settings input,#settings select").forEach(el=>el.addEventListener("input",()=>{
   refreshCoverPlaceholders();
+  refreshFontSpecimens();
   renderAdminPreview();
 }));
 

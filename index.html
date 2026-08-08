@@ -166,6 +166,18 @@
           <label>Badge word "of"<input id="setCoverOfWord" type="text" maxlength="10"></label>
         </div>
 
+        <h3>Typography</h3>
+        <p class="field-help">Five faces drive every keepsake. Each specimen below is drawn by the same renderer that prints the covers, using your own event wording — what you see is what a guest gets. Faces missing from this device are marked; check them on the booth iPad before the night.</p>
+        <div id="fontRoles" class="font-roles"></div>
+        <!-- The chosen face per role. Hidden because the specimen grid above
+             is the control; these keep fonts on the same read/write path as
+             every other setting. -->
+        <input id="setFontDisplay" type="hidden">
+        <input id="setFontText" type="hidden">
+        <input id="setFontCondensed" type="hidden">
+        <input id="setFontScript" type="hidden">
+        <input id="setFontHand" type="hidden">
+
         <h3>Living Polaroid</h3>
         <p class="field-help">The four handwritten lines under the photograph. Same contract as the covers: leave one blank and it is written for you from the event title; leave one blank on purpose to print fewer lines.</p>
         <div class="field-grid">
@@ -173,12 +185,6 @@
           <label>Handwritten line 2<input id="setPolaroidLine2" type="text" maxlength="40"></label>
           <label>Handwritten line 3<input id="setPolaroidLine3" type="text" maxlength="46"></label>
           <label>Handwritten line 4<input id="setPolaroidLine4" type="text" maxlength="46"></label>
-          <label>Handwriting
-            <select id="setPolaroidHand">
-              <option value="marker">Felt tip</option>
-              <option value="cursive">Cursive</option>
-            </select>
-          </label>
           <label>Between photos
             <select id="setPolaroidTransition">
               <option value="crossfade">Crossfade</option>
@@ -269,6 +275,7 @@
 </section>
 
 </main>
+<script src="fonts.js"></script>
 <script src="covers.js"></script>
 <script src="polaroid.js"></script>
 <script src="mp4.js"></script>

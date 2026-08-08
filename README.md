@@ -26,6 +26,8 @@ Filters:
 
 Frame and filter are separate systems. **Both apply to the strip only** — filters are not carried over to magazine covers, which have their own finish (below).
 
+Filters are applied as a pixel pass, not with `ctx.filter` — see **Grading**. On an older booth iPad the `ctx.filter` version silently did nothing at all.
+
 ## Magazine
 Four cover styles, each laid out separately for portrait and landscape sessions:
 - **Keepsake** (default) — the party cover: framed, didone masthead over condensed stacked lines, left rail of event detail, script + condensed hero line, hearts and an icon strip. Each guest gets their own **numbered edition** ("EDITION 14 OF 63") counted from the booth's local gallery; set the expected headcount in Admin.
@@ -43,25 +45,97 @@ Cover copy lives in one set of slots shared by all four styles (`covers.js`). Ev
 
 Legibility is measured, not assumed: the renderer samples the photo behind each block of type and deepens the scrim where the photo is bright, so white type never washes out on a pale wall.
 
+## Grading
+Every colour adjustment in the booth — the five strip filters, each cover
+template's grade, the editorial finish — is a **pixel pass**. Nothing uses
+`ctx.filter`.
+
+That is not a preference. `CanvasRenderingContext2D.filter` only shipped in
+Safari 17 and fails *silently* before it: on an older iPad the filter buttons
+did nothing, Noir was not monochrome, and no cover got its template grade —
+while the pixel-based editorial finish carried on working, which is exactly
+why the magazine looked right and the filters looked broken.
+
+`Covers.applyGrade(ctx, x, y, w, h, spec)` reads the same CSS-filter syntax the
+code already used, so the recipes did not change. brightness, contrast,
+saturate, grayscale and sepia are each affine in sRGB, so each compiles to a
+3x3 matrix and an offset. They are applied **in sequence, not multiplied into
+one matrix**, because CSS clamps between filter functions — `brightness(1.07)`
+hits white before the next function sees it. Collapsing the chain drifts by up
+to 13/255 in blown highlights, which is where Warm and Glow live. Sequenced,
+every recipe lands within 2/255 of what `ctx.filter` produces on a browser
+that has it.
+
+`grayscale(g)` is exactly `saturate(1-g)`, so one matrix serves both.
+
+## Typography
+Five roles, set in Admin, driving every keepsake:
+
+| Role | Drives |
+|---|---|
+| Headlines | Cover mastheads and the strip's title |
+| Small caps | Cover detail lines, dates, footers |
+| Condensed | Stacked cover lines and cover lines |
+| Script | The strip signature and cover script |
+| Handwriting | The Living Polaroid's felt tip |
+
+`fonts.js` is the only place a typeface is written down. Before it, covers.js,
+app.js and polaroid.js each carried their own stacks and changing a face meant
+editing three files and hoping.
+
+**Only faces that ship with iOS and macOS are offered.** The booth runs from a
+service-worker cache on an iPad with no guarantee of signal, so a web font is
+not a font — it is a request that might not arrive.
+
+**Specimens are drawn on canvas, using your own event wording.** Canvas
+resolves a font stack differently from the DOM and lays type out differently,
+so an HTML preview would be a promise the covers might not keep; and a face
+that carries "RAE" beautifully can fall apart on "Aisha & Tom's Wedding".
+Hearts are stripped from the handwriting specimen because the print draws them
+as paths — showing the font's own glyph would be the one thing on that page
+that is not what a guest gets.
+
+**Faces missing from the device are detected and marked**, rather than
+silently falling back to something that looks nothing like the specimen. The
+laptop the settings were tuned on and the booth iPad are not the same machine,
+so check the specimens on the iPad before the night.
+
 ## Living Polaroid
 A third keepsake next to Strip and Magazine: one instant-film print whose
 photograph loops, exported as a genuine H.264 MP4.
 
-**The print.** Real Polaroid 600 geometry — 3.5in × 4.233in overall, a nearly
-square image area, equal borders on the sides and top and the rest falling to
-the bottom. Warm white paper with a gradient and fine grain, small corner
-radius, soft drop shadow. Because the photo window is near-square, a wide
-group shot is cropped in from the sides; that is the format, and it is why the
-Polaroid supplements the strip rather than replacing it.
+**The print.** Real Polaroid 600 geometry — a nearly square image area with
+equal borders on the sides and top. Warm white paper with a gradient and fine
+grain, small corner radius, soft drop shadow. Because the photo window is
+near-square, a wide group shot is cropped in from the sides; that is the
+format, and it is why the Polaroid supplements the strip rather than replacing
+it.
 
-**The handwriting.** Four lines under the photograph in `Marker Felt` (an iOS
-and macOS system face, so the booth needs no web font and works offline),
-widened with a same-ink stroke so it reads as a thick felt tip rather than a
-thin handwriting font. Hearts are drawn as paths, not typed: no handwriting
-face carries ♡, so the glyph would fall back to a symbol font at half the
-weight of the letters beside it. Cursive is available as an alternative in
-Admin. Each line gets a tiny tilt and offset derived from a hash of its own
-text — deterministic, so the animated preview and the exported file agree.
+One deliberate departure from the film: **the bottom border is deepened** from
+the true 0.289 of print width to 0.40. On real film that space is empty and
+reads as a margin; here it is carrying four lines of handwriting, and at the
+true depth the writing fills it wall to wall and stops looking written on. The
+photo, the sides and the top stay exactly to the film. Type is sized off the
+print's *width* for the same reason — pinning it to the height would make the
+writing grow every time the border deepens.
+
+**The handwriting.** Four lines under the photograph, in whichever face is set
+for the Handwriting role (default `Marker Felt`). A felt tip laid on paper does
+two things a font does not: it puts down a stroke much heavier than any digital
+handwriting face draws, and the ink creeps into the paper fibres around it. So
+each line is drawn three times — a wide, very faint bleed, then the widened
+outline, then the fill. Without the bleed the letters look stamped; without the
+widening they look like a font pretending.
+
+Hearts are drawn as paths, not typed: no handwriting face carries ♡, so the
+glyph falls back to a symbol font at half the weight of the letters beside it.
+They are stroked at the marker's own **stem** width rather than the outline
+width used to fatten the glyphs — a felt tip cannot draw a hairline next to
+letters that heavy, and a delicate heart beside them is the giveaway.
+
+Each line gets a tiny tilt and offset derived from a hash of its own text —
+deterministic, so the animated preview and the exported file agree, and so
+consecutive video frames do not shimmer.
 
 **The animation.** Only the photograph changes. Frame, paper, shadow and
 handwriting are rendered once into a chrome layer with the window punched out,
@@ -109,10 +183,11 @@ Live previews (using the real cover renderer with a stand-in photo):
 - Landscape
 - Portrait
 
-**Every word a guest can see is editable.** Four groups of fields:
+**Every word a guest can see is editable.** Five groups of fields:
 - *Magazine Cover* / *Keepsake Cover* — all copy printed on the covers, including the badge's own "edition" / "of" wording.
 - *Strip* — the strip's header, signature and date lines.
-- *Living Polaroid* — the four handwritten lines, felt tip or cursive, crossfade or hard cut, and the three status lines the panel shows while rendering, when ready, and when video is unavailable.
+- *Typography* — the five font roles, each a grid of canvas-drawn specimens in your own event wording, with anything missing from the device marked.
+- *Living Polaroid* — the four handwritten lines, crossfade or hard cut, and the three status lines the panel shows while rendering, when ready, and when video is unavailable.
 - *Screen Text* — welcome eyebrow, start button and hint, cancel, shot counter (`{n}` / `{total}`), camera prompts (comma-separated, one per shot), the Strip/Magazine/Polaroid tabs, every control label, Share / Save / Next guest / Retake, and the end-screen wording.
 
 The contract is the same everywhere: **leave a field blank and you get the default**, which the field shows in grey as its placeholder. Defaults are written to be good enough to run the night untouched; the fields are there for when something needs amending.
@@ -204,10 +279,10 @@ Two things that are load-bearing and easy to undo by accident:
 - Every frame checks `shouldAbort`. A guest flicking between tabs would
   otherwise leave a stack of encoders all running to completion on one iPad.
 
-Measured on this build: 105 frames at 1080 × 1294 encode in ~1.5s to a ~550KB
-MP4 (~410KB with hard cuts), with the animated preview running throughout.
+Measured on this build: 105 frames at 1080 × 1408 encode in ~1.4s to a ~640KB
+MP4, with the animated preview running throughout.
 
 ## Service worker
-Cache `v5` — bumped when `polaroid.js` and `mp4.js` joined the asset list.
+Cache `v6` — bumped when `fonts.js` joined the asset list.
 
 `sw.js` is **network first, cache as offline fallback**, and deletes old caches on activate. The previous cache-first worker meant an installed booth iPad kept serving whatever build it first saw, no matter how many times the site was redeployed. Set the booth up with signal once and it will always be on the current build; it still runs fine offline on the night.

@@ -156,6 +156,7 @@ let idleTimer=null;
 let audioCtx=null;
 let adminPreviewType="strip";
 let adminOrientation="landscape";
+let adminPreviewTimer=0;
 let serviceWorkerRefreshPending=false;
 let serviceWorkerRefreshStarted=false;
 
@@ -624,8 +625,13 @@ function buildReviewControls(){
   FRAMES.forEach(([key,label])=>{
     const b=document.createElement("button");
     b.className="choice"+(frameStyle===key?" active":"");
+    b.dataset.choice=key;
     b.textContent=label;
-    b.onclick=()=>{frameStyle=key;buildReviewControls();renderWithFade();resetIdle();};
+    b.onclick=()=>{
+      frameStyle=key;
+      document.querySelectorAll("#frameChoices .choice").forEach(x=>x.classList.toggle("active",x===b));
+      renderWithFade();resetIdle();
+    };
     $("frameChoices").appendChild(b);
   });
 
@@ -633,8 +639,13 @@ function buildReviewControls(){
   FILTERS.forEach(([key,label])=>{
     const b=document.createElement("button");
     b.className="choice"+(filterStyle===key?" active":"");
+    b.dataset.choice=key;
     b.textContent=label;
-    b.onclick=()=>{filterStyle=key;buildReviewControls();renderWithFade();resetIdle();};
+    b.onclick=()=>{
+      filterStyle=key;
+      document.querySelectorAll("#filterChoices .choice").forEach(x=>x.classList.toggle("active",x===b));
+      renderWithFade();resetIdle();
+    };
     $("filterChoices").appendChild(b);
   });
 
@@ -642,12 +653,14 @@ function buildReviewControls(){
   photos.forEach((src,i)=>{
     const b=document.createElement("button");
     b.className="photo-choice"+(coverIndex===i?" active":"");
+    b.dataset.photoIndex=String(i);
     const img=document.createElement("img");img.src=src;b.appendChild(img);
     b.onclick=()=>{
       coverIndex=i;
       $("magazinePickStep").hidden=true;
       $("magazineStyleStep").hidden=false;
-      buildReviewControls();
+      document.querySelectorAll(".photo-choice").forEach(x=>x.classList.toggle("active",x===b));
+      renderStyleThumbs();
       renderWithFade();
       resetIdle();
     };
@@ -659,16 +672,21 @@ function buildReviewControls(){
     const b=document.createElement("button");
     b.className="mag-style-choice"+(magazineStyle===tpl.key?" active":"");
     b.type="button";
+    b.dataset.template=tpl.key;
     const cv=document.createElement("canvas");
     cv.className="mag-style-preview";
     cv.dataset.template=tpl.key;
     const tx=document.createElement("span");tx.textContent=tpl.label;
     const hint=document.createElement("small");hint.textContent=tpl.hint;
     b.append(cv,tx,hint);
-    b.onclick=()=>{magazineStyle=tpl.key;buildReviewControls();renderWithFade();resetIdle();};
+    b.onclick=()=>{
+      magazineStyle=tpl.key;
+      document.querySelectorAll(".mag-style-choice").forEach(x=>x.classList.toggle("active",x===b));
+      renderWithFade();resetIdle();
+    };
     $("magazineStyleChoices").appendChild(b);
   });
-  renderStyleThumbs();
+  if(coverIndex!==null)renderStyleThumbs();
 }
 
 /* Live thumbnails of the guest's own chosen photo in every template. */
@@ -1020,6 +1038,7 @@ function resetIdle(){
 /* The admin preview runs the real cover renderer against a stand-in photo,
    so what the host tunes here is exactly what guests get. */
 function renderAdminPreview(){
+  if(adminPreviewTimer){clearTimeout(adminPreviewTimer);adminPreviewTimer=0;}
   const s=draftSettings(),c=$("adminPreviewCanvas"),ctx=c.getContext("2d");
   const land=adminOrientation==="landscape";
 
@@ -1064,6 +1083,10 @@ function renderAdminPreview(){
     edition:{no:14}
   });
 }
+function scheduleAdminPreview(){
+  if(adminPreviewTimer)clearTimeout(adminPreviewTimer);
+  adminPreviewTimer=setTimeout(()=>{adminPreviewTimer=0;renderAdminPreview();},90);
+}
 
 $("startBtn").onclick=beginSession;
 $("cancelCapture").onclick=cancelCapture;
@@ -1071,7 +1094,13 @@ $("retakeBtn").onclick=beginSession;
 $("nextGuestBtn").onclick=beginSession;
 $("shareBtn").onclick=shareCurrent;
 $("saveBtn").onclick=saveCurrent;
-$("changeCoverPhoto").onclick=()=>{coverIndex=null;$("magazinePickStep").hidden=false;$("magazineStyleStep").hidden=true;buildReviewControls();renderWithFade();resetIdle();};
+$("changeCoverPhoto").onclick=()=>{
+  coverIndex=null;
+  $("magazinePickStep").hidden=false;
+  $("magazineStyleStep").hidden=true;
+  document.querySelectorAll(".photo-choice").forEach(x=>x.classList.remove("active"));
+  renderWithFade();resetIdle();
+};
 
 $("openSettings").onclick=()=>{fillSettingsUI();showScreen("settings");setTimeout(()=>{buildFontRoles();renderAdminPreview();renderEventGallery();},0);};
 $("closeSettings").onclick=()=>showScreen("welcome");
@@ -1092,7 +1121,7 @@ document.querySelectorAll(".admin-orientation-tab").forEach(b=>b.onclick=()=>{
 document.querySelectorAll("#settings input,#settings select").forEach(el=>el.addEventListener("input",()=>{
   refreshCoverPlaceholders();
   refreshFontSpecimens();
-  renderAdminPreview();
+  scheduleAdminPreview();
 }));
 
 fillSettingsUI();

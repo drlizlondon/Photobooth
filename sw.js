@@ -1,11 +1,11 @@
 const CACHE_PREFIX="rae-photo-booth-";
-const CACHE="rae-photo-booth-live-v7";
+const CACHE="rae-photo-booth-live-v8";
 const ASSETS=["./","./index.html","./styles.css","./fonts.js","./covers.js","./polaroid.js","./mp4.js","./app.js","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png"];
 
-/* v7 is the bridge away from the old cache-first workers. Those workers can
+/* v7 was the bridge away from the old cache-first workers. Those workers can
    load an old app.js and then activate this worker behind it; only the worker
-   itself can refresh that already-open legacy page. Keep this list finite so
-   later upgrades can wait for a safe between-guests refresh in app.js. */
+   itself can refresh that already-open legacy page. v8 and later upgrades
+   wait for a safe between-guests refresh in app.js. Keep this list finite. */
 const LEGACY_CACHES=new Set([
   "rae-photo-booth-production-1",
   "rae-photo-booth-v2",

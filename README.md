@@ -32,12 +32,16 @@ Filters are applied as a pixel pass, not with `ctx.filter` — see **Grading**. 
 Four cover styles, each laid out separately for portrait and landscape sessions:
 - **Keepsake** (default) — the party cover: framed, didone masthead over condensed stacked lines, left rail of event detail, script + condensed hero line, hearts and an icon strip. Each guest gets their own **numbered edition** ("EDITION 14 OF 63") counted from the booth's local gallery; set the expected headcount in Admin.
 - **Editorial** — full-bleed high-fashion cover: oversized didone masthead, three feature columns, huge cover line bottom-right.
-- **Noir** — deep monochrome, centred masthead and cover line, heavy contrast.
+- **Noir** — deep tonal drama, centred masthead and cover line. It retains the photograph's original hues.
 - **Press** — solid sidebar carrying the masthead, accent issue chip, name and standfirst on the photo.
 
 Magazine always asks the guest to pick Photo 1 / 2 / 3 before showing the finished cover, then shows a live thumbnail of that photo in each of the four styles.
 
-**Editorial finish.** Every magazine cover — all four styles — puts a luxury print pass on the photograph: +2% exposure, +6% contrast, −4% saturation, then ultra-fine print grain. No fake lighting, no glow, no beauty work. It runs on the photo rectangle only, so type, scrims and the barcode are never graded, and it runs before the scrims are measured so they still adapt to the finished picture. The grain is baked once into a repeating tile, so a preview and the saved file are identical.
+**Editorial finish.** Every magazine cover — all four styles — puts the same restrained, adaptive luxury-print pass on the photograph. It samples the actual capture before making a bounded midtone exposure and white-balance correction, then applies a gentle S-curve, highlight shoulder, deep-shadow lift, richer near-blacks, a clean protected white point and an almost imperceptible matte floor. Colour gets +7 vibrance and −4% global saturation: quieter colours gain a trace of life while saturated clothing keeps its hue and is never pushed harder.
+
+Definition is luminance-only: light shadow noise reduction, restrained clarity, micro-contrast and two tiny sharpening stages around one deterministic 2.5% fine monochrome grain pass. No face detection or reconstruction, skin smoothing, background isolation or blur, relighting, bloom, glow, flare or halos. The original camera capture is never overwritten; the finish exists only inside the transient cover canvas.
+
+It runs on the photo rectangle only, before scrims are measured and before typography, rules and the barcode are drawn. Template tone and the house finish remain floating-point until one final clamp, so white clothing and bright venue detail are not thrown away between stages. Each output channel stays inside a print-safe 2.5–253 range.
 
 The finish is automatic and is the **only** grade a cover photo gets beyond its template's own. The guest's filter choice is deliberately switched off for magazine — a cover has one house look, so every cover from the booth matches whatever the guest was playing with on their strip. Strips keep all five filters and are unaffected by the finish.
 
@@ -47,24 +51,24 @@ Legibility is measured, not assumed: the renderer samples the photo behind each 
 
 ## Grading
 Every colour adjustment in the booth — the five strip filters, each cover
-template's grade, the editorial finish — is a **pixel pass**. Nothing uses
+template's tone and the editorial finish — is a **pixel pass**. Nothing uses
 `ctx.filter`.
 
 That is not a preference. `CanvasRenderingContext2D.filter` only shipped in
 Safari 17 and fails *silently* before it: on an older iPad the filter buttons
-did nothing, Noir was not monochrome, and no cover got its template grade —
+did nothing and no cover got its template tone —
 while the pixel-based editorial finish carried on working, which is exactly
 why the magazine looked right and the filters looked broken.
 
 `Covers.applyGrade(ctx, x, y, w, h, spec)` reads the same CSS-filter syntax the
 code already used, so the recipes did not change. brightness, contrast,
 saturate, grayscale and sepia are each affine in sRGB, so each compiles to a
-3x3 matrix and an offset. They are applied **in sequence, not multiplied into
-one matrix**, because CSS clamps between filter functions — `brightness(1.07)`
-hits white before the next function sees it. Collapsing the chain drifts by up
-to 13/255 in blown highlights, which is where Warm and Glow live. Sequenced,
-every recipe lands within 2/255 of what `ctx.filter` produces on a browser
-that has it.
+3x3 matrix and an offset. Strip filters are applied **in sequence**, including
+CSS's between-step clamp, so they remain within 2/255 of `ctx.filter` on
+browsers that support it. Magazine template tone instead folds into the
+adaptive finish as one floating-point transform and clamps once at output;
+otherwise highlight recovery would be asked to recover pixels already
+discarded by the template.
 
 `grayscale(g)` is exactly `saturate(1-g)`, so one matrix serves both.
 
@@ -159,11 +163,11 @@ the clip stays 4.2 seconds either way.
 playsinline loop` in the preview); Save writes the still PNG at 1400 wide.
 Where no encoder exists, Share falls back to the PNG and the panel says so.
 
-**The photograph** gets the booth's editorial finish and nothing else — the
-same `editorialFinish` the covers use, imported rather than reimplemented, so
-one house grade covers every keepsake. No beautifying, no relighting, no glow,
-no bloom. The finish runs once per photo rather than once per frame: it is a
-pass on the photograph, not on the film.
+**The photograph** keeps the Living Polaroid's existing lightweight fixed
+print pass. The new adaptive finish is deliberately magazine-only, so this
+cover change cannot alter already-authored Polaroid video plates. There is no
+beautifying, relighting, glow or bloom. The fixed pass runs once per photo
+rather than once per frame: it is a pass on the photograph, not on the film.
 
 **Not yet built — the motion capture.** The far better version of this records
 the ~0.9s *before* each shutter, so each panel holds real movement (people
@@ -234,13 +238,11 @@ B. Local Event Gallery
 - Clear Event Gallery removes the locally stored sessions from the device.
 
 
-## Premium Magazine release
+## Premium magazine architecture
 - Strip, capture, gallery, sharing and guest flow are unchanged.
-- Magazine is now based on one premium editorial architecture.
-- Premium Cover and Birthday Edition share the same high-fashion structure.
-- The original guest photograph is never tinted, washed, graded or darkened.
-- Magazine only applies a modest full-bleed crop.
-- All design is transparent typography, rules, barcode and graphic layers over the original photograph.
+- All four covers share one non-destructive photograph pipeline.
+- The original guest capture remains unchanged in memory and IndexedDB; only the exported cover canvas is finished.
+- Design remains typography, rules, barcode and graphic layers over that transient photograph render.
 - All host wording remains editable.
 - Text auto-fits its semantic zone.
 
@@ -249,8 +251,9 @@ B. Local Event Gallery
 - Cover rendering moved to `covers.js`: four templates over one copy model.
 - Portrait covers are 1200 × 1560, landscape 1560 × 1200 (magazine trim, not the old 4:3 / 3:4).
 - Layout is measured from the canvas — masthead, columns and cover line re-flow rather than collide when copy is long.
-- Photos now get a per-template grade, adaptive scrims, vignette and print grain.
-- Every cover photo then gets the **editorial finish** on top of its template grade (see Magazine).
+- Template tone and the adaptive **editorial finish** now share one float pipeline, preserving highlight headroom until final output.
+- Grain is consolidated into one deterministic 2.5% monochrome pass; the old second 4–6% template grain is gone.
+- Noir retains original clothing hues; its mood now comes from tonal density, typography, vignette and adaptive scrims.
 - Cover copy auto-generates from the event title; old Birthday/Fashion copy is migrated on load where it was customised.
 - Strips, capture, gallery, sharing and guest flow are unchanged.
 
@@ -283,11 +286,12 @@ Measured on this build: 105 frames at 1080 × 1408 encode in ~1.4s to a ~640KB
 MP4, with the animated preview running throughout.
 
 ## Service worker
-Cache `v7` is the one-time bridge away from every shipped cache-first worker.
-When it finds one of those legacy booth caches it deletes only this app's old
-caches, takes control, and reloads the open booth page once. Settings and the
-saved gallery survive; photos in the middle of an unfinished session do not, so
-deploy this migration between booth sessions.
+Cache `v8` carries the editorial-finish update. The `v7` worker remains the
+one-time bridge away from every shipped cache-first worker: when it finds one
+of those legacy booth caches it deletes only this app's old caches, takes
+control, and reloads the open booth page once. Settings and the saved gallery
+survive; photos in the middle of that one legacy migration do not, so deploy
+the migration between booth sessions.
 
 `sw.js` is **network first, cache as offline fallback**. Its network requests
 explicitly bypass the browser HTTP cache, successful responses are fully written

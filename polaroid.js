@@ -8,10 +8,9 @@
    encode cheap enough to do on an iPad, and it is also the design promise:
    the frame cannot drift because it is literally the same pixels each frame.
 
-   The photograph gets the booth's editorial finish and nothing else — no
-   beautifying, no relighting, no glow. It is imported from covers.js rather
-   than reimplemented so a strip, a cover and a Polaroid of the same face all
-   carry one house grade. */
+   The photograph gets its lightweight fixed print finish and nothing else —
+   no beautifying, relighting or glow. That existing pass remains imported
+   from covers.js, while the heavier adaptive analysis stays magazine-only. */
 (function(global){
 "use strict";
 
@@ -335,7 +334,7 @@ function buildPlate(img,geo){
   ctx.fillRect(0,0,c.width,c.height);
   if(img){
     Covers.drawPhotoCover(ctx,img,0,0,c.width,c.height,0.38);
-    Covers.editorialFinish(ctx,0,0,c.width,c.height);
+    Covers.polaroidFinish(ctx,0,0,c.width,c.height);
   }
   return c;
 }

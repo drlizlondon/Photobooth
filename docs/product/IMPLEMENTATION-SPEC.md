@@ -1,0 +1,569 @@
+# MyBishBash Photobooth — Master Implementation Specification
+
+**Date:** 2026-08-09
+**Source:** [AUDIT-2026-08-09.md](AUDIT-2026-08-09.md) (accepted in full, 2026-08-09)
+**Work-package prefix:** `PB` — claimed 2026-08-09 in `~/.claude/portfolio.md`. Never reuse; never renumber.
+**Executor:** one competent model per packet, working from this document and the repository only.
+**Status tracker:** [WORK.md](../../WORK.md)
+
+---
+
+## 1. Executive implementation strategy
+
+The audit's verdict was that the craft is 9/10 and commercial completeness is 0/10. This programme is therefore almost entirely about the second number, and it is explicitly **forbidden from touching the first**.
+
+The capture engine, the cover renderer, the editorial finish, the Living Polaroid, `covers.js`, `polaroid.js`, `mp4.js` and the grading pipeline are **protected assets**. No packet in this programme modifies them. Where a packet's work sits adjacent to them — the landing page uses the real renderers — the packet says so in its Constraints and the acceptance criteria include proving the renderers still produce output.
+
+Three things govern the ordering.
+
+**Honesty before capability.** The site currently advertises four prices it cannot take and four contact routes that 404. The first three packets do not build a shop; they stop the site lying. That is a day of work and it removes every Blocker except compliance. A working "email us" beats a broken "buy now" on every metric that matters.
+
+**Irreversibility last.** Two steps in this programme freeze other steps' mistakes. Creating Stripe products freezes the pricing model, so **repricing happens before billing** (C4). Changing the origin invalidates every absolute URL, so **social metadata is written against a single constant** that the migration packet repoints (C6). Both are cheap now and expensive in the wrong order.
+
+**Every packet leaves the product deployable.** This is a static site with no build step; a broken commit is a broken production deploy the moment it is pushed. There are no half-finished renames and no "the next packet fixes it" states anywhere in this plan.
+
+What this programme deliberately does **not** do: deploy Stripe to live, rewrite the app, introduce a framework or build step, restructure `app.js`, or redesign anything. The audit found no architectural defect worth a rewrite, and a spec that quietly authorises one will get one.
+
+---
+
+## 2. Guiding principles
+
+Every decision below must satisfy these. Where a packet needs an exception, it states the reason in-line.
+
+1. **Never regress the engine.** Capture, grading, covers, Polaroid and export are untouched. Adjacent work proves they still render.
+2. **A refusal must always name a reason and offer a route.** The product's current idiom — return `false`, do nothing — is banned. This is the direct fix for RC-2 and applies to every gate added or touched.
+3. **Prices grant nothing.** `product.js`'s separation of `PLAN_METADATA` from `CAPABILITY_MATRIX` is the house standard. No packet may make a capability depend on a price, a label, or a string.
+4. **One origin constant.** Every absolute URL in the product derives from one value. Nothing hardcodes a hostname twice.
+5. **Storage keys are contracts.** No packet renames a `localStorage` or IndexedDB key without an explicit migration specified in that packet. Silent resets are invisible in review and obvious to users.
+6. **Extend the existing concept.** `mailto:` is the contact mechanism, one settings screen is the configuration surface, `#checkoutStatus` is the commerce status surface. Do not mint siblings.
+7. **Never regress accessibility.** The 3px `:focus-visible` ring, `prefers-reduced-motion` and `lang` are existing assets. Every packet leaves them intact.
+8. **Local-first is constitutional.** Free and Personal photographs never leave the device. No packet may add an upload path outside the existing, doubly-gated Business consent flow.
+
+---
+
+## 3. Challenges to the audit
+
+The audit is a set of claims; this is where they were re-examined adversarially. Six survived as disagreements.
+
+### C1 — The audit implied two packets where there is one decision, not two problems
+**Audit said:** F-15 (localStorage unlocks Personal) and F-10 (grandfathering expires at the new origin) are separate findings with separate remedies.
+**Disagreement:** They are the same decision seen twice. F-15's recommended fix — "grandfather by issuing real entitlements to known legacy users" — is **not executable**: the product has no accounts, no server, and no record of who the legacy users are. Their existence is known only from a key on their own device. There is therefore exactly one available action for both findings: decide the posture and write it down.
+**Instead:** No code packet. Both are resolved by an ADR in PB-04's decision log, and the migration (PB-15) ends grandfathering as a side effect of the origin change. Cost of being wrong: near zero — if grandfathering later matters commercially, it can be reissued through the restore flow once billing exists.
+
+### C2 — Building a paywall before a checkout would point it at a dead end
+**Audit said (F-03):** convert the silent save into the paywall moment, because the user has just seen their own event name in the preview.
+**Disagreement:** That is the right end state and the wrong first move. With no live checkout, "convert to paywall" means routing the most engaged users on the site to three buttons that say *"This service is not available yet."* That is a worse experience than the silent failure, because it wastes their intent twice.
+**Instead:** Split it. **PB-03** makes the refusal honest and lossless — the configuration is preserved, the reason is named, and the route offered is the founding-list email. **PB-12** upgrades that same surface into a purchase moment once billing exists. One surface, two states, no sibling concept. Cost of being wrong: one extra packet.
+
+### C3 — "Deploy the Worker **or** ship a waitlist" is not a specification
+**Audit said (F-01):** either deploy the Worker and proxy `/v1`, or replace the price CTAs with a waitlist.
+**Disagreement:** A spec that offers the executor a choice guarantees improvisation. One must be chosen, and the dependency chain chooses it: live billing requires terms and a privacy policy (F-13) for Stripe's own account review, and it requires the pricing model to be settled (C4). Both are downstream work.
+**Instead:** The waitlist path is specified now (**PB-02**), and billing activation becomes a **gate packet** (**PB-16**) whose honest outcome may be NO-GO. Live Stripe deployment is explicitly **out of scope** for this programme — it needs Lizzie's credentials and a legal sign-off, and no executor should attempt it. Cost of being wrong: the site earns email addresses instead of payments for a few more weeks, which is the current state anyway, minus the lying.
+
+### C4 — The audit under-sequenced its own pricing recommendation
+**Audit said (F-22):** reprice around the event; it is "among the cheapest changes in the whole audit."
+**Disagreement:** True today, false the moment billing is live. `checkoutProductKey` values (`personal_6_month`, `personal_12_month`) map to Stripe Price objects. Once real customers hold entitlements against those keys, changing the model means migrating live price objects and honouring existing purchases — the cheapest change becomes one of the most expensive.
+**Instead:** Pricing is a **freezing step**. PB-11 lands **before** the billing gate, not after it. This is the single most important ordering decision in the programme.
+
+### C5 — Social metadata written before the domain move would be written twice
+**Audit said (F-05):** add the full `og:`/`twitter:` set — a High-severity quick win.
+**Disagreement:** `og:url` and `og:image` require absolute URLs. Adding them now against `raes-photo-booth.vercel.app` means every one is wrong on migration day, and "update the OG tags" becomes a fiddly checklist item that will be half-done.
+**Instead:** PB-05 introduces a single `SITE_ORIGIN` constant that every absolute URL derives from, and PB-15 changes that one value. The quick win still lands immediately; it just cannot rot. Cost of being wrong: one constant's worth of indirection.
+
+### C6 — `robots.txt` and `sitemap.xml` should not ship before the final domain
+**Audit said (F-07):** add both, noting they should name the final domain.
+**Disagreement:** The audit was right to hedge and then filed it as a Medium quick win anyway. Publishing a sitemap naming a domain you are about to abandon actively teaches search engines the wrong canonical URL, then requires an explicit correction.
+**Instead:** PB-07 authors both files against `SITE_ORIGIN` but the acceptance criteria require them to be correct *after* PB-15. They ship in the same programme; they simply carry the same constant as everything else. No separate work.
+
+---
+
+## 4. Dependency map
+
+The ordering rationale, shortest first:
+
+1. **Honesty fixes depend on nothing.** PB-01, PB-02, PB-03 are independent of domain, backend and each other.
+2. **Compliance precedes billing.** Stripe account review expects reachable terms and privacy URLs, so PB-04 must land before PB-16 can pass.
+3. **The origin constant precedes every absolute URL.** PB-05 must land before PB-07, and PB-15 repoints what both established.
+4. **Pricing precedes billing.** PB-11 before PB-16 — see C4. This is the prerequisite pair that matters most.
+5. **Honest refusal precedes the paywall.** PB-03 before PB-12 — see C2.
+6. **Subpath readiness precedes cutover.** PB-13 and PB-14 both before PB-15. **Prerequisite pair:** PB-13 and PB-14 must *both* land before PB-15 runs; cutting over with only one produces either an unstyled site or stranded users.
+
+| Packet | Depends on | Blocks |
+|---|---|---|
+| PB-01 Contact mailto | — | — |
+| PB-02 Honest checkout state | — | PB-12 |
+| PB-03 Honest Personal refusal | — | PB-12 |
+| PB-04 Legal pages | — | PB-16 |
+| PB-05 Origin constant + metadata | — | PB-07, PB-15 |
+| PB-06 Image weight | — | — |
+| PB-07 robots / sitemap / 404 | PB-05 | — |
+| PB-08 Mobile nav | — | — |
+| PB-09 Camera failure states | — | — |
+| PB-10 Accessibility | — | — |
+| PB-11 Reprice around the event | PB-02 | **PB-16** |
+| PB-12 Free-vs-paid cover comparison | PB-03, PB-11 | — |
+| PB-13 Subpath readiness | PB-05 | **PB-15** |
+| PB-14 Settings export/import | — | **PB-15** |
+| PB-15 Cut over to mybishbash.app | **PB-13 + PB-14** | — |
+| PB-16 GATE: billing readiness | PB-04, PB-11, PB-15 | — |
+
+---
+
+## 5. Implementation phases
+
+| Phase | Purpose | Packets |
+|---|---|---|
+| **P0 — Stop the site lying** | Remove every Blocker that needs no backend and no domain | PB-01 · PB-02 · PB-03 |
+| **P1 — Compliance** | Make it lawful to sell, and unblock Stripe review | PB-04 |
+| **P2 — Be findable and fast** | Fix the acquisition channel and the page weight | PB-05 · PB-06 · PB-07 |
+| **P3 — Craft defects** | The three real UI/UX bugs the audit found | PB-08 · PB-09 · PB-10 |
+| **P4 — Pricing model** | Settle the model *before* billing freezes it | PB-11 · PB-12 |
+| **P5 — Migration** | Move to mybishbash.app/photobooth without stranding anyone | PB-13 · PB-14 · PB-15 |
+| **P6 — Billing gate** | Decide, with evidence, whether to activate payments | PB-16 |
+
+---
+
+## 6. Decisions taken (from audit §13)
+
+The audit closed with five open decisions. Accepting the audit did not answer them, so this spec adopts the audit's own recommendations as defaults. **Each is cheap to reverse before its packet runs; say so now if any is wrong.**
+
+| # | Decision | Taken | Where it binds |
+|---|---|---|---|
+| 1 | Worker before or after migration | **After** — billing is the last gate, migration is P5 | C3, PB-16 |
+| 2 | Carry the gallery across origins | **No.** Settings yes, gallery no, with a clear warning on the old origin | PB-14 |
+| 3 | Legacy users keep Personal on the new domain | **No** — grandfathering ends at the origin change, recorded as an ADR | C1, PB-15 |
+| 4 | Event pricing or duration pricing | **Event pricing**, Founding Lifetime unchanged | PB-11 |
+| 5 | Public price for Business | **No public price**, but a qualifying line replaces the bare "contact us" | PB-01 |
+
+---
+
+## 7. Information architecture — canonical vocabulary
+
+One user-facing term per concept. The current copy drifts across three names for the paid personal tier, which is what makes the pricing section hard to scan.
+
+| Canonical term | Definition | Replaces |
+|---|---|---|
+| **Personal** | The paid tier that unlocks event customisation and the quieter credit | "Personalised", "Personal access", "Personal customisation" |
+| **Your event** | The organiser's configured title, date, colour and wording | "Event settings", "your booth", "custom booth" |
+| **Founding Lifetime** | The capped one-off lifetime purchase | "lifetime", "Founding" |
+| **Business** | The tier with brand assets, event controls and consent records | "For Business", "MyBishBash for Business" (both fine as headings, not as tier names) |
+| **Keepsake** | Any of the three outputs a guest takes away | "output", "product", "asset" *(in guest-facing copy only)* |
+
+**Code identifiers are NOT renamed.** `PERSONAL_6_MONTH`, `canPersonaliseEvent`, `ENTITLEMENTS`, every storage key and every `product.js` export keep their current names. The churn is large, the user never sees them, and `product.js` is frozen and test-covered. Change user-facing strings only. An executor that renames an entitlement constant has broken the contract with the Worker and both test suites.
+
+**Where the vocabulary must change:** pricing card headings and body copy in `index.html`, `#outputNote` strings at [app.js:443](../../app.js:443), the settings screen heading, and the founding availability line. Nowhere else.
+
+---
+
+## 8. Protected assets — do not modify
+
+An executor working a packet in this programme must not edit these files except where a packet names them explicitly:
+
+- `covers.js`, `polaroid.js`, `mp4.js`, `fonts.js` — the rendering engine. **No packet in this programme modifies them.**
+- `product.js` — the entitlement boundary. Modified by **PB-11 only**, and only within `PLAN_METADATA`. The capability matrix, consent validators and brand-asset validator are frozen.
+- `worker/` — the API. **No packet in this programme modifies it.** PB-16 only reads and reports on it.
+- `sw.js` `ASSETS` array — modified by **PB-06 only** (the image filename), and the list must stay finite.
+- The capture path in `app.js` (`startCamera`, `beginSession`, the countdown and grading calls) — modified by **PB-09 only**, and only its `catch` branch.
+
+**Storage keys that must not be renamed by any packet:** `mybishbashPhotoboothVerifiedAccessV1`, `mybishbashPhotoboothGallery`, `mybishbashPhotoboothGalleryMigratedV1`, `mybishbashPhotoboothEditionSequenceV1`, the settings key at [app.js:226](../../app.js:226), and `raePhotoBoothLiveSettings` / `raePhotoBoothGallery` (legacy, read-only).
+
+---
+
+## 9. Testing strategy
+
+There is no build step, no linter and no root `package.json`. The preflight is therefore a literal command sequence. **Every packet runs all of it.**
+
+```bash
+node tests/product.test.js && node tests/integration-contract.test.js && (cd worker && npx vitest run)
+```
+
+Expected baseline, verified 2026-08-09: **17 browser tests pass, 14 worker tests pass, 0 fail.**
+
+Per-phase additions:
+
+- **P0–P1:** manual — load `/` and `/business`, confirm every CTA reaches a real destination.
+- **P2:** `curl -sI` each new route for status and content-type; re-measure total transfer with the command in PB-06.
+- **P3:** re-run the mobile measurement in PB-08's verification; real Tab press to confirm the focus ring survives.
+- **P4:** `node tests/product.test.js` must still pass after `PLAN_METADATA` changes — if it fails, the executor has changed a capability, not a price.
+- **P5:** the migration checklist in PB-15, run against the live domain before DNS/proxy is announced.
+- **Regression risk to watch throughout:** the landing page drives the real renderers. Any packet touching `index.html` or `styles.css` must confirm all ten demo canvases still report `data-demo-ready="true"`.
+
+---
+
+## 10. Success metrics
+
+Nothing is instrumented today; there is no analytics of any kind. That is a deliberate state (privacy is the product's trust asset), so these are stated as observable checks rather than dashboard metrics.
+
+| Metric | Baseline (2026-08-09) | Target | Instrumented? |
+|---|---|---|---|
+| Working commercial exits | **0 of 8** (3 checkout, 4 contact, 1 save) | 8 of 8 | Manual check |
+| Blocker findings open | 4 | 0 after P1 | Tracker |
+| Critical-path transfer weight | 2,331,527 bytes | < 400,000 bytes | PB-06 command |
+| Pages with complete social metadata | 0 of 2 | 2 of 2 | PB-05 verification |
+| Legal pages reachable from footer | 0 | 3 (terms, privacy, refunds) | Manual check |
+| WCAG AA contrast failures on sampled roles | 1 of 8 | 0 of 8 | PB-10 script |
+| Preflight | 31 pass / 0 fail | unchanged | Preflight command |
+
+Adding analytics is **out of scope** and would require its own consent decision (see §13).
+
+---
+
+## 11. Packets
+
+Execute strictly in order. Later packets assume earlier constants and vocabulary.
+
+---
+
+### Packet PB-01 — Replace the dead Business contact URL with a working route
+**Phase:** P0
+**Objective:** Make it possible to contact the business at all, closing audit F-02.
+**Depends on:** nothing
+**Files:** `index.html` (the `business-contact-url` meta at line 11; the four CTA anchors), `app.js` if the meta is read anywhere.
+**Constraints:** Do not build a contact page or form — that is a separate decision and a different domain. Keep exactly one source of truth for the address (the existing meta tag); do not hardcode it into four anchors. Do not change the Business page's content or layout.
+**Acceptance criteria:**
+- [ ] `<meta name="business-contact-url">` contains a `mailto:` address that Lizzie monitors, supplied at execution time.
+- [ ] All four CTAs (`TALK TO US` ×3, `Talk to us` ×1) resolve to that address; zero references to `mybishbash.app/contact` remain in the repository.
+- [ ] The `mailto:` carries a prefilled subject identifying the Business enquiry.
+- [ ] A qualifying line is added beside the primary CTA per decision 5 (§6) — indicative scale, not a price.
+- [ ] Preflight green.
+**Verification checklist:** `grep -rn "mybishbash.app/contact" --include=* .` returns nothing outside `docs/`. Load `/business`, click each of the four CTAs, confirm the mail client opens with the subject prefilled.
+**Rollback:** Revert the commit. No data, no storage, no migration.
+**Complexity:** Low
+**Definition of done:** preflight green, criteria in the commit message, tracker updated, deployable.
+
+---
+
+### Packet PB-02 — Make the commerce state honest
+**Phase:** P0
+**Objective:** Stop advertising three prices that cannot be paid, and capture intent instead, closing audit F-01 and F-11.
+**Depends on:** nothing
+**Files:** `index.html` (pricing section), `app.js` (`startCheckout` [1534](../../app.js:1534), `loadFoundingAvailability` [1526](../../app.js:1526), the `[data-checkout-plan]` wiring at [1697](../../app.js:1697)), `styles.css` if a state class is needed.
+**Constraints:** **Do not delete the checkout code.** `startCheckout`, `handleCheckoutReturn` and the restore flow must remain intact and callable — PB-16 re-enables them. Gate them behind a single flag, do not rip them out. Do not remove the prices from `product.js`. Do not invent a new status surface; `#checkoutStatus` already exists.
+**Acceptance criteria:**
+- [ ] A single boolean constant in `app.js` controls whether billing is live; it is `false` in this packet and flipping it to `true` restores the current checkout behaviour with no other edit.
+- [ ] While billing is off, the three plan buttons invite a founding-list email (reusing PB-01's address with a distinct subject) instead of calling `startCheckout`.
+- [ ] The prices remain visible and are labelled as forthcoming, in wording that does not imply a purchase is currently possible.
+- [ ] The unevidenced scarcity line is removed or reworded while `/v1/billing/founding` is unreachable; no failed request is left to error silently in the console.
+- [ ] Clicking any plan button produces a visible, non-error next step. The string "This service is not available yet." no longer appears to a user.
+- [ ] Preflight green.
+**Verification checklist:** Load `/`, click all three plan buttons, confirm each opens mail with a distinct subject. Open devtools console; confirm no failed `/v1/*` request on page load. Flip the constant to `true` locally and confirm `startCheckout` is reached again, then set it back to `false` before committing.
+**Rollback:** Revert. No storage involved.
+**Complexity:** Medium
+**Definition of done:** as above.
+
+---
+
+### Packet PB-03 — Never silently discard a guest's configuration
+**Phase:** P0
+**Objective:** Replace the silent `return false` with a preserved-and-explained refusal, closing audit F-03 and the F-12 half that needs no checkout.
+**Depends on:** nothing
+**Files:** `app.js` (`savePersonalSettings` [1494](../../app.js:1494), `openPersonalSettings` [1489](../../app.js:1489), the entry wiring at [1690-1691](../../app.js:1690)), `index.html` (a status region in the settings screen), `styles.css`.
+**Constraints:** Free users must **keep** access to the setup flow — do not gate the entrance. The audit's point is that configuring it is the persuasion. Do not grant Personal capability. Do not write the free user's settings to the real settings key; hold them in the existing `temporarySettingsSnapshot` mechanism rather than inventing a second store. Do not use `alert()`.
+**Acceptance criteria:**
+- [ ] A free user pressing save sees an in-page message naming the reason and offering the PB-02 founding-list route.
+- [ ] The configuration the free user typed is **still on screen** after the refusal — nothing is cleared.
+- [ ] `savePersonalSettings` no longer returns `false` without a user-visible consequence.
+- [ ] An entitled user's save path is byte-for-byte unchanged in behaviour.
+- [ ] The message region is announced to assistive technology (`role="status"` or equivalent) and does not steal focus mid-typing.
+- [ ] Preflight green.
+**Verification checklist:** With empty `localStorage`, open Customise My Booth from the landing page, type an event title, press save; confirm the message appears, the title is still in the field, and `Object.keys(localStorage)` still contains no settings key. Repeat with `raePhotoBoothLiveSettings` set to confirm the legacy path still saves.
+**Rollback:** Revert. No storage migration.
+**Complexity:** Medium
+**Definition of done:** as above.
+
+---
+
+### Packet PB-04 — Publish terms, privacy and cancellation, and link them
+**Phase:** P1
+**Objective:** Make it lawful to advertise and later sell, closing audit F-13 and F-14, and unblocking PB-16.
+**Depends on:** nothing
+**Files:** new static pages, `vercel.json` (routes), `index.html` (both footers).
+**Constraints:** These are static pages, not app screens — do not add them as `.screen` sections, because they must be reachable and indexable without JavaScript. Do not copy boilerplate that contradicts the product: photographs genuinely do not leave the device on Free and Personal, and the privacy policy must say so accurately. Legal content requires Lizzie's review before the packet is marked done; the executor drafts, it does not sign off.
+**Acceptance criteria:**
+- [ ] `/privacy`, `/terms` and a cancellation/refund statement all return 200 with `text/html`.
+- [ ] All three are linked from the footer on **both** the Personal and Business surfaces.
+- [ ] The privacy policy states the local-first position, and separately describes the Business consent-record processing that `product.js` already implements.
+- [ ] The refund statement covers UK distance-selling cancellation rights for the tiers named in `PLAN_METADATA`.
+- [ ] Pages render with JavaScript disabled.
+- [ ] Two ADRs are recorded in the tracker decision log per C1: grandfathering posture, and client-side entitlement posture.
+- [ ] Preflight green.
+**Verification checklist:** `curl -sI` each of the three routes. Load each with JS disabled. Confirm footer links on `/` and `/business`.
+**Rollback:** Revert; routes 404 again as they do today.
+**Complexity:** Medium
+**Definition of done:** as above, **plus Lizzie's explicit sign-off on the legal content.**
+
+---
+
+### Packet PB-05 — Introduce the origin constant and complete the social metadata
+**Phase:** P2
+**Objective:** Make a shared link render as a keepsake instead of a bare URL, closing audit F-05, F-06 and F-18, on a foundation the migration can repoint (C5).
+**Depends on:** nothing
+**Files:** `index.html` (`<head>`), `app.js` (surface routing — `showProductRoute`).
+**Constraints:** Exactly one constant holds the origin; nothing else hardcodes a hostname. Do not generate `og:image` at runtime from a canvas — it must be a real, cacheable, crawlable file. Do not change the visible page content.
+**Acceptance criteria:**
+- [ ] A single `SITE_ORIGIN` constant exists and every absolute URL in the head derives from it.
+- [ ] Complete `og:` and `twitter:` sets are present: `og:title`, `og:description`, `og:image`, `og:url`, `og:type`, `twitter:card`, `twitter:title`, `twitter:description`, `twitter:image`.
+- [ ] `og:image` is a real committed file showing a rendered keepsake, at least 1200×630, under 300 KB.
+- [ ] `<link rel="canonical">` is present and correct on both surfaces.
+- [ ] Selecting the Business surface updates `title`, `description`, `canonical` and `og:url` to Business-specific values; returning to Personal restores them.
+- [ ] Exactly one `<h1>` is present in the DOM per active surface.
+- [ ] Preflight green; all ten demo canvases still report `data-demo-ready="true"`.
+**Verification checklist:** Load `/`, read every `meta[property]` and `meta[name]`; repeat after switching to Business and confirm the values changed. `curl -sI` the `og:image` URL for 200 and content-type. Paste the deployed URL into a link-preview validator.
+**Rollback:** Revert. No storage.
+**Complexity:** Medium
+**Definition of done:** as above.
+
+---
+
+### Packet PB-06 — Cut the demo contact sheet from 2.23 MB to under 200 KB
+**Phase:** P2
+**Objective:** Remove 96% of the page's weight, closing audit F-17.
+**Depends on:** nothing
+**Files:** `assets/` (new encoded image), `marketing.js` (source constants at [8-10](../../marketing.js:8)), `index.html` if a `<picture>` element is used, `sw.js` (the `ASSETS` entry only).
+**Constraints:** **The three demo photographs must remain visually unchanged** at their rendered sizes — this image feeds the real renderers, so degrading it degrades the product demo. `SOURCE_WIDTH`, `SOURCE_COLUMN` and `SOURCE_CROP_HEIGHT` are used for column arithmetic in `marketing.js`; if the source dimensions change, every one must be updated consistently. Keep the `sw.js` asset list finite and correct — a stale filename there breaks offline install.
+**Acceptance criteria:**
+- [ ] Total critical-path transfer is **under 400,000 bytes** (baseline 2,331,527).
+- [ ] The image carries only the rows actually displayed (currently 640 of 1024 — 37% is never shown).
+- [ ] A modern format is served with a working fallback for older Safari, or a single format is used that all supported targets decode.
+- [ ] All ten demo canvases report `data-demo-ready="true"` and are visually indistinguishable from the current output at rendered size.
+- [ ] `sw.js` `ASSETS` references the shipped filename; no 404 during service-worker install.
+- [ ] Preflight green.
+**Verification checklist:**
+```bash
+total=0; for f in index.html styles.css fonts.js covers.js polaroid.js mp4.js product.js app.js marketing.js; do total=$((total+$(curl -s -H 'Accept-Encoding: gzip, br' -o /dev/null -w "%{size_download}" "$DEPLOY_URL/$f"))); done; echo "JS/CSS/HTML: $total"
+```
+Add the image's transfer size and confirm the sum is under 400,000. Open devtools Application → Cache Storage and confirm the install succeeded with no missing entry.
+**Rollback:** Revert; the old PNG returns. Note that clients holding the old service-worker cache need one refresh cycle — the existing `checkForUpdate` handles this.
+**Complexity:** Medium
+**Definition of done:** as above.
+
+---
+
+### Packet PB-07 — Ship robots.txt, sitemap.xml and a branded 404
+**Phase:** P2
+**Objective:** Close audit F-07 and F-08 against the origin constant, so nothing must be rewritten on migration day (C6).
+**Depends on:** **PB-05** (requires `SITE_ORIGIN`)
+**Files:** new `robots.txt`, new `sitemap.xml`, `vercel.json` (catch-all and 404 handling), a 404 page.
+**Constraints:** Both files must derive their URLs from the same origin value PB-05 established — if the toolchain cannot template a static file, the packet must state where the value is duplicated so PB-15 can update it, and the tracker must record it. The 404 page must not require JavaScript to show a route home.
+**Acceptance criteria:**
+- [ ] `/robots.txt` returns 200 `text/plain` and references the sitemap.
+- [ ] `/sitemap.xml` returns 200 and lists both surfaces with correct absolute URLs.
+- [ ] An unknown path returns a **branded** 404 with a working link to the booth, `content-type: text/html`.
+- [ ] Every location holding a hardcoded origin is listed in the tracker for PB-15 to update.
+- [ ] Preflight green.
+**Verification checklist:** `curl -sI` for `/robots.txt`, `/sitemap.xml`, `/nonexistent-page-xyz`. Load the 404 with JS disabled and confirm the link home works.
+**Rollback:** Revert. No storage.
+**Complexity:** Low
+**Definition of done:** as above.
+
+---
+
+### Packet PB-08 — Fix the mobile navigation containing block
+**Phase:** P3
+**Objective:** Reattach the audience nav to the header on mobile, closing audit F-21.
+**Depends on:** nothing
+**Files:** `styles.css` (line [364](../../styles.css:364) media block only).
+**Constraints:** This is a **pure CSS fix with a known root cause** — do not restructure the header markup, and do not change the desktop layout. The intended design (a tab bar hanging off the header's bottom border, `border-top:0`) is correct and must be preserved. Do not "fix" it by increasing `.hero-section` padding; that hides the symptom and leaves the nav in the wrong place.
+**Root cause, for the executor:** `.audience-nav` carries both `grid-row:2; grid-column:1/-1` and `position:absolute`. For an absolutely-positioned grid item the containing block is its **grid area**, not the grid container's padding box, so `top:72px` is measured from the top of implicit row 2 (~y=71) and the 72px header height is counted twice. Removing the grid placement properties, or setting `top:100%`, resolves it.
+**Acceptance criteria:**
+- [ ] At 375×812 the nav's top edge is flush with the header's bottom edge (within 1px).
+- [ ] The nav's bounding rect does not intersect `.hero-kicker`'s bounding rect.
+- [ ] Desktop layout at 1280×800 is unchanged.
+- [ ] The nav remains centred and keeps its border treatment.
+- [ ] No horizontal document overflow is introduced at 375px.
+- [ ] Preflight green.
+**Verification checklist:** At 375×812 evaluate:
+```js
+const n=document.querySelector('.audience-nav').getBoundingClientRect(), h=document.querySelector('.site-nav').getBoundingClientRect(), k=document.querySelector('.hero-kicker').getBoundingClientRect();
+({gap: Math.round(n.top-h.bottom), overlapsKicker: !(n.right<k.left||n.left>k.right||n.bottom<k.top||n.top>k.bottom), overflow: document.documentElement.scrollWidth>document.documentElement.clientWidth})
+```
+Expected: `gap` 0±1, `overlapsKicker` false, `overflow` false. Baseline today: gap 71, overlaps true.
+**Rollback:** Revert one CSS declaration block.
+**Complexity:** Low
+**Definition of done:** as above.
+
+---
+
+### Packet PB-09 — Differentiate camera failures and remove the native alert
+**Phase:** P3
+**Objective:** Replace one Safari-specific `alert()` covering six causes with recoverable in-page states, closing audit F-04.
+**Depends on:** nothing
+**Files:** `app.js` (the `catch` at [915-935](../../app.js:915) only), `index.html` (an error state region), `styles.css`.
+**Constraints:** **Do not modify `startCamera`, the countdown, capture, grading or gallery-save logic** — only the failure branch. Preserve the existing `cancelled` short-circuit and the `sid !== captureSessionId` session guards exactly; they prevent a stale session from writing over a new one. Do not add a permissions pre-prompt screen — that is a redesign, not a fix.
+**Acceptance criteria:**
+- [ ] The `catch` branches on `err.name`, handling at minimum `NotAllowedError`, `NotFoundError` and `NotReadableError` distinctly, with a sensible default for everything else.
+- [ ] No `alert()` remains in the capture path.
+- [ ] No message names a specific browser unless that browser was actually detected.
+- [ ] In-app browsers (no `getUserMedia`, or a blocked call) get an explicit "open in your normal browser" route.
+- [ ] The error state offers a retry that re-enters capture without a page reload.
+- [ ] Session guards and the `cancelled` path are unchanged; a cancelled session still produces no message.
+- [ ] Preflight green.
+**Verification checklist:** In devtools, override `navigator.mediaDevices.getUserMedia` to reject with `new DOMException('x','NotAllowedError')`, then `NotFoundError`, then `NotReadableError`, then `delete navigator.mediaDevices`; confirm four distinct recoverable states and that retry works. **[verify by hand]** — before this packet is marked done, confirm on real hardware what WhatsApp and Instagram in-app browsers actually do on iOS and Android, and check the copy matches.
+**Rollback:** Revert. No storage.
+**Complexity:** Medium
+**Definition of done:** as above, **plus the owed manual verification recorded in the tracker.**
+
+---
+
+### Packet PB-10 — Close the measured accessibility gaps
+**Phase:** P3
+**Objective:** Fix the one AA contrast failure, the small demo targets and the missing skip link, closing audit F-24, F-25 and F-26.
+**Depends on:** nothing
+**Files:** `styles.css`, `index.html` (skip link).
+**Constraints:** **Do not touch the focus ring, `prefers-reduced-motion` or `lang`** — all three are correct and are existing assets. The demo chips are at 29px, which *passes* WCAG 2.2 SC 2.5.8 (24×24 minimum); raising them to 44px is a usability improvement against Apple's guidance, not a conformance fix, and must not change the demo's layout on desktop.
+**Acceptance criteria:**
+- [ ] `.product-kicker` reaches ≥4.5:1 against its background (baseline 3.60:1).
+- [ ] All demo frame/filter/style chips are ≥44×44 CSS px at 375px width.
+- [ ] A skip-to-content link is the first focusable element, visible on focus.
+- [ ] All eight text roles sampled in the audit pass their AA threshold.
+- [ ] A real Tab press still produces the 3px `:focus-visible` outline.
+- [ ] Desktop demo layout is unchanged.
+- [ ] Preflight green.
+**Verification checklist:** Re-run the audit's contrast script over the eight roles; all must report `passesAA: true`. At 375px, confirm no `#landing button` has height < 44. Press Tab from page load and confirm the skip link appears and works.
+**Rollback:** Revert. No storage.
+**Complexity:** Low
+**Definition of done:** as above.
+
+---
+
+### Packet PB-11 — Reprice Personal around the event
+**Phase:** P4
+**Objective:** Replace duration-based tiers with event-based pricing before billing freezes the model, closing audit F-22 (see C4).
+**Depends on:** PB-02
+**Files:** `product.js` (`PLAN_METADATA` **only**), `index.html` (pricing copy), `tests/product.test.js` if plan assertions exist.
+**Constraints:** **This is the one packet permitted to edit `product.js`, and only within `PLAN_METADATA`.** `CAPABILITY_MATRIX`, `ENTITLEMENTS`, `CHECKOUT_POLICY`, the consent validators and the brand-asset validator are frozen. Entitlement **constant names do not change** — the Worker's D1 schema and both test suites depend on `PERSONAL_6_MONTH` and `PERSONAL_12_MONTH` as identifiers. Change what they *mean and cost*, not what they are called. Founding Lifetime is unchanged at £100 with its 500 cap. `checkoutProductKey` values must remain stable or the change must be recorded for PB-16.
+**Acceptance criteria:**
+- [ ] Personal is sold as an event, not a duration, in all user-facing copy.
+- [ ] `PLAN_METADATA` reflects the new model with `amountMinor` in integer minor units and `currency: "GBP"`.
+- [ ] No entitlement constant is renamed; `grep -c "PERSONAL_6_MONTH" product.js` is unchanged.
+- [ ] `CAPABILITY_MATRIX` is byte-identical to before this packet.
+- [ ] No capability anywhere derives from a price, label or amount.
+- [ ] Any `checkoutProductKey` change is recorded in the tracker for the Stripe products PB-16 will need.
+- [ ] Preflight green — **all 17 browser tests still pass.** A failure here means a capability was changed, not a price.
+**Verification checklist:** `git diff product.js` and confirm every changed line is inside `PLAN_METADATA`. Run the preflight. Load `/` and confirm the pricing section reads coherently with no orphaned "6 months" or "1 year" strings: `grep -rn "6 months\|1 Year\|six months\|twelve months" index.html`.
+**Rollback:** Revert. No storage, no live Stripe objects exist yet — which is precisely why this packet runs now.
+**Complexity:** Medium
+**Definition of done:** as above.
+
+---
+
+### Packet PB-12 — Show the free-vs-paid cover difference, and make the refusal a purchase moment
+**Phase:** P4
+**Objective:** Surface the paywall's real value and complete the F-03 end state, closing audit F-23 and the remainder of F-12 (see C2).
+**Depends on:** **PB-03, PB-11**
+**Files:** `index.html` (pricing section), `marketing.js` (an additional comparison render), `app.js` (the PB-03 refusal message gains a route to pricing).
+**Constraints:** The comparison must be produced by the **real cover renderer**, exactly as the existing demos are — no mockups, no screenshots. Reuse the existing `.compare-card` / `.compare-versus` pattern the landing page already uses for the welcome screen; do not mint a new comparison component. Do not change `DEFAULTS.eventTitle` — `"Your Celebration"` is the correct free-tier behaviour and is the very thing being demonstrated. Do not gate the setup flow's entrance.
+**Acceptance criteria:**
+- [ ] The pricing section shows two real rendered covers side by side: one mastheaded from `DEFAULTS.eventTitle`, one from a sample event title.
+- [ ] Both are rendered by `Covers`, not embedded as static images.
+- [ ] The Free pricing card's copy names the masthead difference, not just the credit line.
+- [ ] The PB-03 refusal message links to the pricing section.
+- [ ] The existing `.compare-card` pattern is reused; no new comparison component is introduced.
+- [ ] Preflight green; all demo canvases still report ready.
+**Verification checklist:** Load `/`, confirm both comparison canvases carry `data-demo-ready="true"` and show visibly different mastheads. From an empty `localStorage`, run the PB-03 flow and confirm the message routes to pricing.
+**Rollback:** Revert. No storage.
+**Complexity:** Medium
+**Definition of done:** as above.
+
+---
+
+### Packet PB-13 — Make the app subpath-ready
+**Phase:** P5
+**Objective:** Guarantee the product works under `/photobooth/` before anything points at it, closing audit F-19 and F-20.
+**Depends on:** PB-05
+**Files:** `vercel.json`, `index.html` (`<base>` guard), possibly `manifest.webmanifest`.
+**Constraints:** **Do not convert relative paths to absolute** — relative paths are the correct choice for a portable subpath app and are what make this migration possible at all. The fix is a trailing-slash guarantee and a catch-all rewrite, not a path rewrite. The service worker registers `./sw.js` and will correctly scope to `/photobooth/`; do not add a `scope` option or a `Service-Worker-Allowed` header. Keep the `sw.js` `ASSETS` list relative.
+**Acceptance criteria:**
+- [ ] A request to the subpath **without** a trailing slash permanently redirects to the version **with** one.
+- [ ] A catch-all rewrite serves the app for any path under the subpath; enumerating routes in two places is removed.
+- [ ] `/photobooth/business` serves the app and the client selects the Business surface.
+- [ ] The app is verified working end to end when served from a subpath — not only from a root — with all assets 200 and the service worker registering with the subpath scope.
+- [ ] `manifest.webmanifest` `start_url` still resolves correctly under the subpath.
+- [ ] Preflight green.
+**Verification checklist:** Serve the repo locally under a `/photobooth/` prefix. Load `/photobooth` and confirm the redirect. Confirm `styles.css`, `app.js`, `covers.js` and the manifest all return 200 under the prefix. In devtools Application → Service Workers, confirm the scope is `/photobooth/`. Load `/photobooth/business` directly with a hard navigation. **[verify by hand]** — audit F-20 recorded one unexplained hard-navigation timeout to `/business`; confirm hard navigation works under the subpath before PB-15.
+**Rollback:** Revert. The current root deployment is unaffected either way.
+**Complexity:** High
+**Definition of done:** as above.
+
+---
+
+### Packet PB-14 — Give organisers a way to carry their booth to the new domain
+**Phase:** P5
+**Objective:** Stop the origin change from silently destroying every organiser's configuration, closing audit F-09 (settings half).
+**Depends on:** nothing
+**Files:** `app.js` (settings screen — export and import), `index.html`, `styles.css`.
+**Constraints:** **Settings only. The gallery is explicitly out of scope** per decision 2 (§6) — photographs are large and the decision is recorded, not drifted into. Do not upload anything anywhere; this is a local file download and a local file read, consistent with the local-first principle. Do not rename any storage key. The import must validate its input and refuse malformed data rather than writing a broken settings object.
+**Acceptance criteria:**
+- [ ] An organiser can export their event settings to a file from the settings screen.
+- [ ] An organiser can import that file on a different origin and recover their configuration.
+- [ ] The export carries a schema version so a future format change is detectable.
+- [ ] Import validates and rejects malformed input with a visible message; it never writes a partial settings object.
+- [ ] Nothing is transmitted over the network at any point in either operation.
+- [ ] The gallery is not exported, and the UI states plainly that saved sessions stay on the old device.
+- [ ] Preflight green.
+**Verification checklist:** Export from `http://localhost:PORT_A`, import at `http://localhost:PORT_B` (a different origin), confirm settings match. Import a truncated and a malformed file; confirm both are refused with a message and the existing settings survive. Watch the network panel during both operations and confirm zero requests.
+**Rollback:** Revert. Exported files remain readable by the reverted build only if the format is unchanged — note this in the tracker.
+**Complexity:** High
+**Definition of done:** as above.
+
+---
+
+### Packet PB-15 — Cut over to mybishbash.app/photobooth
+**Phase:** P5
+**Objective:** Move the product to its real address without stranding anyone, completing F-09, F-10 and F-19, and repointing everything PB-05 and PB-07 established.
+**Depends on:** **PB-13 and PB-14 — prerequisite pair. Both must have landed.**
+**Files:** `SITE_ORIGIN` (PB-05), any duplicated origin recorded by PB-07, `vercel.json`, the old origin's configuration.
+**Constraints:** This is the **only irreversible-feeling packet** in the programme and the only one that changes what the public sees at a new address. Do not run it until PB-13's subpath verification has actually passed on a deployed environment, not just locally. Do not delete the old deployment — it must keep serving the hand-off. Do not announce or share the new URL as part of this packet; that is Lizzie's call.
+**Acceptance criteria:**
+- [ ] `https://mybishbash.app/photobooth` (no slash) redirects to `/photobooth/`, which returns 200 and renders fully styled.
+- [ ] `SITE_ORIGIN` and every duplicate recorded by PB-07 now name the new address; `grep -rn "raes-photo-booth"` returns nothing outside `docs/`.
+- [ ] `canonical`, `og:url`, `sitemap.xml` and `robots.txt` all name the new address.
+- [ ] `/photobooth/business` works on a hard navigation.
+- [ ] The service worker registers with scope `/photobooth/` and offline load works after one visit.
+- [ ] The old origin serves a hand-off explaining the move, linking to the new address, and pointing organisers at PB-14's export before they lose access.
+- [ ] The grandfathering ADR from PB-04 is confirmed still accurate now that the origin has changed.
+- [ ] Preflight green.
+**Verification checklist:** `curl -sIL https://mybishbash.app/photobooth` and confirm the redirect chain ends 200. Load the new URL cold, confirm styling, then go offline and reload to confirm the service worker serves the shell. Paste the new URL into a chat app and confirm the preview card renders. Load the old origin and confirm the hand-off.
+**Rollback:** Repoint the constant and revert the proxy rules. **Users who exported settings after cutover keep working files.** Users who installed the PWA from the new origin will hold a stale scope — note this in the tracker as a known cost.
+**Complexity:** High
+**Definition of done:** as above.
+
+---
+
+### Packet PB-16 — GATE: decide whether to activate billing
+**Phase:** P6
+**Objective:** Establish, with evidence, whether payments should go live — and record NO-GO as a valid, successful outcome.
+**Depends on:** PB-04, PB-11, PB-15
+**Files:** tracker decision log; `worker/README.md` if setup gaps are found. **No application code changes.**
+**Constraints:** **This packet is a measurement and a decision, not a deployment.** The executor must not deploy the Worker, must not create Stripe products, must not handle live keys, and must not flip PB-02's billing constant. Live Stripe activation requires Lizzie's credentials and legal sign-off and is **out of scope for this programme** (§12). A NO-GO outcome is a success, not a failure — say so plainly in the report.
+**Acceptance criteria:**
+- [ ] The report states GO or NO-GO with reasons.
+- [ ] Each precondition is verified and recorded: terms/privacy/refunds reachable (PB-04); pricing model settled and `checkoutProductKey` values final (PB-11); the product live at its final domain (PB-15); worker tests green; `worker/README.md` sufficient to configure D1, R2, Stripe keys and the webhook secret from scratch.
+- [ ] Any gap between `PLAN_METADATA` and the Stripe products that would need creating is enumerated.
+- [ ] The exact steps to flip PB-02's billing constant and proxy `/v1` are written down for whoever holds the credentials.
+- [ ] Confirmation that no browser code path grants a paid entitlement — `CHECKOUT_POLICY.clientSuccessRedirectGrantsEntitlement` is still `false` and `handleCheckoutReturn` still treats a success redirect as presentational only.
+- [ ] Preflight green.
+**Verification checklist:** `cd worker && npx vitest run`. `curl -sI` the three legal routes on the live domain. Read `handleCheckoutReturn` ([app.js:1565](../../app.js:1565)) and confirm it grants nothing.
+**Rollback:** Nothing to roll back; no code changed.
+**Complexity:** Medium
+**Definition of done:** report written into the tracker, GO/NO-GO recorded, no code changed.
+
+---
+
+## 12. Out of scope
+
+Named so nobody drifts into them and calls it diligence:
+
+- **Live Stripe deployment and Worker hosting.** Needs credentials and legal sign-off. PB-16 prepares it; a human performs it.
+- **Any change to the rendering engine** — covers, editorial finish, Polaroid, MP4, filters, fonts. The audit found nothing wrong with them.
+- **Refactoring `app.js`.** At 1,790 lines it is large, but the audit found no defect caused by its size, and sunk-cost-free honesty cuts both ways: churn without a user-visible reason is not improvement.
+- **A build step, framework, bundler or TypeScript migration.** The no-build static architecture is why this product runs offline on an old iPad.
+- **Analytics or any tracking.** Would require its own consent decision and contradicts the privacy position that PB-04 is about to make binding.
+- **A visual redesign or re-theme.** The audit rated marketing craft 7/10 with two specific defects, both packeted.
+- **Gallery migration across origins.** Decision 2, recorded, deliberate.
+- **A contact form or contact page on `mybishbash.app`.** PB-01 uses `mailto:`; a page is a different project's work.
+- **Server-side entitlement enforcement.** C1 — documented as a posture, not built.
+
+---
+
+*Sixteen packets. Four Blockers cleared by the end of P1. The engine is not touched anywhere in this programme.*

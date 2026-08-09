@@ -18,6 +18,37 @@ templates and adaptive finish, Living Polaroid H.264/PNG paths, iOS Share
 fallbacks, IndexedDB gallery, and service-worker offline flow were all present
 and treated as protected product assets.
 
+## Planning documents (authoritative)
+
+Product direction for this repository is governed by three documents. Where this
+README and those documents disagree about what *should* happen next, they win;
+this README remains the description of how the product *works*.
+
+- **[docs/product/AUDIT-2026-08-09.md](docs/product/AUDIT-2026-08-09.md)** — white-box
+  audit of the live product and this repository. Diagnostic only. Accepted in full
+  on 2026-08-09.
+- **[docs/product/IMPLEMENTATION-SPEC.md](docs/product/IMPLEMENTATION-SPEC.md)** — the
+  accepted findings converted into sixteen numbered packets, `PB-01`…`PB-16`, each
+  with acceptance criteria. This is the binding plan.
+- **[WORK.md](WORK.md)** — execution state: what has landed, what is next, owed
+  manual verifications, inputs needed, and the decision log.
+
+**Execution rules.** One packet per session, in the order given. Every packet leaves
+the product deployable — there is no build step, so a broken commit is a broken
+production deploy. Run the preflight (`node tests/product.test.js && node
+tests/integration-contract.test.js && (cd worker && npx vitest run)`) before every
+commit, tick the acceptance criteria in the commit message, and update `WORK.md` in
+the same commit. An executor that hits a contradiction stops and asks rather than
+improvising — a spec gap is a planning failure, not an execution decision.
+
+**Protected assets.** The rendering engine (`covers.js`, `polaroid.js`, `mp4.js`,
+`fonts.js`) is not modified by any packet in this programme. `product.js` is modified
+by `PB-11` only, and only inside `PLAN_METADATA`. `worker/` is not modified at all.
+The full list, including the storage keys that must not be renamed, is in `WORK.md`.
+
+Work packages in this repository use the **`PB`** prefix, registered in the portfolio
+prefix registry. A session seeing a foreign prefix here should stop and ask.
+
 ## Product surfaces
 
 - `/` is the Personal landing page. **Start Photobooth** immediately enters the

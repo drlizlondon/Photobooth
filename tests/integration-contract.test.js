@@ -36,6 +36,7 @@ test("exposes Personal and Business as separate static product surfaces", functi
   assert.match(html, /data-product-route="business"/);
   assert.match(app, /function routeFromLocation\(\)/);
   assert.match(app, /window\.addEventListener\("popstate"/);
+  assert.equal(vercel.cleanUrls, undefined, "cleanUrls rewrites index.html away before the static root fallback can resolve it");
   assert.deepEqual(vercel.rewrites, [
     { source: "/", destination: "/index.html" },
     { source: "/business", destination: "/index.html" },

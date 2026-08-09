@@ -18,6 +18,7 @@ var html = source("index.html");
 var styles = source("styles.css");
 var manifest = source("manifest.webmanifest");
 var serviceWorker = source("sw.js");
+var vercel = JSON.parse(source("vercel.json"));
 
 test("keeps the existing capture engine as the direct public Start destination", function () {
   var launch = app.slice(app.indexOf("function launchFreeBooth"), app.indexOf("function previewExampleBooth"));
@@ -35,6 +36,11 @@ test("exposes Personal and Business as separate static product surfaces", functi
   assert.match(html, /data-product-route="business"/);
   assert.match(app, /function routeFromLocation\(\)/);
   assert.match(app, /window\.addEventListener\("popstate"/);
+  assert.deepEqual(vercel.rewrites, [
+    { source: "/", destination: "/index.html" },
+    { source: "/business", destination: "/index.html" },
+    { source: "/business/", destination: "/index.html" }
+  ]);
 });
 
 test("renders attribution inside every output pipeline", function () {

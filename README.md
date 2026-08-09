@@ -37,17 +37,39 @@ Four cover styles, each laid out separately for portrait and landscape sessions:
 
 Magazine always asks the guest to pick Photo 1 / 2 / 3 before showing the finished cover, then shows a live thumbnail of that photo in each of the four styles.
 
-**Editorial finish.** Every magazine cover — all four styles — puts the same restrained, adaptive luxury-print pass on the photograph. It samples the actual capture before making a bounded midtone exposure and white-balance correction, then applies a gentle S-curve, highlight shoulder, deep-shadow lift, richer near-blacks, a clean protected white point and an almost imperceptible matte floor. Colour gets +7 vibrance and −4% global saturation: quieter colours gain a trace of life while saturated clothing keeps its hue and is never pushed harder.
+**Editorial finish.** Every magazine cover — all four styles — puts the same deterministic, adaptive luxury-print pass on the photograph. It samples the untouched capture before making a bounded midtone exposure and colour-cast correction, then applies a gentle S-curve, soft highlight shoulder, protected shadow density, clean whites and an almost imperceptible matte floor. The analysis keys exposure from the median and upper midtones instead of applying one fixed brightness value. Dark venues receive a lift; bright, complex scenes receive a restrained reduction; flat pale scenes are specifically protected from being made unnecessarily dark.
 
-Definition is luminance-only: light shadow noise reduction, restrained clarity, micro-contrast and two tiny sharpening stages around one deterministic 2.5% fine monochrome grain pass. No face detection or reconstruction, skin smoothing, background isolation or blur, relighting, bloom, glow, flare or halos. The original camera capture is never overwritten; the finish exists only inside the transient cover canvas.
+White balance listens primarily to genuinely low-chroma surfaces. A strongly yellow or blue room may contribute a deliberately quiet 25% fallback vote only when reliable neutral evidence is absent. Ambiguous equal-gap orange — which could be tungsten light, complexion or brown fabric — gets a separate 10% fallback. Both room votes fade continuously to zero as neutral support reaches 1% of analysed samples, so a coloured wall cannot rotate a valid grey surface. Correction is bounded to ±6.5% per channel and continuously reduced on coloured pixels; protection rises again for highly saturated clothing. Warm-pigment protection is also a continuous confidence rather than an on/off colour class, so adjacent skin or wall pixels cannot split into different colour treatments. There is no separate selective wall/clothing recolouring pass. Colour gets +8 vibrance and −6% global saturation; deep-shadow chroma remains at least 86% before that global colour shaping. Template character remains tonal, so clothing hue is not deliberately changed between styles.
 
-It runs on the photo rectangle only, before scrims are measured and before typography, rules and the barcode are drawn. Template tone and the house finish remain floating-point until one final clamp, so white clothing and bright venue detail are not thrown away between stages. Each output channel stays inside a print-safe 2.5–253 range.
+Definition is luminance-only: very light shadow noise reduction, two restrained local-contrast scales, micro-contrast and two edge-masked detail stages around one deterministic 2.5% fine monochrome grain pass. A separate sub-one-code monochrome paper tooth is visible only in close comparison. Noise reduction and micro-contrast occupy different frequency bands, so real skin texture is retained rather than smoothed away and replaced with grain. Broad local contrast is limited to five output code values. A Sobel edge-flow guard limits coherent contours to two additional code values while allowing four only at non-edge texture extrema, preventing HDR outlines while making eyes, hair and fabric visibly clearer.
+
+The signature vignette is part of this single house finish: the central 70% is untouched, side-centres receive only about one quarter of the already-low fall-off, and 7.5–9.5% is reached only at the extreme corners. The ellipse is heavily feathered and protects dark tones. It does not create a brighter subject zone or paint light onto the person. No face detection or reconstruction, skin smoothing, background isolation or blur, relighting, bloom, glow or flare is used. The original camera capture is never overwritten; the finish exists only inside the transient cover canvas.
+
+It runs on the photo rectangle only, before the existing cover scrims, typography, rules and barcode are drawn. Template tone stays in the floating-point recovery pass through tone/colour staging, so white clothing and bright venue detail are not clipped before the shoulder can recover them. Luminance detail then remains twelve-bit until the final detail write. Each output channel stays inside a print-safe 2.5–253 range.
+
+### Exact editorial finish parameters
+
+| Stage | Implemented values |
+|---|---|
+| Analysis | Up to 50,000 regular samples; scene key `max(median, p75 − 0.17)`; tonal span `median − p10` |
+| Exposure | Target midtone `0.45`; adaptation `0.24`; hard range `−0.20…+0.20 EV`; negative correction on low-span scenes reduced to `30–100%` |
+| Adaptive density | Gamma `1.00…1.20`, gated by median `0.20…0.38` and span `0.12…0.28`; shadow gamma `1.00…1.25` below pivot `0.22`; identical tonal curve at every image position — no radial subject brightening |
+| White balance | Deadband `0.035`; full-cast point `0.10`; strength `0.95`; channel-gain ceiling `0.935…1.065`; yellow/blue tail authority `25%`; ambiguous warm/orange tail authority `10%`; both fade to zero over core support `0.002…0.010` of analysed samples; near-neutral chroma roll-off `0.025…0.10`; directional-tail chroma enters `0.06…0.14` and exits `0.35…0.50`; yellow/blue direction slopes `1.08 / 0.75` |
+| Continuous colour protection | Coloured-pixel gate `0.055…0.18`; generic protection `0.40`, rising to `0.92` over chroma `0.18…0.45`; warm R/G/B protection `0.92 / 0.28 / 0.25`; warm ordering margins `−0.03…+0.03` and pigment margin `−0.06…+0.06` at R−G : G−B slope `0.85`; no cast-aligned selective desaturation |
+| Tone curve | S-curve `0.065`; deep-shadow lift `0.006`; highlight shoulder `0.035` from `0.56`, peaking at `0.80` and rolling out by `0.985`; black density `0.018`; white clean-up `0.022`; matte floor `0.0035` |
+| Colour | Density-following chroma floor `0.30` and cap `1.04`; saturation `0.94`; vibrance `0.08`; deep-shadow chroma floor `0.86`; no skin/clothing-specific chroma boost |
+| Noise/detail | Luminance NR `0.010…0.022`; clarity `0.22`; broad structure `0.15`; micro-contrast `0.10`; pre-sharpen `2.00`; final sharpen `0.80`; texture gate `0.004…0.018`; edge gate `0.010…0.032`; strong-edge suppression `0.95` |
+| Detail guards | Broad move cap `±5/255`; broad extrema radius `8 px`; Sobel strength gate `0.008…0.030` and edge-flow gate `0.35…0.55`; local 3 × 3 allowance `2/255` on coherent edges and up to `4/255` on irregular texture; smooth-plane protection `0.35` clarity / `0.65` structure |
+| Texture | Seeded monochrome grain `0.025` with range `0.68`; seeded paper tooth `0.0015`; both modulated gently by luminance |
+| Vignette | Scene-adaptive corner strength `0.075…0.095`; elliptical squared-radius feather `0.25…1.00`; centre at `(0.50, 0.50)`; side-centre mask `0.259`; shadow weighting `0.52…1.00` |
+| Existing template tone | Editorial `contrast 1.04 / brightness 1.01`; Noir `contrast 1.07 / brightness 0.985`; Keepsake `contrast 1.05 / brightness 0.99`; Press `contrast 1.04`; folded into the float pass without a separate clamp |
+| Output | High-quality cover resize; monotonic 4096-step tone LUT; gamut-safe chroma reconstruction; final range `2.5/255…253/255` |
 
 The finish is automatic and is the **only** grade a cover photo gets beyond its template's own. The guest's filter choice is deliberately switched off for magazine — a cover has one house look, so every cover from the booth matches whatever the guest was playing with on their strip. Strips keep all five filters and are unaffected by the finish.
 
 Cover copy lives in one set of slots shared by all four styles (`covers.js`). Every slot is editable in Admin; **leaving a slot blank generates it from the event title** — masthead, age in words, issue lines, script line and barcode all follow "Rae's 26th Birthday" / "Sam's 30th" / "Aisha & Tom's Wedding" without any admin work.
 
-Legibility is measured, not assumed: the renderer samples the photo behind each block of type and deepens the scrim where the photo is bright, so white type never washes out on a pale wall.
+Legibility is measured, not assumed: the renderer samples the finished photo beneath each cover zone and adjusts the existing scrim where required, so typography remains readable over varied captures.
 
 ## Grading
 Every colour adjustment in the booth — the five strip filters, each cover
@@ -66,9 +88,10 @@ saturate, grayscale and sepia are each affine in sRGB, so each compiles to a
 3x3 matrix and an offset. Strip filters are applied **in sequence**, including
 CSS's between-step clamp, so they remain within 2/255 of `ctx.filter` on
 browsers that support it. Magazine template tone instead folds into the
-adaptive finish as one floating-point transform and clamps once at output;
-otherwise highlight recovery would be asked to recover pixels already
-discarded by the template.
+adaptive tone/colour pass as one floating-point transform before its staging
+write; otherwise highlight recovery would be asked to recover pixels already
+discarded by the template. The later luminance-detail pass keeps twelve-bit
+working luma until its final output write.
 
 `grayscale(g)` is exactly `saturate(1-g)`, so one matrix serves both.
 
@@ -253,7 +276,7 @@ B. Local Event Gallery
 - Layout is measured from the canvas — masthead, columns and cover line re-flow rather than collide when copy is long.
 - Template tone and the adaptive **editorial finish** now share one float pipeline, preserving highlight headroom until final output.
 - Grain is consolidated into one deterministic 2.5% monochrome pass; the old second 4–6% template grain is gone.
-- Noir retains original clothing hues; its mood now comes from tonal density, typography, vignette and adaptive scrims.
+- Noir retains original clothing hues; its mood comes from tonal density, typography and its existing adaptive scrims, while the canonical finish supplies the same soft edge fall-off as every other cover.
 - Cover copy auto-generates from the event title; old Birthday/Fashion copy is migrated on load where it was customised.
 - Strips, capture, gallery, sharing and guest flow are unchanged.
 
@@ -286,7 +309,7 @@ Measured on this build: 105 frames at 1080 × 1408 encode in ~1.4s to a ~640KB
 MP4, with the animated preview running throughout.
 
 ## Service worker
-Cache `v8` carries the editorial-finish update. The `v7` worker remains the
+Cache `v10` carries the locked editorial-finish update. The `v7` worker remains the
 one-time bridge away from every shipped cache-first worker: when it finds one
 of those legacy booth caches it deletes only this app's old caches, takes
 control, and reloads the open booth page once. Settings and the saved gallery

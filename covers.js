@@ -181,6 +181,9 @@ function drawPhotoCover(ctx,img,x,y,w,h,anchorY){
   const iw=img.width||img.videoWidth||1,ih=img.height||img.videoHeight||1;
   const scale=Math.max(w/iw,h/ih);
   const sw=w/scale,sh=h/scale;
+  /* Preserve the camera's available detail when it is resized to cover trim. */
+  ctx.imageSmoothingEnabled=true;
+  ctx.imageSmoothingQuality="high";
   ctx.drawImage(img,(iw-sw)/2,(ih-sh)*(anchorY===undefined?0.4:anchorY),sw,sh,x,y,w,h);
 }
 let sampler=null;
@@ -230,12 +233,6 @@ function bandScrim(L,edge,depth,alpha){
   else if(edge==="left")ctx.fillRect(0,0,depth,H);
   else ctx.fillRect(W-depth,0,depth,H);
   ctx.restore();
-}
-function vignette(ctx,W,H,a){
-  const g=ctx.createRadialGradient(W/2,H*0.44,Math.min(W,H)*0.3,W/2,H*0.5,Math.max(W,H)*0.76);
-  g.addColorStop(0,"rgba(0,0,0,0)");
-  g.addColorStop(1,`rgba(0,0,0,${a})`);
-  ctx.save();ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.restore();
 }
 /* A feathered pool of shade behind one block of type. Reads as lighting
    falloff rather than a box, and rescues display type that lands on a
@@ -346,24 +343,34 @@ function applyGrade(ctx,x,y,w,h,spec){
 /* ---------- editorial finish ---------- */
 /* The magazine finish is an adaptive, print-minded pixel pass. It never
    detects or reconstructs a face, isolates a background, changes geometry,
-   paints light, or touches the typography. The only spatial operations are
-   tiny luminance-only detail passes, so skin, hair, fabric and the original
-   scene remain photographic rather than becoming generated or airbrushed.
+   paints light, or touches the typography. Spatial work is limited to
+   luminance-only detail and one broad edge fall-off, so skin, hair, fabric and
+   the original scene remain photographic rather than generated or airbrushed.
 
-   Template colour is folded into the same floating-point pass and clamped
-   once at the very end. That matters in white clothing and bright venues:
-   the old sequence clipped a template grade before highlight recovery had a
-   chance to see it. */
+   Template colour is folded into the floating-point tone pass before its first
+   staging write. That matters in white clothing and bright venues: the old
+   sequence clipped a template grade before highlight recovery could see it.
+   Luminance detail then works at twelve-bit precision before the final write. */
 
 const EDITORIAL_FINISH={
-  targetMid:0.46,exposureAdapt:0.18,minEV:-0.10,maxEV:0.12,
-  wbDeadband:0.035,wbFullCast:0.14,wbStrength:0.60,wbMin:0.94,wbMax:1.06,
-  sCurve:0.052,shadowLift:0.007,highlightShoulder:0.018,
-  blackDensity:0.005,whiteClean:0.008,matte:0.004,
-  saturation:0.96,vibrance:0.07,
-  noiseLight:0.06,noiseShadow:0.12,clarity:0.11,
-  microContrast:0.06,preSharpen:0.10,finalSharpen:0.05,
-  grainOpacity:0.025,grainRange:0.35,
+  targetMid:0.45,exposureAdapt:0.24,minEV:-0.20,maxEV:0.20,upperMidOffset:0.17,
+  densityGammaMax:1.20,densityMedianLow:0.20,densityMedianHigh:0.38,
+  wbDeadband:0.035,wbFullCast:0.10,wbStrength:0.95,wbMin:0.935,wbMax:1.065,
+  sCurve:0.065,shadowLift:0.006,shadowGammaMax:1.25,shadowPivot:0.22,highlightShoulder:0.035,
+  highlightStart:0.56,highlightPeak:0.80,highlightEnd:0.985,
+  blackDensity:0.018,whiteClean:0.022,matte:0.0035,
+  saturation:0.94,vibrance:0.08,shadowChroma:0.86,
+  densityChromaFloor:0.30,
+  wbTailAuthority:0.25,wbWarmTailAuthority:0.10,
+  wbCoreSupportStart:0.002,wbCoreSupportFull:0.010,
+  wbColourProtect:0.40,wbSaturatedProtect:0.92,
+  wbWarmRedProtect:0.92,wbWarmGreenProtect:0.28,wbWarmBlueProtect:0.25,
+  noiseLight:0.010,noiseShadow:0.022,clarity:0.22,structureContrast:0.15,
+  microContrast:0.10,preSharpen:2.00,finalSharpen:0.80,
+  clarityPlaneProtect:0.35,structurePlaneProtect:0.65,
+  broadDeltaCap:5/255,broadGuardRadius:8,
+  grainOpacity:0.025,grainRange:0.68,paperTexture:0.0015,
+  vignetteMin:0.075,vignetteMax:0.095,vignetteInner:0.25,vignetteOuter:1.00,
   floor:2.5/255,ceiling:253/255
 };
 function clamp01(v){return v<0?0:(v>1?1:v);}
@@ -372,10 +379,22 @@ function smoothstep(a,b,v){
   const t=(v-a)/(b-a);return t*t*(3-2*t);
 }
 
+/* Warm-pigment protection is a continuous confidence, never a colour-class
+   switch. That matters on skin and smooth painted walls: neighbouring pixels
+   separated by one camera code must not take visibly different paths. Signed,
+   chroma-normalised margins also make the test behave consistently from
+   shadows to highlights. */
+function warmPigmentWeight(r,g,b){
+  const span=Math.max(1,Math.max(r,g,b)-Math.min(r,g,b));
+  const rg=(r-g)/span,gb=(g-b)/span;
+  const ordered=smoothstep(-0.03,0.03,rg)*smoothstep(-0.03,0.03,gb);
+  return ordered*smoothstep(-0.06,0.06,rg-0.85*gb);
+}
+
 /* `applyGrade` above keeps CSS's between-step clamping because strips depend
    on that exact behaviour. Covers use the same recipes as one affine float
    transform so the editorial shoulder can retain the grade's highlight
-   headroom until the final output clamp. */
+   headroom through tone/colour staging. */
 const floatGradeCache={};
 function compileFloatGrade(spec){
   const key=String(spec||"");
@@ -411,19 +430,14 @@ function histogramValue(hist,total,q){
    exposure/WB decision and keep four chooser thumbnails responsive. White
    balance listens mainly to low-chroma midtones and has a deadband, so a red
    dress or blue wall cannot make the whole photograph swing the other way. */
-function analyseEditorial(d,grade){
+function analyseEditorial(d){
   const pixels=d.length/4,stride=Math.max(1,Math.floor(pixels/50000));
   const hist=new Uint32Array(ANALYSIS_BINS);
-  let sampled=0,nWeight=0,nr=0,ng=0,nb=0;
-  const gm=grade&&grade.m,go=grade&&grade.o;
+  let sampled=0,coreWeight=0,coreR=0,coreG=0,coreB=0;
+  let tailWeight=0,tailR=0,tailG=0,tailB=0;
+  let warmTailWeight=0,warmTailR=0,warmTailG=0,warmTailB=0;
   for(let p=0;p<pixels;p+=stride){
     const i=p*4;let r=d[i],g=d[i+1],b=d[i+2];
-    if(gm){
-      const rr=gm[0]*r+gm[1]*g+gm[2]*b+go[0];
-      const gg=gm[3]*r+gm[4]*g+gm[5]*b+go[1];
-      const bb=gm[6]*r+gm[7]*g+gm[8]*b+go[2];
-      r=rr;g=gg;b=bb;
-    }
     const y=(LUMA[0]*r+LUMA[1]*g+LUMA[2]*b)/255;
     const bin=Math.max(0,Math.min(ANALYSIS_BINS-1,Math.round(y/ANALYSIS_MAX*(ANALYSIS_BINS-1))));
     hist[bin]++;sampled++;
@@ -433,44 +447,114 @@ function analyseEditorial(d,grade){
     if(cy>31&&cy<237){
       const hi=Math.max(cr,cg,cb),lo=Math.min(cr,cg,cb);
       const chroma=(hi-lo)/Math.max(20,hi);
-      /* A strong tungsten or blue cast can push an actually neutral surface
-         past 0.28 chroma. The faint extended window only accepts the channel
-         order of those casts; ordinary warm skin (whose red-green gap is
-         larger than its green-blue gap) cannot masquerade as a grey card. */
-      const blueCast=cb>cg&&cg>cr;
-      const yellowCast=cr>cg&&cg>cb&&(cg-cb)>(cr-cg)*0.8;
-      const skinSlope=cr>cg&&cg>cb&&(cr-cg)>(cg-cb)*1.2;
-      const core=chroma<0.28&&!skinSlope,extended=chroma<0.50&&(blueCast||yellowCast);
-      if(core||extended){
-        const chromaWeight=core?1-smoothstep(0.04,0.28,chroma):
-          0.18*(1-smoothstep(0.28,0.50,chroma));
-        const weight=chromaWeight*smoothstep(31,72,cy)*(1-smoothstep(205,237,cy));
-        nWeight+=weight;nr+=cr*weight;ng+=cg*weight;nb+=cb*weight;
+      /* White balance is inferred from the untouched capture, never from a
+         template grade. Near-neutrals carry full weight. A much quieter
+         illuminant tail lets a large tungsten/blue room vote without treating
+         ordinary warm skin or saturated clothing as a grey card. */
+      const tonalWeight=smoothstep(31,72,cy)*(1-smoothstep(205,237,cy));
+      const warmWeight=warmPigmentWeight(cr,cg,cb);
+      const skinExclusion=smoothstep(0.045,0.10,chroma)*warmWeight;
+      const neutralWeight=(1-smoothstep(0.025,0.10,chroma))*
+        (1-skinExclusion)*tonalWeight;
+      if(neutralWeight>0){
+        const weight=neutralWeight;
+        coreWeight+=weight;coreR+=cr*weight;coreG+=cg*weight;coreB+=cb*weight;
+      }
+      /* A continuous, low-authority directional tail helps in rooms where no
+         true neutral survives. It fades out before saturated clothing; warm
+         pigment is excluded from this normal vote and handled by the quieter
+         fallback below instead of crossing a hard classifier boundary. */
+      const span=Math.max(1,hi-lo),rg=(cr-cg)/span,gb=(cg-cb)/span;
+      const br=(cb-cg)/span,gr=(cg-cr)/span;
+      const warmOrder=smoothstep(-0.03,0.03,rg)*smoothstep(-0.03,0.03,gb);
+      const yellowDirection=warmOrder*smoothstep(-0.06,0.06,gb-1.08*rg);
+      const blueOrder=smoothstep(-0.03,0.03,br)*smoothstep(-0.03,0.03,gr);
+      const blueDirection=blueOrder*smoothstep(-0.06,0.06,gr-0.75*br);
+      const tailDirection=Math.max(yellowDirection*(1-warmWeight),blueDirection);
+      const tailGate=smoothstep(0.06,0.14,chroma)*
+        (1-smoothstep(0.35,0.50,chroma));
+      const directionalWeight=tailGate*tailDirection*tonalWeight;
+      if(directionalWeight>0){
+        const weight=directionalWeight;
+        tailWeight+=weight;tailR+=cr*weight;tailG+=cg*weight;tailB+=cb*weight;
+      }
+      /* Equal-gap orange is ambiguous: it can be tungsten light, skin or brown
+         fabric. Keep it out of the normal 25% room vote, but retain a separate
+         10% fallback so an all-orange capture receives a real, gentle WB move.
+         Per-pixel colour protection still guards complexion and clothing. */
+      const warmDirectionalWeight=tailGate*warmWeight*tonalWeight;
+      if(warmDirectionalWeight>0){
+        const weight=warmDirectionalWeight;
+        warmTailWeight+=weight;warmTailR+=cr*weight;
+        warmTailG+=cg*weight;warmTailB+=cb*weight;
       }
     }
   }
+  const p10=histogramValue(hist,sampled,0.10);
   const median=Math.max(0.025,histogramValue(hist,sampled,0.5));
-  const ev=Math.max(EDITORIAL_FINISH.minEV,Math.min(EDITORIAL_FINISH.maxEV,
-    EDITORIAL_FINISH.exposureAdapt*Math.log2(EDITORIAL_FINISH.targetMid/median)));
-  const sceneWhite=Math.max(1,histogramValue(hist,sampled,0.99));
+  const p75=histogramValue(hist,sampled,0.75);
+  /* Bright walls/windows should be able to pull a hazy scene down even when
+     dark hair or clothing occupies the centre. Dark venues still key from
+     their median and receive a lift rather than a blanket density increase. */
+  const sceneMid=Math.max(median,p75-EDITORIAL_FINISH.upperMidOffset);
+  const tonalSpan=median-p10;
+  let requestedEV=EDITORIAL_FINISH.exposureAdapt*Math.log2(EDITORIAL_FINISH.targetMid/sceneMid);
+  /* A uniformly pale/high-key frame is not evidence that every captured
+     midtone needs a strong reduction. Complex bright scenes keep full
+     correction; low-span scenes receive only a restrained negative move. */
+  if(requestedEV<0)requestedEV*=0.30+0.70*smoothstep(0.10,0.28,tonalSpan);
+  const ev=Math.max(EDITORIAL_FINISH.minEV,Math.min(EDITORIAL_FINISH.maxEV,requestedEV));
+  const densityGate=smoothstep(EDITORIAL_FINISH.densityMedianLow,
+    EDITORIAL_FINISH.densityMedianHigh,median)*smoothstep(0.12,0.28,tonalSpan);
+  const densityGamma=1+(EDITORIAL_FINISH.densityGammaMax-1)*densityGate;
+  const shadowGamma=1+(EDITORIAL_FINISH.shadowGammaMax-1)*densityGate;
+  const vignetteStrength=EDITORIAL_FINISH.vignetteMin+
+    (EDITORIAL_FINISH.vignetteMax-EDITORIAL_FINISH.vignetteMin)*smoothstep(0.28,0.62,sceneMid);
   let gainR=1,gainG=1,gainB=1;
-  if(nWeight>Math.max(24,sampled*0.0025)){
-    const mr=nr/nWeight,mg=ng/nWeight,mb=nb/nWeight;
+  const rawWbWeight=coreWeight+tailWeight+warmTailWeight;
+  if(rawWbWeight>Math.max(32,sampled*0.004)){
+    /* As soon as reliable near-neutral evidence exists, it must define the
+       illuminant: a large blue wall beside a grey shirt is not allowed to tint
+       the shirt orange. Directional room votes fade continuously from their
+       25% yellow/blue or 10% warm fallback authority to zero over 0.2–1.0%
+       supported samples. */
+    const coreSupport=smoothstep(
+      Math.max(32,sampled*EDITORIAL_FINISH.wbCoreSupportStart),
+      Math.max(128,sampled*EDITORIAL_FINISH.wbCoreSupportFull),coreWeight);
+    const fallbackFade=1-coreSupport;
+    const tailMix=EDITORIAL_FINISH.wbTailAuthority*fallbackFade;
+    const warmTailMix=EDITORIAL_FINISH.wbWarmTailAuthority*fallbackFade;
+    const wbWeight=coreWeight+tailMix*tailWeight+warmTailMix*warmTailWeight;
+    const mr=(coreR+tailMix*tailR+warmTailMix*warmTailR)/wbWeight;
+    const mg=(coreG+tailMix*tailG+warmTailMix*warmTailG)/wbWeight;
+    const mb=(coreB+tailMix*tailB+warmTailMix*warmTailB)/wbWeight;
     const target=(mr+mg+mb)/3;
     const cast=(Math.max(mr,mg,mb)-Math.min(mr,mg,mb))/Math.max(1,target);
-    const ramp=smoothstep(EDITORIAL_FINISH.wbDeadband,EDITORIAL_FINISH.wbFullCast,cast)*EDITORIAL_FINISH.wbStrength;
+    /* Strongly coloured rooms are ambiguous: a blue wall is not a grey card.
+       Tail-only evidence therefore receives limited authority; genuine
+       near-neutral evidence unlocks the normal correction. */
+    const evidenceWeight=coreWeight+fallbackFade*(tailWeight+warmTailWeight);
+    const evidenceTrust=wbWeight/Math.max(1,evidenceWeight);
+    const ramp=smoothstep(EDITORIAL_FINISH.wbDeadband,EDITORIAL_FINISH.wbFullCast,cast)*
+      EDITORIAL_FINISH.wbStrength*evidenceTrust;
     if(ramp>0){
-      gainR=1+(target/Math.max(1,mr)-1)*ramp;
-      gainG=1+(target/Math.max(1,mg)-1)*ramp;
-      gainB=1+(target/Math.max(1,mb)-1)*ramp;
-      gainR=Math.max(EDITORIAL_FINISH.wbMin,Math.min(EDITORIAL_FINISH.wbMax,gainR));
-      gainG=Math.max(EDITORIAL_FINISH.wbMin,Math.min(EDITORIAL_FINISH.wbMax,gainG));
-      gainB=Math.max(EDITORIAL_FINISH.wbMin,Math.min(EDITORIAL_FINISH.wbMax,gainB));
+      gainR=Math.max(0.85,Math.min(1.15,1+(target/Math.max(1,mr)-1)*ramp));
+      gainG=Math.max(0.85,Math.min(1.15,1+(target/Math.max(1,mg)-1)*ramp));
+      gainB=Math.max(0.85,Math.min(1.15,1+(target/Math.max(1,mb)-1)*ramp));
       const preserve=LUMA[0]*gainR+LUMA[1]*gainG+LUMA[2]*gainB;
       gainR/=preserve;gainG/=preserve;gainB/=preserve;
+      /* Luminance normalisation can otherwise push one channel beyond the
+         nominal clamp. Scale all deviations together so hue direction and
+         neutral luminance are both preserved within the hard gain ceiling. */
+      const extent=Math.max(Math.abs(gainR-1),Math.abs(gainG-1),Math.abs(gainB-1));
+      const limit=Math.min(1-EDITORIAL_FINISH.wbMin,EDITORIAL_FINISH.wbMax-1);
+      if(extent>limit){
+        const scale=limit/extent;
+        gainR=1+(gainR-1)*scale;gainG=1+(gainG-1)*scale;gainB=1+(gainB-1)*scale;
+      }
     }
   }
-  return {ev,sceneWhite,gainR,gainG,gainB};
+  return {ev,median,p10,p75,sceneMid,densityGamma,shadowGamma,vignetteStrength,gainR,gainG,gainB};
 }
 
 /* A per-render LUT keeps the expensive curve math out of the full pixel
@@ -482,25 +566,37 @@ const TONE_STEPS=4096;
 function editorialToneLut(analysis){
   const lut=new Float32Array(TONE_STEPS),f=EDITORIAL_FINISH;
   const e=Math.pow(2,analysis.ev)-1;
-  const effectiveWhite=Math.max(1,analysis.sceneWhite*(1+Math.min(0,e)));
   for(let i=0;i<TONE_STEPS;i++){
     let x=i/(TONE_STEPS-1)*ANALYSIS_MAX;
     const unit=clamp01(x);
     if(e>=0)x+=e*x*(1-smoothstep(0.72,1,unit));
     else x+=e*x*smoothstep(0.02,0.25,unit)*
-      (1-0.9*smoothstep(0.72,0.98,unit));
-    if(x>0.70&&effectiveWhite>1.001){
-      x=0.70+(x-0.70)*(0.30/Math.max(0.30,effectiveWhite-0.70));
-    }
+      (1-0.92*smoothstep(0.72,0.98,unit));
+    /* Adaptive density removes the phone-camera veil from healthy scenes,
+       but fades to neutral in genuinely dark captures. */
+    x=Math.pow(Math.max(0,x),analysis.densityGamma);
+    /* A second, pivoted gamma gives healthy captures clean ink-black depth.
+       It is continuous at the pivot, does not move ordinary midtones, and
+       fades with the same scene-confidence gate in dark venues. */
+    if(x<f.shadowPivot)x=f.shadowPivot*Math.pow(x/f.shadowPivot,analysis.shadowGamma);
+    /* A soft shoulder only engages in the clean-white range. Unlike the old
+       linear normalisation, ordinary white stays crisp while values pushed
+       over range by the camera/template retain distinct highlight detail. */
+    if(x>0.94)x=0.94+0.06*(1-Math.exp(-(x-0.94)/0.055));
     x=clamp01(x);
     x+=f.shadowLift*(1-smoothstep(0.02,0.20,x));
     x+=f.sCurve*(x-0.5)*4*x*(1-x);
-    x-=f.highlightShoulder*smoothstep(0.70,1,x);
+    const shoulderBand=smoothstep(f.highlightStart,f.highlightPeak,x)*
+      (1-0.88*smoothstep(f.highlightPeak,f.highlightEnd,x));
+    x-=f.highlightShoulder*shoulderBand;
     x-=f.blackDensity*smoothstep(0.04,0.12,x)*(1-smoothstep(0.24,0.42,x));
     x+=f.whiteClean*smoothstep(0.78,0.96,x);
     x=f.matte+(1-f.matte)*x;
     lut[i]=Math.max(f.floor,Math.min(f.ceiling,x));
   }
+  /* Tiny interactions between the shoulder and white clean-up must never
+     invert two neighbouring input tones. */
+  for(let i=1;i<TONE_STEPS;i++)if(lut[i]<lut[i-1])lut[i]=lut[i-1];
   return lut;
 }
 
@@ -528,8 +624,8 @@ function boxBlurMap(src,w,h,radius){
   }
   return out;
 }
-function localLumaMap(luma,w,h){
-  const step=Math.max(2,Math.min(4,Math.round(Math.min(w,h)/300)));
+function localLumaMap(luma,w,h,requestedStep,radius){
+  const step=requestedStep||Math.max(3,Math.min(5,Math.round(Math.min(w,h)/240)));
   const mw=Math.ceil(w/step),mh=Math.ceil(h/step),small=new Float32Array(mw*mh);
   for(let by=0;by<mh;by++)for(let bx=0;bx<mw;bx++){
     let sum=0,n=0;
@@ -537,7 +633,16 @@ function localLumaMap(luma,w,h){
     for(let yy=y0;yy<y1;yy++)for(let xx=x0;xx<x1;xx++){sum+=luma[yy*w+xx];n++;}
     small[by*mw+bx]=sum/Math.max(1,n);
   }
-  return {data:boxBlurMap(small,mw,mh,2),width:mw,step};
+  return {data:boxBlurMap(small,mw,mh,radius||2),width:mw,height:mh,step};
+}
+function sampleLocalLuma(map,x,y){
+  const gx=Math.max(0,Math.min(map.width-1,(x+0.5)/map.step-0.5));
+  const gy=Math.max(0,Math.min(map.height-1,(y+0.5)/map.step-0.5));
+  const x0=Math.floor(gx),y0=Math.floor(gy),x1=Math.min(map.width-1,x0+1),y1=Math.min(map.height-1,y0+1);
+  const tx=gx-x0,ty=gy-y0;
+  const a=map.data[y0*map.width+x0]*(1-tx)+map.data[y0*map.width+x1]*tx;
+  const b=map.data[y1*map.width+x0]*(1-tx)+map.data[y1*map.width+x1]*tx;
+  return a*(1-ty)+b*ty;
 }
 
 /* Zero-mean triangular noise, seeded once and repeated on a 128px tile.
@@ -560,6 +665,39 @@ function editorialGrainTile(){
   editorialGrain=tile;return tile;
 }
 
+/* A second, much quieter monochrome layer gives smooth walls and fabric the
+   barely-there tooth of ink on coated stock. Periodic value noise keeps the
+   tile seamless; its amplitude stays below one output code value, so it can
+   never read as a paper overlay or alter colour. */
+const PAPER_SIZE=256,PAPER_GRID=16;
+let editorialPaper=null;
+function editorialPaperTile(){
+  if(editorialPaper)return editorialPaper;
+  const grid=new Float32Array(PAPER_GRID*PAPER_GRID);
+  const tile=new Float32Array(PAPER_SIZE*PAPER_SIZE);
+  let seed=0x9e3779b9,mean=0,max=0;
+  function random(){
+    seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;
+    return (seed>>>0)/4294967296-0.5;
+  }
+  for(let i=0;i<grid.length;i++)grid[i]=random();
+  const cell=PAPER_SIZE/PAPER_GRID;
+  for(let y=0;y<PAPER_SIZE;y++)for(let x=0;x<PAPER_SIZE;x++){
+    const gx=x/cell,gy=y/cell,x0=Math.floor(gx),y0=Math.floor(gy);
+    const x1=(x0+1)%PAPER_GRID,y1=(y0+1)%PAPER_GRID;
+    const tx=smoothstep(0,1,gx-x0),ty=smoothstep(0,1,gy-y0);
+    const a=grid[(y0%PAPER_GRID)*PAPER_GRID+x0]*(1-tx)+grid[(y0%PAPER_GRID)*PAPER_GRID+x1]*tx;
+    const b=grid[y1*PAPER_GRID+x0]*(1-tx)+grid[y1*PAPER_GRID+x1]*tx;
+    const v=a*(1-ty)+b*ty;
+    tile[y*PAPER_SIZE+x]=v;mean+=v;
+  }
+  mean/=tile.length;
+  for(let i=0;i<tile.length;i++){tile[i]-=mean;max=Math.max(max,Math.abs(tile[i]));}
+  for(let i=0;i<tile.length;i++)tile[i]/=max||1;
+  editorialPaper=tile;return tile;
+}
+
+const DETAIL_SCALE=4095;
 function editorialFinish(ctx,x,y,w,h,gradeSpec){
   const ix=Math.max(0,Math.ceil(x)),iy=Math.max(0,Math.ceil(y));
   const iw=Math.min(ctx.canvas.width,Math.floor(x+w))-ix;
@@ -567,38 +705,72 @@ function editorialFinish(ctx,x,y,w,h,gradeSpec){
   if(iw<=0||ih<=0)return;
   try{
     const image=ctx.getImageData(ix,iy,iw,ih),d=image.data;
-    const grade=compileFloatGrade(gradeSpec),analysis=analyseEditorial(d,grade);
-    const tone=editorialToneLut(analysis),luma=new Uint8Array(iw*ih),f=EDITORIAL_FINISH;
+    const grade=compileFloatGrade(gradeSpec),analysis=analyseEditorial(d);
+    const tone=editorialToneLut(analysis),luma=new Uint16Array(iw*ih),f=EDITORIAL_FINISH;
     const gm=grade&&grade.m,go=grade&&grade.o;
 
     /* Tone and colour. Chroma is always rebuilt around luminance, and any
        out-of-gamut colour is pulled back toward that luminance as one vector;
        channels are never clipped independently, so hue stays put. */
     for(let p=0,i=0;i<d.length;i+=4,p++){
-      let r=d[i],g=d[i+1],b=d[i+2];
+      /* Correct the capture before the template's tonal character. That keeps
+         one skin/clothing rendering across all four covers. */
+      const rawR=d[i],rawG=d[i+1],rawB=d[i+2];
+      const rawHi=Math.max(rawR,rawG,rawB),rawLo=Math.min(rawR,rawG,rawB);
+      const rawChroma=(rawHi-rawLo)/Math.max(20,rawHi);
+      const warmWeight=warmPigmentWeight(rawR,rawG,rawB);
+      /* Neutral surfaces receive the full scene correction. Coloured pixels
+         retain most of their captured hue, and warm skin-like pigments retain
+         still more, preventing a corrected room from turning skin ashy or
+         quietly recolouring saturated clothes. This is colour gating only;
+         it does not locate or alter a face. */
+      const colourGate=smoothstep(0.055,0.18,rawChroma);
+      const genericProtect=f.wbColourProtect+
+        (f.wbSaturatedProtect-f.wbColourProtect)*smoothstep(0.18,0.45,rawChroma);
+      const protectR=colourGate*(genericProtect+
+        (f.wbWarmRedProtect-genericProtect)*warmWeight);
+      const protectG=colourGate*(genericProtect+
+        (f.wbWarmGreenProtect-genericProtect)*warmWeight);
+      const protectB=colourGate*(genericProtect+
+        (f.wbWarmBlueProtect-genericProtect)*warmWeight);
+      const gainR=1+(analysis.gainR-1)*(1-protectR);
+      const gainG=1+(analysis.gainG-1)*(1-protectG);
+      const gainB=1+(analysis.gainB-1)*(1-protectB);
+      let r=rawR*gainR,g=rawG*gainG,b=rawB*gainB;
       if(gm){
         const rr=gm[0]*r+gm[1]*g+gm[2]*b+go[0];
         const gg=gm[3]*r+gm[4]*g+gm[5]*b+go[1];
         const bb=gm[6]*r+gm[7]*g+gm[8]*b+go[2];
         r=rr;g=gg;b=bb;
       }
-      r=r/255*analysis.gainR;g=g/255*analysis.gainG;b=b/255*analysis.gainB;
+      r/=255;g/=255;b/=255;
       const sourceY=LUMA[0]*r+LUMA[1]*g+LUMA[2]*b;
       const ti=Math.max(0,Math.min(TONE_STEPS-1,Math.round(sourceY/ANALYSIS_MAX*(TONE_STEPS-1))));
       const targetY=tone[ti];
       const hi=Math.max(r,g,b),lo=Math.min(r,g,b);
       const satMetric=clamp01((hi-lo)/Math.max(0.08,Math.abs(hi)));
-      const chromaScale=f.saturation*(1+f.vibrance*(1-satMetric));
+      /* Follow large luminance moves with chroma so density does not turn
+         skin or dark fabric burgundy. Vibrance then restores only the quiet
+         colours, while a final shadow taper cleans near-black colour noise. */
+      const toneChroma=Math.max(f.densityChromaFloor,
+        Math.min(1.04,targetY/Math.max(0.04,sourceY)));
+      const shadowChroma=f.shadowChroma+(1-f.shadowChroma)*smoothstep(0.035,0.16,targetY);
+      const chromaScale=f.saturation*(1+f.vibrance*(1-satMetric))*toneChroma*shadowChroma;
       let dr=(r-sourceY)*chromaScale,dg=(g-sourceY)*chromaScale,db=(b-sourceY)*chromaScale,k=1;
       if(dr>0)k=Math.min(k,(f.ceiling-targetY)/dr);else if(dr<0)k=Math.min(k,(f.floor-targetY)/dr);
       if(dg>0)k=Math.min(k,(f.ceiling-targetY)/dg);else if(dg<0)k=Math.min(k,(f.floor-targetY)/dg);
       if(db>0)k=Math.min(k,(f.ceiling-targetY)/db);else if(db<0)k=Math.min(k,(f.floor-targetY)/db);
       if(k<1){dr*=k;dg*=k;db*=k;}
       d[i]=(targetY+dr)*255;d[i+1]=(targetY+dg)*255;d[i+2]=(targetY+db)*255;
-      luma[p]=Math.round(targetY*255);
+      /* Twelve-bit working luma lets deliberately small detail moves survive
+         the tone/colour staging write and reach the final detail write. */
+      luma[p]=Math.round(targetY*DETAIL_SCALE);
     }
 
-    const broad=localLumaMap(luma,iw,ih),noise=editorialGrainTile();
+    const broad=localLumaMap(luma,iw,ih);
+    const structureStep=Math.max(8,Math.min(12,Math.round(Math.min(iw,ih)/90)));
+    const structure=localLumaMap(luma,iw,ih,structureStep,5);
+    const noise=editorialGrainTile(),paper=editorialPaperTile();
     for(let py=0,p=0;py<ih;py++)for(let px=0;px<iw;px++,p++){
       const i=p*4,c=luma[p],xl=px?px-1:px,xr=px+1<iw?px+1:px;
       const yu=py?py-1:py,yd=py+1<ih?py+1:py;
@@ -606,28 +778,95 @@ function editorialFinish(ctx,x,y,w,h,gradeSpec){
       const nw=luma[yu*iw+xl],ne=luma[yu*iw+xr],sw=luma[yd*iw+xl],se=luma[yd*iw+xr];
       const gaussian=(4*c+2*(n+s+e+ww)+nw+ne+sw+se)/16;
       const cross=(n+s+e+ww)/4;
-      const y0=c/255,gaussDetail=(c-gaussian)/255,crossDetail=(c-cross)/255;
-      const tonal=smoothstep(0.035,0.18,y0)*(1-0.7*smoothstep(0.82,0.985,y0));
+      const y0=c/DETAIL_SCALE,gaussDetail=(c-gaussian)/DETAIL_SCALE,crossDetail=(c-cross)/DETAIL_SCALE;
+      const tonal=smoothstep(0.02,0.14,y0)*(1-0.45*smoothstep(0.82,0.985,y0));
       const nrStrength=f.noiseLight+(f.noiseShadow-f.noiseLight)*(1-smoothstep(0.22,0.62,y0));
-      const nrDelta=-gaussDetail*nrStrength*(1-smoothstep(0.018,0.075,Math.abs(gaussDetail)));
-      const local=(broad.data[Math.floor(py/broad.step)*broad.width+Math.floor(px/broad.step)]-c)/-255;
-      const clarity=f.clarity*Math.max(-0.06,Math.min(0.06,local))*
-        (1-smoothstep(0.06,0.14,Math.abs(local)))*tonal;
-      const micro=f.microContrast*Math.max(-0.025,Math.min(0.025,gaussDetail))*tonal;
-      const edgeGate=smoothstep(0.006,0.028,Math.abs(crossDetail));
-      const pre=f.preSharpen*Math.max(-0.035,Math.min(0.035,crossDetail))*edgeGate*tonal;
-      let cleanY=y0+nrDelta+clarity+micro+pre;
-      const localMin=Math.min(c,n,s,e,ww,nw,ne,sw,se)/255-1.5/255;
-      const localMax=Math.max(c,n,s,e,ww,nw,ne,sw,se)/255+1.5/255;
-      cleanY=Math.max(localMin,Math.min(localMax,cleanY));
+      /* NR owns only the sub-texture noise band. Micro-contrast starts above
+         it, so pores, hair and fabric are no longer smoothed and then added
+         back by an equal amount. */
+      const nrGate=1-smoothstep(0.004,0.018,Math.abs(gaussDetail));
+      const textureGate=smoothstep(0.004,0.018,Math.abs(gaussDetail));
+      const nrDelta=-gaussDetail*nrStrength*nrGate;
+      const broadEdgeProtect=1-0.94*smoothstep(0.025,0.09,Math.abs(crossDetail));
+      const local=(c-sampleLocalLuma(broad,px,py))/DETAIL_SCALE;
+      let clarity=f.clarity*Math.max(-0.075,Math.min(0.075,local))*
+        (1-smoothstep(0.075,0.16,Math.abs(local)))*
+        broadEdgeProtect*tonal;
+      const shape=(c-sampleLocalLuma(structure,px,py))/DETAIL_SCALE;
+      let structureDelta=f.structureContrast*Math.max(-0.12,Math.min(0.12,shape))*
+        (1-smoothstep(0.12,0.24,Math.abs(shape)))*
+        broadEdgeProtect*tonal;
+      /* Broad contrast must not turn a smooth cheek or other midtone plane
+         into a dark patch simply because it sits beside a bright wall. The
+         protection fades on genuine texture and edges, so hair, eyes and
+         fabric keep the full dimensional treatment and no texture is blurred. */
+      const planeProtect=smoothstep(0.07,0.18,y0)*(1-smoothstep(0.42,0.70,y0))*
+        (1-smoothstep(0.006,0.024,Math.abs(gaussDetail)))*
+        (1-smoothstep(0.020,0.070,Math.abs(crossDetail)));
+      if(clarity<0)clarity*=1-f.clarityPlaneProtect*planeProtect;
+      if(structureDelta<0)structureDelta*=1-f.structurePlaneProtect*planeProtect;
+      const hardEdgeProtect=1-0.95*smoothstep(0.04,0.12,Math.abs(crossDetail));
+      const micro=f.microContrast*Math.max(-0.03,Math.min(0.03,gaussDetail))*
+        textureGate*hardEdgeProtect*tonal;
+      const edgeGate=smoothstep(0.010,0.032,Math.abs(crossDetail));
+      const pre=f.preSharpen*Math.max(-0.04,Math.min(0.04,crossDetail))*
+        edgeGate*hardEdgeProtect*tonal;
+      /* Coherent edges keep a strict two-code guard, while non-edge texture
+         extrema may use up to four. This restores pores, hair and fabric
+         without drawing a visible light/dark outline around clean contours. */
+      const sobelX=((ne+2*e+se)-(nw+2*ww+sw))/(8*DETAIL_SCALE);
+      const sobelY=((sw+2*s+se)-(nw+2*n+ne))/(8*DETAIL_SCALE);
+      const sobelStrength=Math.hypot(sobelX,sobelY);
+      const edgeFlow=sobelStrength/
+        Math.max(1/DETAIL_SCALE,sobelStrength+Math.abs(crossDetail));
+      const straightEdge=smoothstep(0.008,0.030,sobelStrength)*
+        smoothstep(0.35,0.55,edgeFlow);
+      const localAllowance=(2+2*(1-straightEdge))/255;
+      const localMin=Math.min(c,n,s,e,ww,nw,ne,sw,se)/DETAIL_SCALE-localAllowance;
+      const localMax=Math.max(c,n,s,e,ww,nw,ne,sw,se)/DETAIL_SCALE+localAllowance;
+      /* Give wide tonal separation its own bounded lane. A 3x3 edge clamp is
+         correct for micro-detail, but applying it to a 30–100px clarity map
+         would erase the intended dimensional shaping on smooth skin, walls
+         and fabric. The broad term is separately edge-masked and capped at
+         five code values; the actual detail terms keep the tight local guard. */
+      const proposedBroadDelta=Math.max(-f.broadDeltaCap,
+        Math.min(f.broadDeltaCap,structureDelta+clarity));
+      const br=f.broadGuardRadius,bxl=Math.max(0,px-br),bxr=Math.min(iw-1,px+br);
+      const byu=Math.max(0,py-br),byd=Math.min(ih-1,py+br);
+      const farW=luma[py*iw+bxl]/DETAIL_SCALE,farE=luma[py*iw+bxr]/DETAIL_SCALE;
+      const farN=luma[byu*iw+px]/DETAIL_SCALE,farS=luma[byd*iw+px]/DETAIL_SCALE;
+      const farMin=Math.min(y0,farW,farE,farN,farS),farMax=Math.max(y0,farW,farE,farN,farS);
+      const broadDelta=Math.max(farMin,
+        Math.min(farMax,y0+proposedBroadDelta))-y0;
+      const detailY=Math.max(localMin,Math.min(localMax,y0+nrDelta+micro+pre));
+      const cleanY=detailY+broadDelta;
+      const vx=((px+0.5)/iw-0.5)/0.5;
+      const vy=((py+0.5)/ih-0.5)/0.5;
+      const radius2=0.5*(vx*vx+vy*vy);
+      /* One canonical, very wide edge fall-off. The central 70% is untouched;
+         side-centres receive only about a quarter of the already-low strength,
+         and 7.5–9.5% is reached only in the extreme corners. Deep shadows get
+         further protection so hair, clothing and dark skin retain separation. */
+      const vignetteMask=smoothstep(f.vignetteInner,f.vignetteOuter,radius2);
+      const shadowProtect=0.52+0.48*smoothstep(0.08,0.32,cleanY);
+      const vignettedY=cleanY*(1-analysis.vignetteStrength*vignetteMask*shadowProtect);
 
       const grain=noise[((py+iy)&(GRAIN_SIZE-1))*GRAIN_SIZE+((px+ix)&(GRAIN_SIZE-1))];
-      const grainWeight=0.55+0.45*4*clamp01(cleanY)*(1-clamp01(cleanY));
+      const grainWeight=0.55+0.45*4*clamp01(vignettedY)*(1-clamp01(vignettedY));
       const grainDelta=grain*f.grainOpacity*f.grainRange*grainWeight;
-      /* Added after grain, but based on the clean edge map: this restores
-         output definition without turning the grain or colour noise brittle. */
-      const finalSharp=f.finalSharpen*Math.max(-0.03,Math.min(0.03,crossDetail))*edgeGate*tonal;
-      const targetY=Math.max(f.floor,Math.min(f.ceiling,cleanY+grainDelta+finalSharp));
+      const paperValue=paper[((py+iy)&(PAPER_SIZE-1))*PAPER_SIZE+((px+ix)&(PAPER_SIZE-1))];
+      const paperWeight=0.35+0.65*4*clamp01(vignettedY)*(1-clamp01(vignettedY));
+      const paperDelta=paperValue*f.paperTexture*paperWeight;
+      /* Added after both texture layers, but based on the clean edge map:
+         restore output definition without sharpening grain or colour noise. */
+      const finalSharp=f.finalSharpen*Math.max(-0.10,Math.min(0.10,crossDetail))*
+        edgeGate*hardEdgeProtect*tonal;
+      const textureDelta=paperDelta+grainDelta;
+      const vignetteLoss=cleanY-vignettedY;
+      const guardedFinal=Math.max(localMin+broadDelta-vignetteLoss,
+        Math.min(localMax+broadDelta-vignetteLoss,vignettedY+finalSharp))-vignettedY;
+      const targetY=Math.max(f.floor,
+        Math.min(f.ceiling,vignettedY+textureDelta+guardedFinal));
 
       const r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255;
       const baseY=LUMA[0]*r+LUMA[1]*g+LUMA[2]*b;
@@ -639,7 +878,11 @@ function editorialFinish(ctx,x,y,w,h,gradeSpec){
       d[i]=(targetY+dr)*255;d[i+1]=(targetY+dg)*255;d[i+2]=(targetY+db)*255;
     }
     ctx.putImageData(image,ix,iy);
-  }catch(e){}
+  }catch(e){
+    /* A failed canvas read must be diagnosable on the booth rather than
+       silently presenting an unfinished photograph as the final cover. */
+    if(global.console&&console.warn)console.warn("Editorial finish skipped",e);
+  }
 }
 
 /* Living Polaroid is outside this magazine-only request. Preserve its
@@ -835,14 +1078,13 @@ function featureBlock(L,o){
 function tplEditorial(L){
   const {ctx,W,H,u,M,land,copy}=L;
   const ink="#ffffff";
-  paintPhoto(L,0,0,W,H,"contrast(1.06) saturate(0.93) brightness(1.02)",land?0.42:0.34);
+  paintPhoto(L,0,0,W,H,"contrast(1.04) brightness(1.01)",land?0.42:0.34);
 
   const topH=land?H*0.38:H*0.32,botH=land?H*0.46:H*0.44;
   bandScrim(L,"top",topH,adapt(edgeLuma(L,"top",topH*0.72),0.18,0.58));
   bandScrim(L,"bottom",botH,adapt(edgeLuma(L,"bottom",botH),0.24,0.68));
   bandScrim(L,"left",W*0.36,adapt(edgeLuma(L,"left",W*0.32),0.1,0.4));
   bandScrim(L,"right",W*0.32,adapt(edgeLuma(L,"right",W*0.3),0.06,0.36));
-  vignette(ctx,W,H,0.26);
   ctx.fillStyle=ink;
 
   /* Masthead fills the measure; a short one leaves room for the skyline. */
@@ -919,12 +1161,11 @@ function tplNoir(L){
   const ink="#f5f1ea";
   /* Noir keeps the photographed hues intact. Its drama comes from restrained
      tonal density, the layout and its scrims — never a clothing recolour. */
-  paintPhoto(L,0,0,W,H,"contrast(1.10) saturate(0.94) brightness(0.98)",land?0.42:0.34);
+  paintPhoto(L,0,0,W,H,"contrast(1.07) brightness(0.985)",land?0.42:0.34);
   bandScrim(L,"top",H*0.36,adapt(edgeLuma(L,"top",H*0.26),0.3,0.66));
   bandScrim(L,"bottom",H*0.46,adapt(edgeLuma(L,"bottom",H*0.42),0.34,0.74));
   bandScrim(L,"left",W*0.34,adapt(edgeLuma(L,"left",W*0.3),0.12,0.46));
   bandScrim(L,"right",W*0.34,adapt(edgeLuma(L,"right",W*0.3),0.12,0.46));
-  vignette(ctx,W,H,0.5);
   ctx.fillStyle=ink;
 
   const mSize=fitTracked(ctx,copy.masthead,W-2*M-(land?W*0.16:W*0.1),land?H*0.14:H*0.13,FONT.serif,700,0.09,24*u);
@@ -968,11 +1209,10 @@ function tplKeepsake(L){
   const soft=lighten(accent,0.34);
   const railW=land?W*0.26:W*0.31;
 
-  paintPhoto(L,0,0,W,H,"contrast(1.09) saturate(1.05) brightness(0.97)",land?0.4:0.28);
+  paintPhoto(L,0,0,W,H,"contrast(1.05) brightness(0.99)",land?0.4:0.28);
   bandScrim(L,"left",railW+(land?W*0.18:W*0.24),adapt(regionLuma(ctx,0,0,railW,H),0.4,0.82));
   bandScrim(L,"top",H*0.3,adapt(edgeLuma(L,"top",H*0.2),0.2,0.52));
   bandScrim(L,"bottom",H*0.44,adapt(edgeLuma(L,"bottom",H*0.36),0.3,0.68));
-  vignette(ctx,W,H,0.34);
 
   /* Printed frame */
   const fi=M*0.5;
@@ -1121,7 +1361,7 @@ function tplPress(L){
 
   const barW=land?W:W*0.2,barH=land?H*0.19:H;
   const px=land?0:barW,py=land?barH:0,pw=land?W:W-barW,ph=land?H-barH:H;
-  paintPhoto(L,px,py,pw,ph,"contrast(1.06) saturate(1.02)",land?0.42:0.34);
+  paintPhoto(L,px,py,pw,ph,"contrast(1.04)",land?0.42:0.34);
 
   /* The whole lower half of the photo is type, so the base has to carry it. */
   const baseH=ph*(land?0.72:0.56);

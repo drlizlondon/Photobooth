@@ -1,5 +1,5 @@
 const CACHE_PREFIX="rae-photo-booth-";
-const CACHE="rae-photo-booth-live-v10";
+const CACHE="rae-photo-booth-live-v11";
 const ASSETS=["./","./index.html","./styles.css","./fonts.js","./covers.js","./polaroid.js","./mp4.js","./app.js","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png"];
 
 /* v7 was the bridge away from the old cache-first workers. Those workers can

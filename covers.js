@@ -24,8 +24,9 @@ const TEMPLATES=[
   {key:"press",     label:"Press",     hint:"Bold sidebar"}
 ];
 
-/* Magazine trim: 1.3 : 1, flipped for landscape sessions. */
-const RATIO=1.3;
+/* Magazine trim: 1.4 : 1, flipped for landscape sessions. This keeps the
+   cover close to A4 while retaining enough width for the editorial layouts. */
+const RATIO=1.4;
 function coverSize(orientation,base){
   const b=base||1200;
   return orientation==="landscape"?{width:Math.round(b*RATIO),height:b}:{width:b,height:Math.round(b*RATIO)};

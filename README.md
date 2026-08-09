@@ -272,7 +272,7 @@ B. Local Event Gallery
 
 ## Latest build — editorial cover engine
 - Cover rendering moved to `covers.js`: four templates over one copy model.
-- Portrait covers are 1200 × 1560, landscape 1560 × 1200 (magazine trim, not the old 4:3 / 3:4).
+- Portrait covers are 1200 × 1680, landscape 1680 × 1200 (A4-adjacent magazine trim, not the old 4:3 / 3:4).
 - Layout is measured from the canvas — masthead, columns and cover line re-flow rather than collide when copy is long.
 - Template tone and the adaptive **editorial finish** now share one float pipeline, preserving highlight headroom until final output.
 - Grain is consolidated into one deterministic 2.5% monochrome pass; the old second 4–6% template grain is gone.
@@ -309,7 +309,8 @@ Measured on this build: 105 frames at 1080 × 1408 encode in ~1.4s to a ~640KB
 MP4, with the animated preview running throughout.
 
 ## Service worker
-Cache `v10` carries the locked editorial-finish update. The `v7` worker remains the
+Cache `v11` carries the taller A4-adjacent magazine trim and locked editorial
+finish. The `v7` worker remains the
 one-time bridge away from every shipped cache-first worker: when it finds one
 of those legacy booth caches it deletes only this app's old caches, takes
 control, and reloads the open booth page once. Settings and the saved gallery

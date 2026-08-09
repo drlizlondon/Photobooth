@@ -1,11 +1,13 @@
 const DEFAULTS = {
-  eventTitle:"Rae's 26th Birthday",
-  date:"2026",
+  eventTitle:"Your Celebration",
+  date:String(new Date().getFullYear()),
 
-  stripTop:"THE BIRTHDAY ISSUE",
-  stripSecond:"Rae's 26th Birthday",
-  stripSignature:"Rae's 26th Birthday",
-  stripDate:"2026",
+  /* Blank Strip copy now follows the same useful auto-generation contract as
+     Magazine and Polaroid. Existing saved Rae wording remains explicit. */
+  stripTop:"",
+  stripSecond:"",
+  stripSignature:"",
+  stripDate:"",
 
   /* Cover copy: blank means "generate it from the event title". */
   coverMasthead:"",
@@ -76,7 +78,7 @@ const DEFAULTS = {
   shotLabelFormat:"",
   promptLines:"",
 
-  accent:"#d86c8f",
+  accent:"#ff5b52",
   countdown:3,
   mirror:true,
   prompts:true,
@@ -87,6 +89,18 @@ const DEFAULTS = {
 
 const FRAMES = [["white","White"],["black","Black"],["editorial","Editorial"],["film","Film"]];
 const FILTERS = [["original","Original"],["bw","B&W"],["vintage","Vintage"],["warm","Warm"],["glow","Glow"]];
+const PRODUCT=window.MyBishBashProduct||null;
+const ENTITLEMENTS=PRODUCT?PRODUCT.ENTITLEMENTS:{FREE:"FREE",PERSONAL_6_MONTH:"PERSONAL_6_MONTH",PERSONAL_12_MONTH:"PERSONAL_12_MONTH",FOUNDING_LIFETIME:"FOUNDING_LIFETIME",BUSINESS:"BUSINESS"};
+const SETTINGS_KEY="mybishbashPhotoboothSettingsV1";
+const LEGACY_SETTINGS_KEY="raePhotoBoothLiveSettings";
+const ACCESS_KEY="mybishbashPhotoboothVerifiedAccessV1";
+const GALLERY_DB="mybishbashPhotoboothGallery";
+const LEGACY_GALLERY_DB="raePhotoBoothGallery";
+const GALLERY_MIGRATION_KEY="mybishbashPhotoboothGalleryMigratedV1";
+const EDITION_KEY="mybishbashPhotoboothEditionSequenceV1";
+const API_META=document.querySelector('meta[name="photobooth-api-base"]');
+const API_BASE=String(API_META&&API_META.content||"").trim().replace(/\/$/,"");
+const HISTORY_SURFACE={PRODUCT:"product",EVENT_HOME:"event-home",BOOTH:"booth"};
 
 /* Every word a guest can see. [settings key, shipped default, element id].
    Blank in settings means "use the default", which is what the admin field
@@ -96,13 +110,13 @@ const SCREEN_TEXT = [
   ["startLabel","START","startLabelText"],
   ["startHint","tap to begin","startHintText"],
   ["cancelLabel","CANCEL","cancelCapture"],
-  ["stripTabLabel","Strip","stripTab"],
-  ["magazineTabLabel","Magazine","magazineTab"],
-  ["polaroidTabLabel","Polaroid","polaroidTab"],
+  ["stripTabLabel","STRIP","stripTab"],
+  ["magazineTabLabel","MAGAZINE","magazineTab"],
+  ["polaroidTabLabel","POLAROID","polaroidTab"],
   ["polaroidLabel","LIVING POLAROID","polaroidLabelText"],
   ["frameLabel","FRAME","frameLabelText"],
   ["filterLabel","FILTER","filterLabelText"],
-  ["pickLabel","PICK YOUR COVER","pickLabelText"],
+  ["pickLabel","PICK YOUR COVER PHOTO","pickLabelText"],
   ["styleLabel","CHOOSE A STYLE","styleLabelText"],
   ["changePhotoLabel","Choose a different photo","changeCoverPhoto"],
   ["shareLabel","Share","shareBtn"],
@@ -141,7 +155,14 @@ function shotLabel(n,total){
   return looseText("shotLabelFormat").replace(/\{n\}/gi,n).replace(/\{total\}/gi,total);
 }
 
+let legacySettingsImported=false;
 let settings=loadSettings();
+let legacyProfileAvailable=legacySettingsImported;
+try{legacyProfileAvailable=legacyProfileAvailable||!!localStorage.getItem(LEGACY_SETTINGS_KEY);}catch(e){}
+let entitlement=ENTITLEMENTS.FREE;
+let capabilities=PRODUCT?PRODUCT.getCapabilities(entitlement):{canPersonaliseEvent:false,canRemoveFreeBranding:false,canUploadBusinessLogo:false,canWhiteLabel:false,canCollectEmail:false,canConfigureSharing:false,canCollectConsent:false,canCollectConsentedPhotos:false};
+let businessEventConfig=PRODUCT?PRODUCT.createBusinessEventConfig():{collectEmail:false,requireEmail:false,allowShare:true,allowSave:true,collectMarketingConsent:false,collectPublicityConsent:false,collectConsentedPhotos:false};
+let businessBrand={name:"",primaryColor:"#2357ff",secondaryColor:"#ffcf33",logoImage:null,whiteLabel:false};
 let stream=null;
 let photos=[];
 let currentMode="strip";
@@ -159,9 +180,19 @@ let adminOrientation="landscape";
 let adminPreviewTimer=0;
 let serviceWorkerRefreshPending=false;
 let serviceWorkerRefreshStarted=false;
+let boothReturnScreen="landing";
+let boothExampleMode=false;
+let settingsReturnScreen="landing";
+let temporarySettingsSnapshot=null;
+let historyTransitionPending=false;
+let activeSetupStep=0;
+let latestRenderPromise=Promise.resolve();
+let stillRenderToken=0;
+let exportBusy=false;
+let businessCompletionSatisfied=false;
 
 const $=id=>document.getElementById(id);
-const screens=["welcome","camera","review","timeout","settings"];
+const screens=["landing","business","welcome","camera","review","timeout","settings"];
 
 /* Copy written under the old two-cover settings moves to the unified cover
    model — but only where the host actually edited it. Anything left at an old
@@ -192,19 +223,69 @@ function migrateSettings(raw){
 }
 function loadSettings(){
   try{
-    const raw=JSON.parse(localStorage.getItem("raePhotoBoothLiveSettings")||"{}");
-    return {...DEFAULTS,...Fonts.migrate(migrateSettings(raw))};
+    let stored=localStorage.getItem(SETTINGS_KEY);
+    if(!stored){
+      stored=localStorage.getItem(LEGACY_SETTINGS_KEY);
+      legacySettingsImported=!!stored;
+    }
+    const raw=JSON.parse(stored||"{}");
+    const migrated={...DEFAULTS,...Fonts.migrate(migrateSettings(raw))};
+    if(legacySettingsImported){
+      /* Non-destructive dual-read migration: copy the working event profile to
+         the neutral key and leave the Rae key untouched for rollback. */
+      try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(migrated));}catch(e){}
+    }
+    return migrated;
   }
   catch{return {...DEFAULTS};}
 }
 
-function openGalleryDB(){
+function stripCopyFor(s){
+  const title=String(s.eventTitle||DEFAULTS.eventTitle).trim()||DEFAULTS.eventTitle;
+  const date=String(s.date||"").trim();
+  return {
+    top:String(s.stripTop||"").trim()||"THE PHOTOBOOTH EDIT",
+    second:String(s.stripSecond||"").trim()||title,
+    signature:String(s.stripSignature||"").trim()||title,
+    date:String(s.stripDate||"").trim()||date
+  };
+}
+
+function openNamedGalleryDB(name){
   return new Promise((resolve,reject)=>{
-    const req=indexedDB.open("raePhotoBoothGallery",1);
+    const req=indexedDB.open(name,1);
     req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains("sessions"))db.createObjectStore("sessions",{keyPath:"id"});};
     req.onsuccess=()=>resolve(req.result);
     req.onerror=()=>reject(req.error);
   });
+}
+let galleryMigrationPromise=null;
+async function migrateLegacyGallery(){
+  if(localStorage.getItem(GALLERY_MIGRATION_KEY)==="done")return;
+  /* The settings copy can happen on an earlier visit than the first gallery
+     open. The old settings key is intentionally retained, so it is the durable
+     migration signal rather than this page-load-only flag. */
+  const hasLegacyProfile=legacySettingsImported||!!localStorage.getItem(LEGACY_SETTINGS_KEY);
+  if(!hasLegacyProfile){localStorage.setItem(GALLERY_MIGRATION_KEY,"done");return;}
+  try{
+    const legacy=await openNamedGalleryDB(LEGACY_GALLERY_DB);
+    const oldTx=legacy.transaction("sessions","readonly");
+    const sessions=await new Promise((res,rej)=>{const r=oldTx.objectStore("sessions").getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error);});
+    legacy.close();
+    if(sessions.length){
+      const next=await openNamedGalleryDB(GALLERY_DB);
+      const tx=next.transaction("sessions","readwrite"),store=tx.objectStore("sessions");
+      sessions.forEach(item=>store.put(item));
+      await new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});
+      next.close();
+    }
+    localStorage.setItem(GALLERY_MIGRATION_KEY,"done");
+  }catch(e){/* Existing gallery remains available for a later migration retry. */}
+}
+async function openGalleryDB(){
+  if(!galleryMigrationPromise)galleryMigrationPromise=migrateLegacyGallery();
+  await galleryMigrationPromise;
+  return openNamedGalleryDB(GALLERY_DB);
 }
 async function saveSessionToGallery(sessionPhotos,orientation){
   if(!sessionPhotos||sessionPhotos.length!==3)return;
@@ -269,6 +350,10 @@ async function renderEventGallery(){
       photos=[...session.photos];
       sessionOrientation=session.orientation||"landscape";
       sessionEdition=sessions.length-sessions.indexOf(session);
+      const eventContext=settingsReturnScreen==="welcome";
+      if(!eventContext)boothExampleMode=false;
+      setBoothReturnScreen(eventContext?"welcome":"landing");
+      enterBoothHistory();
       resetCreativeState();
       buildReviewControls();
       showScreen("review");
@@ -279,9 +364,18 @@ async function renderEventGallery(){
   });
 }
 
-function persistSettings(){localStorage.setItem("raePhotoBoothLiveSettings",JSON.stringify(settings));}
+function persistSettings(){localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings));}
+function nextEditionNumber(fallbackCount){
+  let current=0;
+  try{current=Math.max(0,Number(localStorage.getItem(EDITION_KEY))||0);}catch(e){}
+  current=Math.max(current,Math.max(0,Number(fallbackCount)||0)-1);
+  current+=1;
+  try{localStorage.setItem(EDITION_KEY,String(current));}catch(e){}
+  return current;
+}
 function applyServiceWorkerRefreshIfSafe(){
-  if(!serviceWorkerRefreshPending||serviceWorkerRefreshStarted||!$("welcome").classList.contains("active"))return false;
+  const safe=["landing","business","welcome"].some(id=>$(id)&&$(id).classList.contains("active"));
+  if(!serviceWorkerRefreshPending||serviceWorkerRefreshStarted||!safe)return false;
   serviceWorkerRefreshStarted=true;
   location.reload();
   return true;
@@ -291,10 +385,220 @@ function requestServiceWorkerRefresh(){
   applyServiceWorkerRefreshIfSafe();
 }
 function showScreen(id){
-  screens.forEach(s=>$(s).classList.toggle("active",s===id));
-  if(id==="welcome")applyServiceWorkerRefreshIfSafe();
+  screens.forEach(s=>{const el=$(s);if(el)el.classList.toggle("active",s===id);});
+  document.body.dataset.surface=id;
+  if(id==="landing"||id==="business"||id==="welcome")applyServiceWorkerRefreshIfSafe();
 }
 function delay(ms){return new Promise(r=>setTimeout(r,ms));}
+
+function normaliseBranding(policy,extra){
+  const p=policy||{},x=extra||{};
+  return {
+    mode:p.mode||x.mode||"free",
+    text:x.text!==undefined?x.text:(p.myBishBashText||""),
+    brandName:x.brandName||"",
+    primaryColor:x.primaryColor||settings.accent,
+    secondaryColor:x.secondaryColor||settings.accent,
+    logoImage:x.logoImage||null
+  };
+}
+function currentBranding(){
+  if(!PRODUCT)return {mode:"free",text:"MYBISHBASH PHOTOBOOTH",primaryColor:settings.accent,secondaryColor:settings.accent};
+  const policy=PRODUCT.getOutputBrandingPolicy(entitlement,{whiteLabel:businessBrand.whiteLabel});
+  if(entitlement===ENTITLEMENTS.BUSINESS){
+    return normaliseBranding(policy,{
+      text:businessBrand.whiteLabel?businessBrand.name:[businessBrand.name,policy.myBishBashText].filter(Boolean).join(" · "),
+      brandName:businessBrand.name,
+      primaryColor:businessBrand.primaryColor,
+      secondaryColor:businessBrand.secondaryColor,
+      logoImage:businessBrand.logoImage
+    });
+  }
+  return normaliseBranding(policy);
+}
+function personalPreviewBranding(){
+  if(!PRODUCT)return {mode:"personal",text:"POWERED BY MYBISHBASH PHOTOBOOTH",primaryColor:settings.accent,secondaryColor:settings.accent};
+  return normaliseBranding(PRODUCT.getOutputBrandingPolicy(ENTITLEMENTS.PERSONAL_6_MONTH));
+}
+function setEntitlement(next,record){
+  if(!PRODUCT||PRODUCT.ENTITLEMENT_VALUES.indexOf(next)===-1)next=ENTITLEMENTS.FREE;
+  entitlement=next;
+  capabilities=PRODUCT?PRODUCT.getCapabilities(entitlement):capabilities;
+  if(record&&record.serverVerified===true){
+    try{localStorage.setItem(ACCESS_KEY,JSON.stringify(record));}catch(e){}
+  }
+  applyEntitlementUI();
+  invalidatePolaroid();
+  if(photos.length&&currentMode!=="polaroid")renderWithFade();
+}
+function applyEntitlementUI(){
+  const paid=!!capabilities.canPersonaliseEvent||legacyProfileAvailable;
+  const note=$("settingsAccessNote"),save=$("saveSettings"),launch=$("launchCustomBooth"),choose=$("choosePersonalPlan");
+  if(note)note.textContent=paid?"Your Personal setup can be saved and used on this device.":"Preview the Personal experience, then choose access when you are ready to use it.";
+  if(save){save.disabled=!paid;save.setAttribute("aria-disabled",paid?"false":"true");}
+  if(launch){launch.disabled=!paid;launch.setAttribute("aria-disabled",paid?"false":"true");}
+  if(choose)choose.hidden=paid;
+  const outputNote=$("outputBrandingNote");
+  if(outputNote){
+    outputNote.textContent=entitlement===ENTITLEMENTS.FREE?"Free keepsakes include a tasteful MyBishBash Photobooth credit.":
+      entitlement===ENTITLEMENTS.BUSINESS?"This output follows the organiser’s Business branding policy.":"Personal keepsakes carry a small Powered by MyBishBash Photobooth credit.";
+  }
+}
+function restoreTemporarySettings(){
+  if(!temporarySettingsSnapshot)return;
+  settings=temporarySettingsSnapshot;
+  temporarySettingsSnapshot=null;
+  fillSettingsUI();
+}
+function teardownBoothSession(){
+  captureSessionId++;
+  clearTimeout(idleTimer);idleTimer=null;
+  stillRenderToken++;
+  const countdown=$("countdown"),prompt=$("promptText"),flash=$("flash");
+  if(countdown)countdown.textContent="";
+  if(prompt)prompt.classList.remove("show");
+  if(flash)flash.classList.remove("on");
+  stopCamera();
+  invalidatePolaroid();
+  photos=[];
+  exportBusy=false;
+}
+function setBoothReturnScreen(target){
+  boothReturnScreen=target==="welcome"?"welcome":"landing";
+  const button=$("boothHomeBtn");
+  if(button){
+    const label=boothReturnScreen==="welcome"?"Event Home":"Home";
+    button.textContent=label;
+    button.setAttribute("aria-label",label+(boothReturnScreen==="welcome"?" — return to this event's welcome screen":" — return to the MyBishBash Photobooth website"));
+  }
+}
+function updateProductNav(active){
+  document.querySelectorAll("[data-product-route]").forEach(link=>{
+    const selected=link.dataset.productRoute===active;
+    if(selected)link.setAttribute("aria-current","page");else link.removeAttribute("aria-current");
+  });
+}
+function productHistoryState(route){
+  return {surface:HISTORY_SURFACE.PRODUCT,productRoute:route==="business"?"business":"personal"};
+}
+function productBasePath(){
+  const withoutBusiness=location.pathname.replace(/\/business\/?$/,"/");
+  return withoutBusiness.endsWith("/")?withoutBusiness:withoutBusiness+"/";
+}
+function productURL(route){
+  const base=productBasePath();
+  return route==="business"?base.replace(/\/$/,"")+"/business":base;
+}
+function showProductRoute(route,push,replace){
+  teardownBoothSession();restoreTemporarySettings();
+  const business=route==="business";
+  boothExampleMode=false;setBoothReturnScreen("landing");
+  showScreen(business?"business":"landing");
+  const productRoute=business?"business":"personal";
+  updateProductNav(productRoute);
+  if(push&&history.pushState){
+    const url=productURL(productRoute);
+    const current=history.state||{};
+    if(current.surface!==HISTORY_SURFACE.PRODUCT||current.productRoute!==productRoute){
+      history.pushState(productHistoryState(productRoute),"",url);
+    }
+  }else if(replace&&history.replaceState){
+    history.replaceState(productHistoryState(productRoute),"",productURL(productRoute));
+  }
+  window.scrollTo(0,0);
+}
+function routeFromLocation(){return /(?:^|\/)business\/?$/.test(location.pathname)?"business":"personal";}
+function applyExampleBoothSettings(){
+  if(!temporarySettingsSnapshot)temporarySettingsSnapshot=settings;
+  settings={...DEFAULTS,eventTitle:"Rae's 26th Birthday",date:"2026",accent:"#d86c8f",stripTop:"THE BIRTHDAY ISSUE",stripSecond:"Rae's 26th Birthday",stripSignature:"Rae's 26th Birthday",stripDate:"2026"};
+}
+function showEventHome(example){
+  teardownBoothSession();
+  boothExampleMode=!!example;
+  if(boothExampleMode)applyExampleBoothSettings();
+  setBoothReturnScreen("welcome");
+  fillSettingsUI();showScreen("welcome");
+}
+function enterEventHome(example){
+  if(history.pushState){
+    const current=history.state||{};
+    const next={surface:HISTORY_SURFACE.EVENT_HOME,example:!!example};
+    if(current.surface===HISTORY_SURFACE.EVENT_HOME){
+      history.replaceState(next,"",location.href);
+    }else{
+      history.pushState({surface:HISTORY_SURFACE.EVENT_HOME,example:!!example},"",location.href);
+    }
+  }
+  showEventHome(example);
+}
+function enterBoothHistory(){
+  if(!history.pushState)return;
+  const current=history.state||{};
+  if(current.surface===HISTORY_SURFACE.BOOTH)return;
+  history.pushState({
+    surface:HISTORY_SURFACE.BOOTH,
+    returnScreen:boothReturnScreen,
+    example:boothExampleMode
+  },"",location.href);
+}
+function showBoothReturnScreen(){
+  teardownBoothSession();
+  const state=history.state||{};
+  if(state.surface===HISTORY_SURFACE.BOOTH&&history.back&&history.length>1){
+    if(!historyTransitionPending){historyTransitionPending=true;history.back();}
+    return;
+  }
+  if(boothReturnScreen==="welcome"){
+    showEventHome(boothExampleMode);
+    if(history.replaceState)history.replaceState({surface:HISTORY_SURFACE.EVENT_HOME,example:boothExampleMode},"",location.href);
+    return;
+  }
+  showProductRoute("personal",false,true);
+}
+function returnFromEventToProduct(){
+  teardownBoothSession();
+  const state=history.state||{};
+  if(state.surface===HISTORY_SURFACE.EVENT_HOME&&history.back&&history.length>1){
+    if(!historyTransitionPending){historyTransitionPending=true;history.back();}
+    return;
+  }
+  showProductRoute("personal",false,true);
+}
+function restoreHistorySurface(state){
+  const next=state||{};
+  if(next.surface===HISTORY_SURFACE.EVENT_HOME){showEventHome(!!next.example);return true;}
+  if(next.surface===HISTORY_SURFACE.BOOTH){
+    const eventReturn=next.returnScreen==="welcome";
+    boothExampleMode=!!next.example;
+    setBoothReturnScreen(eventReturn?"welcome":"landing");
+    if(history.back&&history.length>1){
+      if(!historyTransitionPending){historyTransitionPending=true;history.back();}
+      return true;
+    }
+    if(eventReturn){
+      showEventHome(!!next.example);
+      if(history.replaceState)history.replaceState({surface:HISTORY_SURFACE.EVENT_HOME,example:!!next.example},"",location.href);
+    }else{
+      showProductRoute("personal",false,true);
+    }
+    return true;
+  }
+  return false;
+}
+function handleHistoryChange(event){
+  historyTransitionPending=false;
+  teardownBoothSession();
+  const state=event&&event.state||history.state||{};
+  if(restoreHistorySurface(state))return;
+  showProductRoute(state.productRoute||routeFromLocation(),false,false);
+}
+function bootstrapNavigation(){
+  const state=history.state||{};
+  if(restoreHistorySurface(state))return;
+  const route=state.productRoute||routeFromLocation();
+  showProductRoute(route,false,false);
+  if(history.replaceState)history.replaceState(productHistoryState(route),"",location.href);
+}
 
 function fillSettingsUI(){
   $("welcomeTitle").textContent=settings.eventTitle;
@@ -317,6 +621,8 @@ function fillSettingsUI(){
   $("setShutter").checked=settings.shutter;
   $("setFlash").checked=settings.flash;
   $("setConfetti").checked=settings.confetti;
+  const summary=$("setupSummaryTitle");if(summary)summary.textContent=settings.eventTitle||DEFAULTS.eventTitle;
+  applyEntitlementUI();
 }
 
 const inputId=key=>"set"+key.charAt(0).toUpperCase()+key.slice(1);
@@ -338,7 +644,9 @@ const FONT_FIELDS=Fonts.ROLES.map(([role,key])=>[inputId(key),key]);
 
 /* Blank fields show what the cover will auto-generate. */
 function refreshCoverPlaceholders(){
-  const derived=Covers.derive({eventTitle:$("setEventTitle").value.trim()||DEFAULTS.eventTitle,date:$("setDate").value.trim()});
+  const title=$("setEventTitle").value.trim()||DEFAULTS.eventTitle;
+  const date=$("setDate").value.trim();
+  const derived=Covers.derive({eventTitle:title,date});
   COVER_FIELDS.forEach(([id,key],i)=>{
     const el=$(id);if(!el)return;
     el.placeholder=derived[Covers.copyKeys[i]]||"";
@@ -350,24 +658,27 @@ function refreshCoverPlaceholders(){
   POLAROID_FIELDS.forEach(([id],i)=>{
     const el=$(id);if(el)el.placeholder=hand[Polaroid.copyKeys[i]]||"";
   });
+  const strip=stripCopyFor({eventTitle:title,date,stripTop:"",stripSecond:"",stripSignature:"",stripDate:""});
+  [["setStripTop",strip.top],["setStripSecond",strip.second],["setStripSignature",strip.signature],["setStripDate",strip.date]].forEach(([id,value])=>{if($(id))$(id).placeholder=value;});
+  const summary=$("setupSummaryTitle");if(summary)summary.textContent=title;
 }
 
 /* ---------- font specimens ---------- */
 
 /* Sample wording per role, taken from the organiser's own event so a specimen
-   shows the words that will actually be printed — a face that carries "RAE"
+   shows the words that will actually be printed — a face that carries one name
    beautifully can fall apart on "Aisha & Tom's Wedding". */
 function fontSamples(s){
   const cover=Covers.copyFor(s),hand=Polaroid.copyFor(s);
   return {
-    display:cover.masthead||"RAE",
+    display:cover.masthead||"TONIGHT",
     text:cover.footer||"GOOD PEOPLE",
-    condensed:(cover.stack||"BIRTHDAY EDITION").toUpperCase(),
-    script:cover.script||"Rae's 26th",
+    condensed:(cover.stack||"CELEBRATION EDITION").toUpperCase(),
+    script:cover.script||"Your Celebration",
     /* Hearts are stripped from the handwriting specimen: the print draws them
        as paths, so showing the font's own glyph would be the one thing on
        this page that is not what a guest gets. */
-    hand:(hand.line1||"Rae's 26th").replace(/[♡♥❤]/g,"").trim()
+    hand:(hand.line1||"Your Celebration").replace(/[♡♥❤]/g,"").trim()
   };
 }
 /* Specimens are drawn on canvas, not styled in HTML. Canvas resolves a font
@@ -474,20 +785,32 @@ function draftSettings(){
   return draft;
 }
 
-async function startCamera(){
+function releaseMediaStream(target){
+  if(!target)return;
+  const video=$("video");
+  if(video&&video.srcObject===target)video.srcObject=null;
+  if(stream===target)stream=null;
+  target.getTracks().forEach(track=>track.stop());
+}
+async function startCamera(sessionId){
   stopCamera();
-  stream=await navigator.mediaDevices.getUserMedia({
+  const acquired=await navigator.mediaDevices.getUserMedia({
     video:{facingMode:"user",width:{ideal:1920},height:{ideal:1080}},
     audio:false
   });
-  $("video").srcObject=stream;
-  $("video").classList.toggle("mirror",settings.mirror);
-  await $("video").play();
-  const w=$("video").videoWidth||window.innerWidth;
-  const h=$("video").videoHeight||window.innerHeight;
+  if(sessionId!==captureSessionId){releaseMediaStream(acquired);throw new Error("cancelled");}
+  const video=$("video");
+  stream=acquired;
+  video.srcObject=acquired;
+  video.classList.toggle("mirror",settings.mirror);
+  try{await video.play();}
+  catch(error){releaseMediaStream(acquired);throw error;}
+  if(sessionId!==captureSessionId){releaseMediaStream(acquired);throw new Error("cancelled");}
+  const w=video.videoWidth||window.innerWidth;
+  const h=video.videoHeight||window.innerHeight;
   sessionOrientation=w>=h?"landscape":"portrait";
 }
-function stopCamera(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}}
+function stopCamera(){releaseMediaStream(stream);}
 
 function initAudio(){
   try{
@@ -536,13 +859,7 @@ function capturePhoto(){
   return c.toDataURL("image/jpeg",.96);
 }
 function cancelCapture(){
-  captureSessionId++;
-  $("countdown").textContent="";
-  $("promptText").classList.remove("show");
-  $("flash").classList.remove("on");
-  stopCamera();
-  photos=[];
-  showScreen("welcome");
+  showBoothReturnScreen();
 }
 function resetCreativeState(){
   currentMode="strip";
@@ -557,12 +874,15 @@ function resetCreativeState(){
   $("polaroidControls").classList.remove("active");
   $("magazinePickStep").hidden=false;
   $("magazineStyleStep").hidden=true;
+  businessCompletionSatisfied=false;
+  setExportStatus("");
+  refreshExportControls();
 }
 
 async function beginSession(){
   /* A newly activated worker waits until the previous guest is finished. The
      next Start/Retake/Next guest tap is a safe boundary to load the new app. */
-  if(serviceWorkerRefreshPending){showScreen("welcome");return;}
+  if(serviceWorkerRefreshPending){showBoothReturnScreen();return;}
   clearTimeout(idleTimer);
   captureSessionId++;
   const sid=captureSessionId;
@@ -573,7 +893,8 @@ async function beginSession(){
 
   const promptList=capturePrompts();
   try{
-    await startCamera();
+    await startCamera(sid);
+    if(sid!==captureSessionId)return;
     await delay(400);
     for(let i=0;i<3;i++){
       if(sid!==captureSessionId)return;
@@ -590,19 +911,25 @@ async function beginSession(){
       photos.push(capturePhoto());
       await delay(420);
     }
+    if(sid!==captureSessionId)return;
     stopCamera();
     await saveSessionToGallery(photos,sessionOrientation);
-    sessionEdition=await countGallerySessions();
+    if(sid!==captureSessionId)return;
+    const galleryCount=await countGallerySessions();
+    if(sid!==captureSessionId)return;
+    sessionEdition=nextEditionNumber(galleryCount);
     buildReviewControls();
     showScreen("review");
     await renderWithFade();
+    if(sid!==captureSessionId)return;
     resetIdle();
     if(settings.confetti)launchConfetti();
   }catch(err){
+    if(sid!==captureSessionId||err.message==="cancelled")return;
     stopCamera();
     if(err.message!=="cancelled"){
       alert("Please allow camera access in Safari and try again.");
-      showScreen("welcome");
+      showBoothReturnScreen();
     }
   }
 }
@@ -662,6 +989,7 @@ function buildReviewControls(){
       document.querySelectorAll(".photo-choice").forEach(x=>x.classList.toggle("active",x===b));
       renderStyleThumbs();
       renderWithFade();
+      refreshExportControls();
       resetIdle();
     };
     $("coverPhotoChoices").appendChild(b);
@@ -687,6 +1015,8 @@ function buildReviewControls(){
     $("magazineStyleChoices").appendChild(b);
   });
   if(coverIndex!==null)renderStyleThumbs();
+  applyBusinessEventFlow();
+  refreshExportControls();
 }
 
 /* Live thumbnails of the guest's own chosen photo in every template. */
@@ -710,7 +1040,8 @@ async function renderStyleThumbs(){
       width:size.width,height:size.height,
       copy,accent:settings.accent,
       template:cv.dataset.template,
-      edition:{no:sessionEdition}
+      edition:{no:sessionEdition},
+      branding:currentBranding()
     });
   });
 }
@@ -725,6 +1056,7 @@ function setMode(mode){
     $("magazinePickStep").hidden=coverIndex!==null;
     $("magazineStyleStep").hidden=coverIndex===null;
   }
+  refreshExportControls();
   /* The Polaroid drives its own canvas on a rAF loop, so it skips the
      fade-and-redraw the still modes use — that would flash mid-animation. */
   if(mode==="polaroid"){enterPolaroid();resetIdle();return;}
@@ -733,14 +1065,14 @@ function setMode(mode){
 }
 document.querySelectorAll(".mode-tab").forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 
-function filterCSS(){
+function filterCSS(style){
   return {
     original:"none",
     bw:"grayscale(1) contrast(1.06)",
     vintage:"sepia(.18) saturate(.78) contrast(.97) brightness(1.03)",
     warm:"sepia(.10) saturate(1.12) brightness(1.03)",
     glow:"brightness(1.07) contrast(.92) saturate(.95)"
-  }[filterStyle]||"none";
+  }[style||filterStyle]||"none";
 }
 function loadImage(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src;});}
 function drawContain(ctx,img,x,y,w,h,bg="#fff"){
@@ -785,19 +1117,25 @@ function drawBarcode(ctx,x,y,w,h,font,light=false){
   ctx.strokeStyle=light?"#fff":"#111";ctx.lineWidth=1;ctx.strokeRect(x,y,w,h);
   ctx.fillStyle="#111";
   for(let i=0;i<26;i++){const xx=x+7+i*(w-14)/26;ctx.fillRect(xx,y+6,i%4===0?2.4:(i%3===0?1.8:1.1),h-18);}
-  ctx.font=`700 8px ${font}`;ctx.textAlign="center";ctx.fillText("026  2026",x+w/2,y+h-4);
+  ctx.font=`700 8px ${font}`;ctx.textAlign="center";ctx.fillText("001",x+w/2,y+h-4);
   ctx.restore();
 }
 
 async function renderWithFade(){
-  $("mainCanvas").classList.add("changing");
-  await delay(70);
-  await render();
-  $("mainCanvas").classList.remove("changing");
+  const token=++stillRenderToken;
+  latestRenderPromise=(async()=>{
+    $("mainCanvas").classList.add("changing");
+    await delay(70);
+    if(token!==stillRenderToken)return;
+    await render(token);
+    if(token===stillRenderToken)$("mainCanvas").classList.remove("changing");
+  })();
+  return latestRenderPromise;
 }
-async function render(){
+async function render(token){
   if(!photos.length||currentMode==="polaroid")return;
   const imgs=await Promise.all(photos.map(loadImage));
+  if(token!==undefined&&token!==stillRenderToken)return;
   const c=$("mainCanvas"),ctx=c.getContext("2d");
   if(currentMode!=="magazine"||coverIndex===null)renderStrip(ctx,c,imgs,settings,sessionOrientation);
   else renderMagazine(ctx,c,imgs[coverIndex]);
@@ -814,7 +1152,8 @@ function renderMagazine(ctx,c,img){
     fonts:Fonts.faces(settings),
     accent:settings.accent,
     template:magazineStyle,
-    edition:{no:sessionEdition}
+    edition:{no:sessionEdition},
+    branding:currentBranding()
   });
 }
 
@@ -840,7 +1179,8 @@ function polaroidOptions(images){
     images,
     copy:Polaroid.copyFor(settings),
     hand:Fonts.stack("hand",settings),
-    transition:settings.polaroidTransition||"crossfade"
+    transition:settings.polaroidTransition||"crossfade",
+    attribution:currentBranding()
   };
 }
 /* Bumping the token orphans any in-flight build or encode, so a settings
@@ -945,10 +1285,14 @@ async function polaroidPrintBlob(){
   const c=document.createElement("canvas");
   c.width=job.geo.W;c.height=job.geo.H;
   job.drawStill(c.getContext("2d"),coverIndex===null?0:coverIndex);
-  return new Promise(r=>c.toBlob(r,"image/png",1));
+  return new Promise((resolve,reject)=>c.toBlob(blob=>blob?resolve(blob):reject(new Error("The Polaroid print could not be prepared.")),"image/png",1));
 }
 
-function renderStrip(ctx,c,imgs,s,orientation){
+function renderStrip(ctx,c,imgs,s,orientation,creative){
+  const chosenFrame=creative&&creative.frameStyle||frameStyle;
+  const chosenFilter=creative&&creative.filterStyle||filterStyle;
+  const branding=creative&&Object.prototype.hasOwnProperty.call(creative,"branding")?creative.branding:currentBranding();
+  const copy=stripCopyFor(s);
   const t=typography(s),land=orientation==="landscape",first=imgs[0];
   const W=land?900:690,side=26,innerW=W-side*2;
   const ratio=first.width/first.height,photoH=innerW/ratio;
@@ -956,81 +1300,131 @@ function renderStrip(ctx,c,imgs,s,orientation){
   c.width=W;c.height=H;
 
   let bg="#fff",ink="#111",photoBg="#f6f2ec";
-  if(frameStyle==="black"){bg="#090909";ink="#fff";photoBg="#111";}
-  if(frameStyle==="editorial"){bg="#f7f0e5";ink="#111";photoBg="#eee7dd";}
-  if(frameStyle==="film"){bg="#090909";ink="#fff";photoBg="#111";}
+  if(chosenFrame==="black"){bg="#090909";ink="#fff";photoBg="#111";}
+  if(chosenFrame==="editorial"){bg="#f7f0e5";ink="#111";photoBg="#eee7dd";}
+  if(chosenFrame==="film"){bg="#090909";ink="#fff";photoBg="#111";}
 
   ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
 
-  if(frameStyle==="editorial"){
+  if(chosenFrame==="editorial"){
     ctx.strokeStyle="rgba(17,17,17,.28)";ctx.lineWidth=1;ctx.strokeRect(12,12,W-24,H-24);
     ctx.beginPath();ctx.moveTo(44,100);ctx.lineTo(W-44,100);ctx.stroke();
   }
-  if(frameStyle==="film"){
+  if(chosenFrame==="film"){
     ctx.fillStyle="#fff";
     for(let y=24;y<H-24;y+=44){ctx.fillRect(8,y,14,24);ctx.fillRect(W-22,y,14,24);}
   }
 
   ctx.fillStyle=ink;ctx.textAlign="center";
-  fitText(ctx,s.stripTop||"",W-90,14,t.sans,800,9);
-  ctx.globalAlpha=.78;ctx.fillText((s.stripTop||"").toUpperCase(),W/2,32);ctx.globalAlpha=1;
-  fitText(ctx,s.stripSecond||"",W-90,land?28:25,t.serif,400,16);
-  ctx.fillText(s.stripSecond||"",W/2,68);
-  fitText(ctx,s.stripDate||"",W-90,12,t.sans,800,9);
-  ctx.globalAlpha=.58;ctx.fillText(s.stripDate||"",W/2,94);ctx.globalAlpha=1;
+  fitText(ctx,copy.top,W-90,14,t.sans,800,9);
+  ctx.globalAlpha=.78;ctx.fillText(copy.top.toUpperCase(),W/2,32);ctx.globalAlpha=1;
+  fitText(ctx,copy.second,W-90,land?28:25,t.serif,400,16);
+  ctx.fillText(copy.second,W/2,68);
+  fitText(ctx,copy.date,W-90,12,t.sans,800,9);
+  ctx.globalAlpha=.58;ctx.fillText(copy.date,W/2,94);ctx.globalAlpha=1;
 
   imgs.forEach((img,i)=>{
     const y=headerH+i*(photoH+gap);
     drawContain(ctx,img,side,y,innerW,photoH,photoBg);
     /* Graded in pixels, not with ctx.filter — see covers.js. This is the one
        that guests notice, because the filter buttons sit right there. */
-    Covers.applyGrade(ctx,side,y,innerW,photoH,filterCSS());
+    Covers.applyGrade(ctx,side,y,innerW,photoH,filterCSS(chosenFilter));
   });
 
   const base=headerH+photoH*3+gap*2;
   ctx.fillStyle=ink;ctx.textAlign="center";
-  fitText(ctx,s.stripSignature||"",W-90,land?38:32,t.script,400,20);
-  ctx.fillText(s.stripSignature||"",W/2,base+64);
-  fitText(ctx,s.stripDate||"",W-90,12,t.sans,800,9);
-  ctx.fillText(s.stripDate||"",W/2,base+98);
+  fitText(ctx,copy.signature,W-90,land?38:32,t.script,400,20);
+  ctx.fillText(copy.signature,W/2,base+64);
+  fitText(ctx,copy.date,W-90,12,t.sans,800,9);
+  ctx.fillText(copy.date,W/2,base+98);
+  drawStripBranding(ctx,W,H,ink,t.sans,branding,s.accent);
 }
 
-async function canvasBlob(){return new Promise(r=>$("mainCanvas").toBlob(r,"image/png",1));}
+function drawStripBranding(ctx,W,H,ink,font,branding,accent){
+  if(!branding)return;
+  const label=String(branding.text||branding.myBishBashText||branding.brandName||"").trim();
+  const logo=branding.logoImage||null;
+  if(!label&&!logo)return;
+  ctx.save();
+  ctx.fillStyle=branding.secondaryColor||accent||ink;
+  ctx.fillRect(W*.43,H-28,W*.14,2);
+  ctx.fillStyle=ink;
+  const size=fitText(ctx,label.toUpperCase(),W-100,11,font,800,8);
+  ctx.textAlign="center";
+  ctx.globalAlpha=.78;
+  ctx.fillText(label.toUpperCase(),W/2,H-10);
+  ctx.globalAlpha=1;
+  if(logo){
+    try{
+      const ih=logo.naturalHeight||logo.height||1,iw=logo.naturalWidth||logo.width||1;
+      const h=18,w=Math.min(70,h*iw/Math.max(1,ih));
+      ctx.drawImage(logo,36,H-h-8,w,h);
+    }catch(e){}
+  }
+  ctx.restore();
+}
+window.MyBishBashRenderers={renderStrip};
+
+async function canvasBlob(){
+  await latestRenderPromise;
+  return new Promise((resolve,reject)=>$("mainCanvas").toBlob(blob=>blob?resolve(blob):reject(new Error("The image could not be prepared.")),"image/png",1));
+}
 /* Save is always the print. Share prefers the MP4 on the Polaroid tab —
    the moving version is the thing worth sending — and falls back to the
    print everywhere else and whenever the encoder could not run. */
 async function stillBlob(){
+  if(currentMode==="magazine"&&coverIndex===null)throw new Error("Choose Photo 1, 2 or 3 for your Magazine cover first.");
   return currentMode==="polaroid"?polaroidPrintBlob():canvasBlob();
 }
 function download(blob,ext){
   const url=URL.createObjectURL(blob),a=document.createElement("a");
-  a.href=url;a.download=`photo-booth-${currentMode}-${Date.now()}.${ext}`;
+  a.href=url;a.download=`mybishbash-photobooth-${currentMode}-${Date.now()}.${ext}`;
   document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 async function shareCurrent(){
+  if(exportBusy||!exportReady())return;
+  exportBusy=true;refreshExportControls();setExportStatus("Preparing your keepsake…");
   resetIdle();
-  const video=currentMode==="polaroid"&&polaroidVideoBlob;
-  const blob=video?polaroidVideoBlob:await stillBlob();
-  const name=`photo-booth-${currentMode}-${Date.now()}.${video?"mp4":"png"}`;
-  const file=new File([blob],name,{type:video?"video/mp4":"image/png"});
   try{
+    await latestRenderPromise;
+    const video=currentMode==="polaroid"&&polaroidVideoBlob;
+    const blob=video?polaroidVideoBlob:await stillBlob();
+    const name=`mybishbash-photobooth-${currentMode}-${Date.now()}.${video?"mp4":"png"}`;
+    const file=new File([blob],name,{type:video?"video/mp4":"image/png"});
     if(navigator.canShare&&navigator.canShare({files:[file]})){
       await navigator.share({files:[file],title:settings.eventTitle,text:settings.eventTitle});
+      setExportStatus("");
       return;
     }
-  }catch(e){return;/* the guest cancelled the sheet — not a reason to download */}
-  download(blob,video?"mp4":"png");
+    download(blob,video?"mp4":"png");
+    setExportStatus("Saved to this device.");
+  }catch(e){
+    if(e&&e.name!=="AbortError")setExportStatus(e.message||"This keepsake could not be shared.",true);
+  }finally{exportBusy=false;refreshExportControls();}
 }
 async function saveCurrent(){
+  if(exportBusy||!exportReady())return;
+  exportBusy=true;refreshExportControls();setExportStatus("Preparing your keepsake…");
   resetIdle();
-  download(await stillBlob(),"png");
+  try{download(await stillBlob(),"png");setExportStatus("Saved to this device.");}
+  catch(e){setExportStatus(e.message||"This keepsake could not be saved.",true);}
+  finally{exportBusy=false;refreshExportControls();}
+}
+function exportReady(){return currentMode!=="magazine"||coverIndex!==null;}
+function refreshExportControls(){
+  const ready=exportReady()&&!exportBusy;
+  [$("shareBtn"),$("saveBtn")].forEach(button=>{if(button)button.disabled=!ready;});
+}
+function setExportStatus(message,error){
+  const el=$("exportStatus");if(!el)return;
+  el.textContent=message||"";el.classList.toggle("error",!!error);
 }
 function resetIdle(){
   clearTimeout(idleTimer);
   if($("review").classList.contains("active")){
     idleTimer=setTimeout(async()=>{
-      photos=[];resetCreativeState();showScreen("timeout");await delay(650);showScreen("welcome");
+      photos=[];resetCreativeState();showScreen("timeout");await delay(650);showBoothReturnScreen();
     },120000);
   }
 }
@@ -1043,17 +1437,8 @@ function renderAdminPreview(){
   const land=adminOrientation==="landscape";
 
   if(adminPreviewType==="strip"){
-    const t=typography(s),W=land?640:430,H=land?470:650;
-    c.width=W;c.height=H;
-    ctx.fillStyle="#fbf7f0";ctx.fillRect(0,0,W,H);
-    ctx.fillStyle="#111";ctx.textAlign="center";
-    fitText(ctx,s.stripTop,W-50,10,t.sans,800,7);ctx.fillText((s.stripTop||"").toUpperCase(),W/2,19);
-    fitText(ctx,s.stripSecond,W-50,land?19:16,t.serif,400,11);ctx.fillText(s.stripSecond||"",W/2,43);
-    ctx.font=`800 8px ${t.sans}`;ctx.globalAlpha=.55;ctx.fillText(s.stripDate||"",W/2,59);ctx.globalAlpha=1;
-    const mx=14,top=72,g=10,footer=78,ph=(H-top-footer-g*2)/3;
-    for(let i=0;i<3;i++){ctx.fillStyle="#dfd8cf";ctx.fillRect(mx,top+i*(ph+g),W-mx*2,ph);}
-    ctx.fillStyle="#111";fitText(ctx,s.stripSignature,W-45,land?25:20,t.script,400,12);ctx.fillText(s.stripSignature||"",W/2,H-38);
-    ctx.font=`800 8px ${t.sans}`;ctx.fillText(s.stripDate||"",W/2,H-18);
+    const photo=Covers.placeholder();
+    renderStrip(ctx,c,[photo,photo,photo],s,adminOrientation,{frameStyle:"white",filterStyle:"original",branding:personalPreviewBranding()});
     return;
   }
 
@@ -1066,7 +1451,8 @@ function renderAdminPreview(){
     Polaroid.render(ctx,{
       width:430,img:Covers.placeholder(),
       copy:Polaroid.copyFor(s),
-      hand:Fonts.stack("hand",s),transition:s.polaroidTransition
+      hand:Fonts.stack("hand",s),transition:s.polaroidTransition,
+      attribution:personalPreviewBranding()
     });
     return;
   }
@@ -1080,7 +1466,8 @@ function renderAdminPreview(){
     fonts:Fonts.faces(s),
     accent:s.accent,
     template:adminPreviewType,
-    edition:{no:14}
+    edition:{no:14},
+    branding:personalPreviewBranding()
   });
 }
 function scheduleAdminPreview(){
@@ -1088,10 +1475,189 @@ function scheduleAdminPreview(){
   adminPreviewTimer=setTimeout(()=>{adminPreviewTimer=0;renderAdminPreview();},90);
 }
 
-$("startBtn").onclick=beginSession;
+function setSetupStep(step){
+  activeSetupStep=Math.max(0,Math.min(4,Number(step)||0));
+  document.querySelectorAll("[data-setup-panel]").forEach(panel=>{
+    const active=Number(panel.dataset.setupPanel)===activeSetupStep;
+    panel.hidden=!active;panel.classList.toggle("active",active);
+  });
+  document.querySelectorAll("[data-setup-step]").forEach(button=>button.classList.toggle("active",Number(button.dataset.setupStep)===activeSetupStep));
+  $("setupBack").hidden=activeSetupStep===0;
+  $("setupNext").hidden=activeSetupStep===4;
+  if(activeSetupStep===3||activeSetupStep===4)renderAdminPreview();
+}
+function openPersonalSettings(returnScreen){
+  settingsReturnScreen=returnScreen||"landing";
+  fillSettingsUI();setSetupStep(0);showScreen("settings");
+  setTimeout(()=>{buildFontRoles();renderAdminPreview();renderEventGallery();},0);
+}
+function savePersonalSettings(showBooth){
+  if(!capabilities.canPersonaliseEvent&&!legacyProfileAvailable)return false;
+  settings=draftSettings();persistSettings();fillSettingsUI();invalidatePolaroid();buildReviewControls();
+  if(boothExampleMode){temporarySettingsSnapshot=null;boothExampleMode=false;}
+  if(showBooth)enterEventHome(false);
+  return true;
+}
+function launchFreeBooth(){
+  restoreTemporarySettings();
+  if(!capabilities.canPersonaliseEvent&&!legacyProfileAvailable){temporarySettingsSnapshot=settings;settings={...DEFAULTS};fillSettingsUI();}
+  boothExampleMode=false;setBoothReturnScreen("landing");enterBoothHistory();beginSession();
+}
+function previewExampleBooth(){
+  enterEventHome(true);
+}
+function returnToProduct(){
+  returnFromEventToProduct();
+}
+
+function idempotencyKey(){
+  if(window.crypto&&typeof window.crypto.randomUUID==="function")return window.crypto.randomUUID();
+  return "mbb-"+Date.now()+"-"+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
+}
+async function jsonRequest(path,options){
+  const response=await fetch(API_BASE+path,options||{});
+  let data={};
+  try{data=await response.json();}catch(e){}
+  if(!response.ok)throw new Error(data.message||data.error||"This service is not available yet.");
+  return data;
+}
+async function loadFoundingAvailability(){
+  if(!API_BASE)return;
+  try{
+    const data=await jsonRequest("/v1/billing/founding");
+    const remaining=Number(data.remaining),limit=Number(data.limit),sold=Number(data.successfulPurchases);
+    if(Number.isInteger(remaining)&&Number.isInteger(limit)&&Number.isInteger(sold)&&limit===500&&remaining>=0&&remaining<=limit&&sold===limit-remaining){
+      $("foundingAvailability").textContent=remaining+" of 500 Founding Lifetime memberships remain, based on verified purchases.";
+    }
+  }catch(e){/* The generic 500-member limit remains truthful before the API is connected. */}
+}
+async function startCheckout(plan){
+  const status=$("checkoutStatus");
+  if(status){status.textContent="Opening secure checkout…";status.className="checkout-status";}
+  try{
+    const data=await jsonRequest("/v1/billing/checkout",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Idempotency-Key":idempotencyKey()},
+      body:JSON.stringify({plan})
+    });
+    if(!data.checkoutUrl)throw new Error("Checkout returned no secure destination.");
+    /* Redirecting opens Checkout; access is still granted only after the
+       verified webhook changes server-side entitlement state. */
+    location.assign(data.checkoutUrl);
+  }catch(e){
+    if(status){status.textContent=e.message||"Checkout is not connected in this preview.";status.className="checkout-status error";}
+  }
+}
+async function requestRestoreAccess(){
+  const email=$("restoreEmail"),button=$("requestRestoreBtn"),status=$("checkoutStatus");
+  if(!email.checkValidity()){email.reportValidity();return;}
+  button.disabled=true;
+  status.textContent="Requesting a secure restore link…";status.className="checkout-status";
+  try{
+    const data=await jsonRequest("/v1/entitlements/restore/request",{
+      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:email.value.trim()})
+    });
+    status.textContent=data.message||"If that address has active access, a restore link will be sent.";
+    status.className="checkout-status success";
+  }catch(e){status.textContent=e.message||"A restore link could not be requested yet.";status.className="checkout-status error";}
+  finally{button.disabled=false;}
+}
+function handleCheckoutReturn(){
+  if(typeof URLSearchParams!=="function")return;
+  const params=new URLSearchParams(location.search),result=params.get("checkout"),status=$("checkoutStatus");
+  if(result!=="success"&&result!=="cancelled")return;
+  if(result==="success"){
+    status.textContent="Checkout returned successfully. Once the verified payment is processed, request a restore link using the email from Checkout.";
+    status.className="checkout-status success";
+    $("restoreAccessForm").hidden=false;
+  }else{
+    status.textContent="Checkout was cancelled. The free photobooth is still ready to use.";
+    status.className="checkout-status";
+  }
+  /* The return is presentational only. Remove the Stripe session identifier
+     from the address without treating it as entitlement evidence. */
+  params.delete("checkout");params.delete("session_id");
+  if(history.replaceState){const query=params.toString();history.replaceState(history.state,"",location.pathname+(query?"?"+query:"")+location.hash);}
+  setTimeout(()=>$("pricing").scrollIntoView({behavior:"smooth",block:"start"}),0);
+}
+function verifiedAccessRecord(data,token,previousExpiry){
+  const plan=String(data&&data.plan||"");
+  const personalPlans=[ENTITLEMENTS.PERSONAL_6_MONTH,ENTITLEMENTS.PERSONAL_12_MONTH,ENTITLEMENTS.FOUNDING_LIFETIME];
+  /* This restore path is Personal-only. Business guests use scoped event
+     credentials and must never turn a browser restore token into organiser
+     capabilities. */
+  if(!PRODUCT||personalPlans.indexOf(plan)===-1)return null;
+  const accessToken=String(data.accessToken||token||"");
+  const accessTokenExpiresAt=String(data.accessTokenExpiresAt||previousExpiry||"");
+  const expiry=Date.parse(accessTokenExpiresAt);
+  if(!accessToken||!Number.isFinite(expiry)||expiry<=Date.now())return null;
+  return {plan,accessToken,accessTokenExpiresAt,entitlements:data.entitlements||[],serverVerified:true,verifiedAt:new Date().toISOString()};
+}
+async function verifyRestoreToken(token){
+  const data=await jsonRequest("/v1/entitlements/restore/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token})});
+  const record=verifiedAccessRecord(data,data.accessToken);
+  if(!record)throw new Error("That restore link does not contain active Personal access.");
+  setEntitlement(record.plan,record);return record;
+}
+async function loadVerifiedAccess(){
+  let cached=null;
+  try{cached=JSON.parse(localStorage.getItem(ACCESS_KEY)||"null");}catch(e){}
+  if(!cached||!cached.accessToken)return;
+  const expiry=Date.parse(cached.accessTokenExpiresAt||"");
+  if(cached.serverVerified===true&&cached.plan&&Number.isFinite(expiry)&&expiry>Date.now())setEntitlement(cached.plan);
+  else{try{localStorage.removeItem(ACCESS_KEY);}catch(e){}return;}
+  try{
+    const data=await jsonRequest("/v1/entitlements/current",{headers:{Authorization:"Bearer "+cached.accessToken}});
+    const record=verifiedAccessRecord(data,cached.accessToken,cached.accessTokenExpiresAt);
+    if(record)setEntitlement(record.plan,record);
+    else{try{localStorage.removeItem(ACCESS_KEY);}catch(e){}setEntitlement(ENTITLEMENTS.FREE);}
+  }catch(e){/* Keep the last server-verified offline grant until its expiry. */}
+}
+
+function syncBusinessConfigurator(){
+  const collectEmail=$("businessCollectEmail"),requireEmail=$("businessRequireEmail"),marketing=$("businessMarketingConsent"),publicity=$("businessPublicityConsent"),collectPhotos=$("businessCollectPhotos");
+  requireEmail.disabled=!collectEmail.checked;if(requireEmail.disabled)requireEmail.checked=false;
+  marketing.disabled=!collectEmail.checked;if(marketing.disabled)marketing.checked=false;
+  collectPhotos.disabled=!publicity.checked;if(collectPhotos.disabled)collectPhotos.checked=false;
+  businessEventConfig=PRODUCT?PRODUCT.createBusinessEventConfig({
+    collectEmail:collectEmail.checked,requireEmail:requireEmail.checked,
+    allowShare:$("businessAllowShare").checked,allowSave:$("businessAllowSave").checked,
+    collectMarketingConsent:marketing.checked,collectPublicityConsent:publicity.checked,
+    collectConsentedPhotos:collectPhotos.checked
+  }):businessEventConfig;
+  $("businessEmailPreview").hidden=!businessEventConfig.collectEmail;
+  $("businessMarketingPreview").hidden=!businessEventConfig.collectMarketingConsent;
+  $("businessPublicityPreview").hidden=!businessEventConfig.collectPublicityConsent;
+  const actions=document.querySelectorAll(".guest-actions button");
+  if(actions[0])actions[0].hidden=!businessEventConfig.allowShare;
+  if(actions[1])actions[1].hidden=!businessEventConfig.allowSave;
+  applyBusinessEventFlow();
+}
+function updateBusinessBrandText(){
+  const name=String($("businessBrandName").value||"").trim()||"Your brand";
+  businessBrand.name=name;businessBrand.primaryColor=$("businessPrimary").value;businessBrand.secondaryColor=$("businessSecondary").value;
+  document.querySelectorAll("#businessMarketingPreview b,#businessPublicityPreview b").forEach(el=>el.textContent=name);
+  $("guestMarketingWording").textContent="I’d like to hear about news and offers from "+name+".";
+  $("guestPublicityWording").textContent="I give "+name+" permission to use my photographs from this event for promotional purposes.";
+}
+function applyBusinessEventFlow(){
+  const isBusiness=entitlement===ENTITLEMENTS.BUSINESS;
+  const panel=$("businessCompletion");if(!panel)return;
+  const needsForm=isBusiness&&(businessEventConfig.collectEmail||businessEventConfig.collectMarketingConsent||businessEventConfig.collectPublicityConsent);
+  const waitingForCompletion=needsForm&&!businessCompletionSatisfied;
+  panel.hidden=!waitingForCompletion;
+  $("guestEmailField").hidden=!businessEventConfig.collectEmail;
+  $("guestMarketingField").hidden=!businessEventConfig.collectMarketingConsent;
+  $("guestPublicityField").hidden=!businessEventConfig.collectPublicityConsent;
+  $("shareBtn").hidden=isBusiness&&(!businessEventConfig.allowShare||waitingForCompletion);
+  $("saveBtn").hidden=isBusiness&&(!businessEventConfig.allowSave||waitingForCompletion);
+}
+
+$("startBtn").onclick=()=>{setBoothReturnScreen("welcome");enterBoothHistory();beginSession();};
 $("cancelCapture").onclick=cancelCapture;
 $("retakeBtn").onclick=beginSession;
 $("nextGuestBtn").onclick=beginSession;
+$("boothHomeBtn").onclick=showBoothReturnScreen;
 $("shareBtn").onclick=shareCurrent;
 $("saveBtn").onclick=saveCurrent;
 $("changeCoverPhoto").onclick=()=>{
@@ -1099,18 +1665,72 @@ $("changeCoverPhoto").onclick=()=>{
   $("magazinePickStep").hidden=false;
   $("magazineStyleStep").hidden=true;
   document.querySelectorAll(".photo-choice").forEach(x=>x.classList.remove("active"));
-  renderWithFade();resetIdle();
+  renderWithFade();refreshExportControls();resetIdle();
 };
 
-$("openSettings").onclick=()=>{fillSettingsUI();showScreen("settings");setTimeout(()=>{buildFontRoles();renderAdminPreview();renderEventGallery();},0);};
-$("closeSettings").onclick=()=>showScreen("welcome");
-$("saveSettings").onclick=()=>{settings=draftSettings();persistSettings();fillSettingsUI();invalidatePolaroid();buildReviewControls();showScreen("welcome");};
-$("resetSettings").onclick=()=>{settings={...DEFAULTS};persistSettings();fillSettingsUI();renderAdminPreview();};
-$("clearGallery").onclick=async()=>{await clearGallerySessions();await renderEventGallery();};
+$("openSettings").onclick=()=>openPersonalSettings("welcome");
+$("closeSettings").onclick=()=>showScreen(settingsReturnScreen||"landing");
+$("saveSettings").onclick=()=>savePersonalSettings(true);
+$("launchCustomBooth").onclick=()=>savePersonalSettings(true);
+$("resetSettings").onclick=()=>{
+  if(!confirm("Reset this booth to the MyBishBash defaults? Your local gallery will not be removed."))return;
+  settings={...DEFAULTS};persistSettings();fillSettingsUI();renderAdminPreview();
+};
+$("clearGallery").onclick=async()=>{
+  if(!confirm("Clear every locally saved session from this device? This cannot be undone."))return;
+  await clearGallerySessions();await renderEventGallery();
+};
+$("setupBack").onclick=()=>setSetupStep(activeSetupStep-1);
+$("setupNext").onclick=()=>setSetupStep(activeSetupStep+1);
+document.querySelectorAll("[data-setup-step]").forEach(button=>button.onclick=()=>setSetupStep(button.dataset.setupStep));
+document.querySelectorAll("[data-accent]").forEach(button=>button.onclick=()=>{
+  $("setAccent").value=button.dataset.accent;refreshCoverPlaceholders();scheduleAdminPreview();
+});
+$("choosePersonalPlan").onclick=()=>{showProductRoute("personal",true);setTimeout(()=>$("pricing").scrollIntoView({behavior:"smooth"}),0);};
+$("openPersonalSetup").onclick=()=>openPersonalSettings("landing");
+$("openPersonalSetupSecondary").onclick=()=>openPersonalSettings("landing");
+$("previewExampleBooth").onclick=previewExampleBooth;
+$("backToProduct").onclick=returnToProduct;
+document.querySelectorAll("[data-start-photobooth]").forEach(button=>button.onclick=launchFreeBooth);
+document.querySelectorAll("[data-product-route]").forEach(link=>link.addEventListener("click",event=>{event.preventDefault();showProductRoute(link.dataset.productRoute,true);}));
+window.addEventListener("popstate",handleHistoryChange);
+document.querySelectorAll("[data-checkout-plan]").forEach(button=>button.onclick=()=>startCheckout(button.dataset.checkoutPlan));
+$("restoreAccessBtn").onclick=()=>{$("restoreAccessForm").hidden=!$("restoreAccessForm").hidden;if(!$("restoreAccessForm").hidden)$("restoreEmail").focus();};
+$("requestRestoreBtn").onclick=requestRestoreAccess;
+$("restoreAccessForm").onsubmit=async event=>{
+  event.preventDefault();const status=$("checkoutStatus"),token=$("restoreCode").value.trim();
+  if(!token)return;
+  status.textContent="Verifying access…";status.className="checkout-status";
+  try{await verifyRestoreToken(token);status.textContent="Personal access restored on this device.";status.className="checkout-status success";$("restoreAccessForm").hidden=true;}
+  catch(e){status.textContent=e.message||"Access could not be restored.";status.className="checkout-status error";}
+};
+
+const businessToggleIds=["businessCollectEmail","businessRequireEmail","businessAllowShare","businessAllowSave","businessMarketingConsent","businessPublicityConsent","businessCollectPhotos"];
+businessToggleIds.forEach(id=>$(id).addEventListener("change",syncBusinessConfigurator));
+["businessBrandName","businessPrimary","businessSecondary"].forEach(id=>$(id).addEventListener("input",updateBusinessBrandText));
+$("businessLogo").addEventListener("change",()=>{
+  const file=$("businessLogo").files&&$("businessLogo").files[0],status=$("businessLogoStatus");
+  if(!file){status.textContent="";return;}
+  const okay=/^(image\/png|image\/jpeg)$/i.test(file.type)&&file.size<=2*1024*1024;
+  status.textContent=okay?"Logo is valid for this local preview.":"Use a PNG or JPG under 2 MB. SVG requires trusted server sanitisation before use.";
+});
+$("businessContinue").onclick=()=>{
+  const email=$("guestEmail"),submission={
+    email:String(email.value||"").trim(),
+    marketingConsent:$("guestMarketingConsent").checked,
+    publicityConsent:$("guestPublicityConsent").checked
+  };
+  const decision=PRODUCT?PRODUCT.validateConsentSubmission(businessEventConfig,submission):{valid:email.checkValidity()};
+  if(!decision.valid){email.focus();setExportStatus("Check the delivery email and the separate event choices before continuing.",true);return;}
+  /* A live Business event must persist this decision through its scoped event
+     API before setting this flag. The public product shell cannot grant those
+     credentials, so this local branch is only the renderer/config preview. */
+  businessCompletionSatisfied=true;applyBusinessEventFlow();setExportStatus("");
+};
 
 document.querySelectorAll(".admin-preview-tab").forEach(b=>b.onclick=()=>{
   adminPreviewType=b.dataset.preview;
-  document.querySelectorAll(".admin-preview-tab").forEach(x=>x.classList.toggle("active",x===b));
+  document.querySelectorAll(".admin-preview-tab").forEach(x=>x.classList.toggle("active",x.dataset.preview===adminPreviewType));
   renderAdminPreview();
 });
 document.querySelectorAll(".admin-orientation-tab").forEach(b=>b.onclick=()=>{
@@ -1125,6 +1745,13 @@ document.querySelectorAll("#settings input,#settings select").forEach(el=>el.add
 }));
 
 fillSettingsUI();
+setSetupStep(0);
+syncBusinessConfigurator();
+updateBusinessBrandText();
+bootstrapNavigation();
+handleCheckoutReturn();
+loadVerifiedAccess();
+loadFoundingAvailability();
 if("serviceWorker" in navigator){
   let hasServiceWorkerController=Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener("controllerchange",()=>{

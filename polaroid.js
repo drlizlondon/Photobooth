@@ -269,10 +269,48 @@ function drawHand(ctx,geo,copy,hand){
   });
 }
 
+/* The output credit belongs to the stationary film chrome. Painting it here
+   guarantees that the live preview, print PNG and every encoded video frame
+   contain the same deliberate footer. */
+function attributionLabel(attribution){
+  if(!attribution)return "";
+  return String(attribution.text||attribution.myBishBashText||attribution.brandName||"").trim();
+}
+function trackedInk(ctx,text,x,y,tracking){
+  const chars=Array.from(String(text||""));
+  let width=0;
+  chars.forEach(ch=>{width+=ctx.measureText(ch).width+tracking;});
+  width=Math.max(0,width-tracking);
+  let at=x-width/2;
+  chars.forEach(ch=>{ctx.fillText(ch,at,y);at+=ctx.measureText(ch).width+tracking;});
+}
+function drawAttribution(ctx,geo,attribution){
+  if(!attribution)return;
+  const label=attributionLabel(attribution),logo=attribution.logoImage||null;
+  if(!label&&!logo)return;
+  const business=/business|white/i.test(String(attribution.mode||""));
+  const y=geo.margin+geo.printH-geo.printW*.026;
+  const size=Math.max(7,geo.printW*.0125),tracking=size*.18;
+  ctx.save();
+  ctx.textBaseline="alphabetic";
+  ctx.textAlign="left";
+  ctx.fillStyle=business?(attribution.primaryColor||INK):"rgba(22,19,15,.72)";
+  ctx.font=`800 ${size}px "Avenir Next",Avenir,"Helvetica Neue",Arial,sans-serif`;
+  if(label)trackedInk(ctx,label.toUpperCase(),geo.W/2,y,tracking);
+  if(logo){
+    try{
+      const ih=logo.naturalHeight||logo.height||1,iw=logo.naturalWidth||logo.width||1;
+      const h=geo.printW*.026,w=Math.min(geo.printW*.13,h*iw/Math.max(1,ih));
+      ctx.drawImage(logo,geo.margin+geo.printW*.035,y-h*.86,w,h);
+    }catch(e){}
+  }
+  ctx.restore();
+}
+
 /* ---------- layers ---------- */
 
 /* Everything that never moves, with the photo window punched out of it. */
-function buildChrome(geo,copy,hand,backdrop){
+function buildChrome(geo,copy,hand,backdrop,attribution){
   const c=document.createElement("canvas");
   c.width=geo.W;c.height=geo.H;
   const ctx=c.getContext("2d");
@@ -307,6 +345,7 @@ function buildChrome(geo,copy,hand,backdrop){
   ctx.restore();
 
   drawHand(ctx,geo,copy,hand);
+  drawAttribution(ctx,geo,attribution);
 
   const p=geo.photo;
   /* The hole. Cleared last so nothing drawn above can creep into the window. */
@@ -348,7 +387,7 @@ function buildPlate(img,geo){
 function compose(o){
   const geo=size(o.base||1296);
   const images=(o.images||[]).filter(Boolean);
-  const chrome=buildChrome(geo,o.copy||{},o.hand||HAND_FALLBACK,o.backdrop);
+  const chrome=buildChrome(geo,o.copy||{},o.hand||HAND_FALLBACK,o.backdrop,o.attribution);
   const plates=images.map(img=>buildPlate(img,geo));
   const t=timing(o.transition);
   const line=timeline({count:plates.length||1,fade:t.fade,hold:t.hold});
@@ -382,7 +421,8 @@ function compose(o){
 function render(ctx,opts){
   const job=compose({
     base:opts.width,images:[opts.img],copy:opts.copy,
-    hand:opts.hand,transition:opts.transition,backdrop:opts.backdrop
+    hand:opts.hand,transition:opts.transition,backdrop:opts.backdrop,
+    attribution:opts.attribution
   });
   job.drawStill(ctx,0);
   return job.geo;

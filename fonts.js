@@ -93,7 +93,7 @@ function labelFor(role,settings){
    is missing measures identically to the generic behind it; two different
    generics are tried because a few faces genuinely share metrics with one. */
 let probe=null;
-const PROBE_TEXT="MWmwil1@#Rae's 26th ♡";
+const PROBE_TEXT="MWmwil1@#Your Celebration ♡";
 function widthIn(family,size){
   if(!probe)probe=document.createElement("canvas").getContext("2d");
   probe.font=`${size}px ${family}`;

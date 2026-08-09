@@ -1,0 +1,5 @@
+.claude/
+.env*
+README.md
+tests/
+worker/

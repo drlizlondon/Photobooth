@@ -1432,6 +1432,68 @@ function tplPress(L){
 
 const RENDERERS={keepsake:tplKeepsake,editorial:tplEditorial,noir:tplNoir,press:tplPress};
 
+/* A small publisher slug is part of the exported cover, not an HTML
+   watermark. The anchor changes with the template so it reads as magazine
+   furniture rather than a sticker dropped over the photograph. */
+function brandingLabel(branding){
+  if(!branding)return "";
+  return String(branding.text||branding.myBishBashText||branding.brandName||"").trim();
+}
+function hexLuma(value){
+  const m=String(value||"").match(/^#([0-9a-f]{6})$/i);
+  if(!m)return 0;
+  const n=parseInt(m[1],16),r=n>>16&255,g=n>>8&255,b=n&255;
+  return (r*299+g*587+b*114)/255000;
+}
+function drawOutputBranding(ctx,L,branding,template){
+  if(!branding)return;
+  const label=brandingLabel(branding),logo=branding.logoImage||null;
+  if(!label&&!logo)return;
+
+  const u=L.u,W=L.W,H=L.H,M=L.M;
+  const mode=String(branding.mode||"");
+  const business=/business|white/i.test(mode);
+  const bg=business?(branding.primaryColor||"#171412"):"#fffdf8";
+  const fg=business&&hexLuma(bg)>.62?"#111":"#fff";
+  const textColour=business?fg:"#111";
+  const accent=branding.secondaryColor||L.accent||"#d86c8f";
+  const fontSize=Math.max(8,11*u),padX=Math.max(7,10*u);
+  const h=Math.max(20,31*u),logoH=logo?h-Math.max(7,10*u):0;
+  let logoW=0;
+  if(logo){
+    const iw=logo.naturalWidth||logo.width||1,ih=logo.naturalHeight||logo.height||1;
+    logoW=Math.min(Math.max(30*u,logoH*iw/Math.max(1,ih)),120*u);
+  }
+  setFont(ctx,800,fontSize,FONT.sans);
+  const text=label.toUpperCase();
+  const textW=text?trackedWidth(ctx,text,fontSize*.12):0;
+  const w=Math.min(W-M*.8,Math.max(70*u,padX*2+textW+(logoW?(logoW+padX):0)));
+  let x=M*.55;
+  if(template==="editorial")x=W-M*.55-w;
+  else if(template==="noir")x=(W-w)/2;
+  else if(template==="press")x=L.land?W-M*.55-w:M*.55;
+  const y=H-M*.28-h;
+
+  ctx.save();
+  ctx.globalAlpha=.94;
+  ctx.fillStyle=bg;ctx.fillRect(x,y,w,h);
+  ctx.globalAlpha=1;
+  ctx.fillStyle=accent;ctx.fillRect(x,y,Math.max(3,4*u),h);
+  let tx=x+padX;
+  if(logo){
+    try{
+      ctx.drawImage(logo,tx,y+(h-logoH)/2,logoW,logoH);
+      tx+=logoW+padX;
+    }catch(e){}
+  }
+  if(text){
+    ctx.fillStyle=textColour;
+    setFont(ctx,800,fontSize,FONT.sans);
+    drawTracked(ctx,text,tx,y+h/2+fontSize*.34,fontSize*.12,"left");
+  }
+  ctx.restore();
+}
+
 function render(ctx,opts){
   if(opts.fonts)Object.assign(FONT,opts.fonts);
   const W=opts.width,H=opts.height;
@@ -1451,6 +1513,7 @@ function render(ctx,opts){
   ctx.textBaseline="alphabetic";
   ctx.textAlign="left";
   (RENDERERS[opts.template]||tplKeepsake)(L);
+  drawOutputBranding(ctx,L,opts.branding,opts.template||"keepsake");
   ctx.restore();
 }
 

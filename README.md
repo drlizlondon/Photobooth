@@ -1,4 +1,76 @@
-# Rae's Photo Booth — Live Build
+# MyBishBash Photobooth
+
+**3 photos. 3 ways to keep them.** MyBishBash Photobooth turns one three-shot
+camera session into a Photo Strip, Magazine Cover and Living Polaroid. The
+public Personal funnel, the booth and the Business surface all live in this
+standalone repository; `mybishbash.app/photobooth` can rewrite or redirect to
+this deployment without merging the code into another MyBishBash project.
+
+The capture and rendering engine remains the proven local-first implementation
+described below. The commercial product shell calls its existing entry points;
+it does not replace the countdown, capture, grading, cover, video or export
+pipelines.
+
+Productisation was baselined before editing at `main` commit
+`e6313f8d8115164e9e8ecdbfaaa131fd6c3bc41a`. The three-shot countdown,
+full-resolution capture, four Strip frames, five pixel filters, four Cover
+templates and adaptive finish, Living Polaroid H.264/PNG paths, iOS Share
+fallbacks, IndexedDB gallery, and service-worker offline flow were all present
+and treated as protected product assets.
+
+## Product surfaces
+
+- `/` is the Personal landing page. **Start Photobooth** immediately enters the
+  real camera flow: no login, checkout, email gate or simulated demo.
+- `/business` is the separate For Business surface. `vercel.json` rewrites the
+  static route back to `index.html`, where the client selects the surface.
+- **Customise My Booth** is a five-step Personal setup over the existing event
+  settings. The full controls remain available under Advanced settings.
+- The homepage product examples are produced by the real Strip, Magazine and
+  Polaroid renderers. `assets/demo-photos.png` supplies only three ordinary
+  input photographs; it is not a set of pre-baked product outputs.
+
+## Product access and attribution
+
+`product.js` is the single entitlement and capability boundary. Application
+behaviour derives from `FREE`, `PERSONAL_6_MONTH`, `PERSONAL_12_MONTH`,
+`FOUNDING_LIFETIME` or `BUSINESS`; prices never act as feature flags.
+
+- Free guests get the full capture, creation, Share and Save experience. Every
+  exported Strip PNG, Magazine PNG, Living Polaroid PNG and Living Polaroid MP4
+  carries a designed-in `MYBISHBASH PHOTOBOOTH` attribution.
+- Personal access enables event customisation and uses the quieter `POWERED BY
+  MYBISHBASH PHOTOBOOTH` attribution. It does not grant logo upload or
+  white-labelling.
+- Business access can add validated brand assets and event-level collection,
+  consent and sharing controls. Guest-photo collection is off by default and
+  is eligible only when both the event setting and the attendee's explicit
+  publicity/photo-use permission are present.
+
+Attribution is rendered into the assets, not placed above them in HTML: Strip
+uses its reserved footer; Magazine draws after the selected real template; and
+Polaroid draws on the stationary print chrome shared by the still and every
+MP4 frame.
+
+## Local-first data and migration
+
+Free and Personal photographs remain on the device. New settings and gallery
+data use MyBishBash-neutral storage names. On a device with the earlier live
+build, settings and up to the existing gallery limit are copied forward from
+the `raePhotoBoothLiveSettings` / `raePhotoBoothGallery` stores while the
+original data is deliberately left intact.
+
+The optional server boundary lives under `worker/`: Cloudflare Workers for the
+API, D1 for customers, purchases, entitlements, Business events and versioned
+consent decisions, and R2 only for validated Business brand assets or
+explicitly enabled, permission-backed Business output collection. Stripe
+Checkout grants nothing on its return URL; only a verified webhook can create
+or update an entitlement. See `worker/README.md` for the API and setup.
+
+The browser calls `/v1` on the same origin by default. A deployment can proxy
+that path to the Worker, or set the `photobooth-api-base` meta value in
+`index.html` to the Worker origin after configuring its CORS allowlist. No
+production credentials are included in this repository.
 
 ## Guest flow
 Start → 3 photos → Strip → optionally try frame/filter → Magazine → pick one of the 3 photos → choose one of four cover styles → Polaroid → Share / Save → Next guest.
@@ -220,28 +292,35 @@ Live previews (using the real cover renderer with a stand-in photo):
 The contract is the same everywhere: **leave a field blank and you get the default**, which the field shows in grey as its placeholder. Defaults are written to be good enough to run the night untouched; the fields are there for when something needs amending.
 
 ## Behaviour
-- No backend.
-- No photo upload.
+- The booth engine does not depend on a backend.
+- Free and Personal sessions never upload photographs.
+- Business photo collection remains off unless the event enables it and the
+  attendee grants the separately recorded photo-use permission.
 - Full-frame camera preview.
 - No centre composition box.
 - Session orientation is locked for all three shots.
-- Cancel immediately stops the session and returns home.
-- Next Guest goes directly to a fresh camera session.
+- Public capture and results expose **Home**, which stops all in-flight camera,
+  render and timeout work before returning to the public landing page.
+- A personalised event exposes **Event Home**, returning to its Tap to Begin
+  welcome screen without leaving event mode.
+- Browser Back follows the same context-aware path; transient camera/results
+  states are never resumed from history.
+- Next Guest goes directly to a fresh camera session and never opens marketing.
+- Retake starts the current guest's three-photo capture again.
 - Soft confetti after the three-shot capture.
 - Two-minute review timeout.
 - Share uses the iOS Share sheet where supported.
 - Save exports a high-resolution PNG.
 - The Living Polaroid also exports a looping H.264 MP4, encoded on the device.
 
-## New Vercel project
+## Vercel deployment
 This is a plain static site.
 
-1. Unzip this folder.
-2. Create a new Vercel project.
-3. Deploy the folder containing `index.html`.
-4. Framework preset: Other / static.
-5. No build command.
-6. No output directory.
+1. Create or link the standalone Photobooth Vercel project.
+2. Deploy the folder containing `index.html`.
+3. Framework preset: Other / static.
+4. No build command.
+5. No output directory.
 
 Use HTTPS so Safari can access the camera.
 
@@ -309,13 +388,11 @@ Measured on this build: 105 frames at 1080 × 1408 encode in ~1.4s to a ~640KB
 MP4, with the animated preview running throughout.
 
 ## Service worker
-Cache `v11` carries the taller A4-adjacent magazine trim and locked editorial
-finish. The `v7` worker remains the
-one-time bridge away from every shipped cache-first worker: when it finds one
-of those legacy booth caches it deletes only this app's old caches, takes
-control, and reloads the open booth page once. Settings and the saved gallery
-survive; photos in the middle of that one legacy migration do not, so deploy
-the migration between booth sessions.
+The current cache is the MyBishBash product shell. Its finite legacy list knows
+about the previously shipped Rae booth caches, deletes only those application
+caches during upgrade, and leaves local settings and IndexedDB gallery data
+alone. Deploy a service-worker migration between booth sessions: an in-flight
+camera capture is intentionally not persisted.
 
 `sw.js` is **network first, cache as offline fallback**. Its network requests
 explicitly bypass the browser HTTP cache, successful responses are fully written
@@ -331,3 +408,22 @@ When the app shell or its asset list changes, update `ASSETS` and bump `CACHE` i
 `sw.js`. Before the event, open the installed booth once with a signal and let
 the migration reload finish; it will then keep the current build available
 offline.
+
+## Verification
+
+The repository stays build-free. Run the static product contract suite with:
+
+```sh
+node --test tests/*.test.js
+```
+
+The Cloudflare boundary has its own TypeScript and policy tests:
+
+```sh
+cd worker
+npm test
+npm run typecheck
+```
+
+Camera permission, native iOS Share sheet behaviour and both encoder paths
+still need a final pass on the target iPhone/iPad over HTTPS before an event.

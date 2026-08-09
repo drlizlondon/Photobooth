@@ -1,6 +1,7 @@
-const CACHE_PREFIX="rae-photo-booth-";
-const CACHE="rae-photo-booth-live-v11";
-const ASSETS=["./","./index.html","./styles.css","./fonts.js","./covers.js","./polaroid.js","./mp4.js","./app.js","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png"];
+const CACHE_PREFIX="mybishbash-photobooth-";
+const CACHE="mybishbash-photobooth-v3";
+const ASSETS=["./","./index.html","./styles.css","./fonts.js","./covers.js","./polaroid.js","./mp4.js","./product.js","./app.js","./marketing.js","./assets/demo-photos.png","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png"];
+const CACHEABLE_ASSET_URLS=new Set(ASSETS.map(path=>new URL(path,self.registration.scope).href));
 
 /* v7 was the bridge away from the old cache-first workers. Those workers can
    load an old app.js and then activate this worker behind it; only the worker
@@ -15,7 +16,8 @@ const LEGACY_CACHES=new Set([
   "rae-photo-booth-live-v3",
   "rae-photo-booth-live-v4",
   "rae-photo-booth-live-v5",
-  "rae-photo-booth-live-v6"
+  "rae-photo-booth-live-v6",
+  "rae-photo-booth-live-v7"
 ]);
 
 self.addEventListener("install",event=>{
@@ -29,7 +31,7 @@ self.addEventListener("activate",event=>{
     const isLegacyUpgrade=keys.some(key=>LEGACY_CACHES.has(key));
     await Promise.all(
       keys
-        .filter(key=>key.startsWith(CACHE_PREFIX)&&key!==CACHE)
+        .filter(key=>(key.startsWith(CACHE_PREFIX)||key.startsWith("rae-photo-booth-"))&&key!==CACHE)
         .map(key=>caches.delete(key))
     );
     await self.clients.claim();
@@ -56,17 +58,24 @@ self.addEventListener("fetch",event=>{
   if(request.method!=="GET"||url.origin!==self.location.origin||!/^https?:$/.test(url.protocol))return;
 
   event.respondWith((async()=>{
+    const cacheKey=new URL(url.href);cacheKey.search="";cacheKey.hash="";
+    /* Cache only the finite public application shell. The product API can
+       return entitlement, Business event and attendee data and must never be
+       copied into or read from the browser's shared Cache Storage. */
+    const cacheable=CACHEABLE_ASSET_URLS.has(cacheKey.href)&&!request.headers.has("authorization");
     try{
       const response=await fetch(request,{cache:"no-store"});
-      if(response.status===200&&response.type==="basic"){
+      if(cacheable&&response.status===200&&response.type==="basic"){
         const copy=response.clone();
         await caches.open(CACHE).then(cache=>cache.put(request,copy)).catch(()=>{});
       }
       return response;
     }catch(error){
       const cache=await caches.open(CACHE);
-      const exact=await cache.match(request);
-      if(exact)return exact;
+      if(cacheable){
+        const exact=await cache.match(request);
+        if(exact)return exact;
+      }
       if(request.mode==="navigate"){
         const shell=await cache.match(new URL("./index.html",self.registration.scope).href);
         if(shell)return shell;

@@ -2,33 +2,397 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-  <meta name="theme-color" content="#0b0b0b" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Photo Booth" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="MyBishBash Photobooth" />
+  <meta name="description" content="Take three photos and turn them into a photo strip, magazine cover and moving Polaroid." />
+  <meta name="business-contact-url" content="https://mybishbash.app/contact" />
+  <meta name="photobooth-api-base" content="" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="stylesheet" href="styles.css" />
-  <title>Rae's Photo Booth</title>
+  <title>MyBishBash Photobooth</title>
 </head>
 <body>
 <main id="app">
 
-<section id="welcome" class="screen active welcome-screen">
-  <button id="openSettings" class="settings-link" type="button">SETTINGS</button>
+<section id="landing" class="screen active landing-screen product-surface">
+  <header class="site-nav" aria-label="Main navigation">
+    <a class="wordmark" href="./" data-product-route="personal" aria-label="MyBishBash Photobooth home">
+      <span><b>MY</b><b>BISH</b><b>BASH</b></span>
+      <small>PHOTOBOOTH</small>
+    </a>
+    <nav class="audience-nav" aria-label="Choose product">
+      <a href="./" data-product-route="personal" aria-current="page">Personal</a>
+      <span aria-hidden="true">|</span>
+      <a href="business" data-product-route="business">For Business</a>
+    </nav>
+    <button class="nav-start" data-start-photobooth type="button">Start</button>
+  </header>
+
+  <div class="landing-content">
+    <section class="hero-section page-section" aria-labelledby="heroTitle">
+      <div class="hero-copy">
+        <p class="product-kicker hero-kicker">FOR PERSONAL EVENTS</p>
+        <h1 id="heroTitle" aria-label="Your party. Your photobooth.">Your party.<br>Your <span>photobooth.</span></h1>
+        <p class="hero-proposition">Take 3 photos. Make photo strips, magazine covers and moving Polaroids.</p>
+        <div class="hero-actions">
+          <button class="product-cta hero-start" data-start-photobooth type="button">
+            <svg aria-hidden="true" viewBox="0 0 28 22" focusable="false"><path d="M2 6.5h5l2-3h10l2 3h5v14H2z"></path><circle cx="14" cy="13.5" r="4.5"></circle></svg>
+            <span>START PHOTOBOOTH</span>
+          </button>
+        </div>
+        <p class="trust-line">Free to try · No sign-up · Photos stay on your device</p>
+        <div class="hero-benefits" aria-label="Photobooth benefits">
+          <span>Works on your phone</span>
+          <span>Takes seconds</span>
+          <span>Save &amp; share</span>
+          <span>No app download</span>
+        </div>
+      </div>
+
+      <div class="hero-visual hero-collage" aria-label="A photo strip, magazine cover and moving Polaroid made from the same three party photos">
+        <span class="collage-shape collage-pink" aria-hidden="true"></span>
+        <span class="collage-shape collage-blue" aria-hidden="true"></span>
+        <span class="collage-shape collage-yellow" aria-hidden="true"></span>
+        <canvas id="heroStripCanvas" class="hero-output hero-output-strip" role="img" aria-label="Example MyBishBash photo strip"></canvas>
+        <canvas id="heroMagazineCanvas" class="hero-output hero-output-magazine" role="img" aria-label="Example MyBishBash magazine cover"></canvas>
+        <canvas id="heroPolaroidCanvas" class="hero-output hero-output-polaroid" role="img" aria-label="Example moving MyBishBash Living Polaroid"></canvas>
+        <span class="collage-badge" aria-hidden="true">3 PHOTOS<br>3 KEEPSAKES</span>
+        <span class="collage-doodle collage-heart" aria-hidden="true">♡</span>
+        <span class="collage-doodle collage-star" aria-hidden="true">✦</span>
+        <span class="collage-doodle collage-rays" aria-hidden="true">///</span>
+      </div>
+    </section>
+
+    <section class="transformation-section page-section" aria-labelledby="transformTitle">
+      <div class="section-heading-row">
+        <div>
+          <p class="section-number">01 / THREE PHOTOS</p>
+          <h2 id="transformTitle">3 photos. <span>3 ways</span> to keep them.</h2>
+        </div>
+        <p>Take them once, then make all three without starting again.</p>
+      </div>
+
+      <div class="input-story">
+        <div>
+          <p class="micro-label">YOUR THREE PHOTOS</p>
+          <div id="demoInputs" class="demo-inputs" aria-label="Three example phone photos"></div>
+        </div>
+        <span class="story-arrow" aria-hidden="true">→</span>
+        <p class="story-note">One quick session.<br>Three finished keepsakes.</p>
+      </div>
+
+      <div class="output-demo-grid">
+        <article class="output-demo-card strip-demo-card">
+          <div class="demo-card-head">
+            <div><span>01</span><h3>Photo Strip</h3></div>
+            <p>Four frames. Five filters. Pick your favourite.</p>
+          </div>
+          <div class="demo-canvas-stage strip-stage"><canvas id="landingStripCanvas"></canvas></div>
+          <div class="demo-control-group">
+            <span>FRAME</span>
+            <div class="demo-chip-row">
+              <button class="active" data-demo-frame="white" type="button">White</button>
+              <button data-demo-frame="black" type="button">Black</button>
+              <button data-demo-frame="editorial" type="button">Editorial</button>
+              <button data-demo-frame="film" type="button">Film</button>
+            </div>
+          </div>
+          <div class="demo-control-group">
+            <span>FILTER</span>
+            <div class="demo-chip-row">
+              <button class="active" data-demo-filter="original" type="button">Original</button>
+              <button data-demo-filter="bw" type="button">B&amp;W</button>
+              <button data-demo-filter="vintage" type="button">Vintage</button>
+              <button data-demo-filter="warm" type="button">Warm</button>
+              <button data-demo-filter="glow" type="button">Glow</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="output-demo-card magazine-demo-card">
+          <div class="demo-card-head">
+            <div><span>02</span><h3>Magazine Cover</h3></div>
+            <p>Four cover styles made for your best shot.</p>
+          </div>
+          <div class="demo-canvas-stage"><canvas id="landingMagazineCanvas"></canvas></div>
+          <div class="demo-control-group">
+            <span>COVER STYLE</span>
+            <div class="demo-chip-row">
+              <button class="active" data-demo-template="keepsake" type="button">Keepsake</button>
+              <button data-demo-template="editorial" type="button">Editorial</button>
+              <button data-demo-template="noir" type="button">Noir</button>
+              <button data-demo-template="press" type="button">Press</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="output-demo-card polaroid-demo-card">
+          <div class="demo-card-head">
+            <div><span>03</span><h3>Living Polaroid</h3></div>
+            <p>All three photos move inside one instant print.</p>
+          </div>
+          <div class="demo-canvas-stage"><canvas id="landingPolaroidCanvas"></canvas></div>
+          <p class="motion-note"><span aria-hidden="true"></span> Yes, this one really moves.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="personal-value-section page-section" aria-labelledby="personalValueTitle">
+      <div class="section-heading-row">
+        <div>
+          <p class="section-number">02 / MAKE IT YOURS</p>
+          <h2 id="personalValueTitle">Make the party feel like yours.</h2>
+        </div>
+        <p>The photobooth is free. Personal gives your event its own welcome screen, wording and colour.</p>
+      </div>
+      <div class="compare-grid">
+        <article class="compare-card free-compare">
+          <div class="compare-label"><span>FREE</span><small>READY TO GO</small></div>
+          <div class="free-welcome-demo" aria-label="Free MyBishBash Photobooth welcome">
+            <p>PHOTO BOOTH</p>
+            <h3>MYBISHBASH<br>PHOTOBOOTH</h3>
+            <span>START · tap to begin</span>
+          </div>
+          <strong>MYBISHBASH PHOTOBOOTH</strong>
+        </article>
+        <div class="compare-versus" aria-hidden="true">VS</div>
+        <article class="compare-card personal-compare">
+          <div class="compare-label"><span>PERSONALISED</span><small>YOUR EVENT</small></div>
+          <div class="booth-browser personal-welcome-browser">
+            <div class="booth-browser-bar" aria-hidden="true">
+              <span></span><span></span><span></span>
+              <small>your event photobooth</small>
+            </div>
+            <div class="booth-example">
+              <p class="eyebrow">PHOTO BOOTH</p>
+              <h3>Rae’s 26th<br>Birthday</h3>
+              <p class="booth-example-date">2026</p>
+              <button id="previewExampleBooth" class="round-start compact" type="button">
+                <span>START</span>
+                <small>tap to begin</small>
+              </button>
+            </div>
+          </div>
+          <strong>RAE’S 26TH BIRTHDAY</strong>
+        </article>
+      </div>
+      <div class="personal-proof">
+        <div class="personal-proof-copy">
+          <ul>
+            <li>Add your event name and date.</li>
+            <li>Choose your colour and keepsake wording.</li>
+            <li>Preview everything before the party starts.</li>
+          </ul>
+          <button id="openPersonalSetup" class="product-link" type="button">See everything you can personalise</button>
+        </div>
+        <button id="openPersonalSetupSecondary" class="product-cta" type="button">PREVIEW MY BOOTH</button>
+      </div>
+    </section>
+
+    <section id="pricing" class="pricing-section page-section" aria-labelledby="pricingTitle">
+      <p class="section-number">03 / PERSONAL PRICING</p>
+      <h2 id="pricingTitle">Use it free. Personalise it when the party is yours.</h2>
+      <div class="pricing-grid">
+        <article class="price-card">
+          <p>Free</p>
+          <h3>£0</h3>
+          <span>Use the full photobooth with MyBishBash-branded outputs.</span>
+          <button data-start-photobooth type="button">Start free</button>
+        </article>
+        <article class="price-card">
+          <p>6 Months</p>
+          <h3>£30</h3>
+          <span>Personal customisation for six months.</span>
+          <button data-checkout-plan="PERSONAL_6_MONTH" type="button">Choose 6 months</button>
+        </article>
+        <article class="price-card">
+          <p>1 Year</p>
+          <h3>£50</h3>
+          <span>Personal customisation for twelve months.</span>
+          <button data-checkout-plan="PERSONAL_12_MONTH" type="button">Choose 1 year</button>
+        </article>
+        <article class="price-card founding-card">
+          <div class="founding-ribbon">FOUNDING</div>
+          <p>Founding Lifetime</p>
+          <h3>£100</h3>
+          <span>Lifetime Personal customisation.</span>
+          <small id="foundingAvailability">Limited to the first 500 Founding Lifetime customers.</small>
+          <button data-checkout-plan="FOUNDING_LIFETIME" type="button">Choose lifetime</button>
+        </article>
+      </div>
+      <div id="checkoutStatus" class="checkout-status" role="status" aria-live="polite"></div>
+      <button id="restoreAccessBtn" class="restore-link" type="button">Restore Personal access</button>
+      <form id="restoreAccessForm" class="restore-form" hidden>
+        <label for="restoreEmail">Email used at checkout</label>
+        <div><input id="restoreEmail" type="email" inputmode="email" autocomplete="email" maxlength="254"><button id="requestRestoreBtn" type="button">Send restore link</button></div>
+        <label for="restoreCode">Your access code</label>
+        <div><input id="restoreCode" type="text" autocomplete="one-time-code" maxlength="96"><button type="submit">Restore</button></div>
+        <small>We respond the same way whether or not an address exists. Access is granted only after the server verifies a completed purchase.</small>
+      </form>
+    </section>
+
+    <section class="privacy-section page-section" aria-labelledby="privacyTitle">
+      <div>
+        <p class="section-number">04 / PRIVATE BY DEFAULT</p>
+        <h2 id="privacyTitle">Your photos stay at the party.</h2>
+      </div>
+      <div class="privacy-points">
+        <p><strong>Free + Personal</strong><span>Photos stay on your device. There is no backend photo upload.</span></p>
+        <p><strong>Works locally</strong><span>The booth keeps its offline-first behaviour for unreliable event Wi-Fi.</span></p>
+        <p><strong>Business is explicit</strong><span>Photo collection is off by default and only becomes eligible with the event setting and separate attendee permission.</span></p>
+      </div>
+    </section>
+
+    <section class="business-teaser page-section">
+      <p class="product-kicker">FOR BUSINESS</p>
+      <h2>Want your brand on the booth?</h2>
+      <p>Add your logo and colours, brand the welcome and keepsakes, configure Share and Save, and keep every consent choice separate.</p>
+      <a class="product-cta" href="https://mybishbash.app/contact">TALK TO US</a>
+    </section>
+  </div>
+
+  <footer class="site-footer">
+    <a class="wordmark inverse" href="./" data-product-route="personal"><span><b>MY</b><b>BISH</b><b>BASH</b></span><small>PHOTOBOOTH</small></a>
+    <p>3 photos. 3 ways to keep them.</p>
+    <nav><a href="./" data-product-route="personal">Personal</a><a href="business" data-product-route="business">For Business</a><button data-start-photobooth type="button">Start photobooth</button></nav>
+  </footer>
+</section>
+
+<section id="business" class="screen business-screen product-surface">
+  <header class="site-nav business-nav" aria-label="Business navigation">
+    <a class="wordmark" href="./" data-product-route="personal"><span><b>MY</b><b>BISH</b><b>BASH</b></span><small>PHOTOBOOTH</small></a>
+    <nav class="audience-nav">
+      <a href="./" data-product-route="personal">Personal</a>
+      <span aria-hidden="true">|</span>
+      <a href="business" data-product-route="business" aria-current="page">For Business</a>
+    </nav>
+    <a class="nav-start business-contact-link" href="https://mybishbash.app/contact">Talk to us</a>
+  </header>
+
+  <div class="business-content">
+    <section class="business-hero page-section" aria-labelledby="businessTitle">
+      <div>
+        <p class="product-kicker">MYBISHBASH FOR BUSINESS</p>
+        <h1 id="businessTitle">Want your brand on the booth?</h1>
+        <p>Build a branded photobooth activation with real event controls—not a fixed one-size-fits-all flow.</p>
+        <a class="product-cta" href="https://mybishbash.app/contact">TALK TO US</a>
+      </div>
+      <div class="business-audience-list" aria-label="Who Business is for">
+        <span>BRANDS</span><span>VENUES</span><span>EVENT AGENCIES</span><span>COMPANIES</span><span>SCHOOLS</span><span>ORGANISERS</span>
+      </div>
+    </section>
+
+    <section class="brand-lab page-section" aria-labelledby="brandLabTitle">
+      <div class="brand-lab-copy">
+        <p class="section-number">01 / BRAND THE REAL OUTPUT</p>
+        <h2 id="brandLabTitle">Your brand’s photobooth.</h2>
+        <p>Preview brand-safe controls against the real Magazine renderer. Uploaded assets remain separate from guest photographs.</p>
+        <div class="brand-fields">
+          <label>Organisation name<input id="businessBrandName" type="text" value="Northstar Studio" maxlength="48"></label>
+          <div class="brand-colours">
+            <label>Primary colour<input id="businessPrimary" type="color" value="#2357ff"></label>
+            <label>Accent colour<input id="businessSecondary" type="color" value="#ffcf33"></label>
+          </div>
+          <label class="brand-file">Logo preview <input id="businessLogo" type="file" accept="image/png,image/jpeg,image/svg+xml"><small>PNG or JPG recommended. SVG is accepted only after safe validation. Maximum 2 MB.</small></label>
+          <p id="businessLogoStatus" class="field-status" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+      <div class="business-preview-wrap"><canvas id="businessPreviewCanvas"></canvas><p>Live renderer preview</p></div>
+    </section>
+
+    <section class="business-capabilities page-section" aria-labelledby="businessCapabilitiesTitle">
+      <p class="section-number">02 / BEYOND WHITE-LABELLING</p>
+      <h2 id="businessCapabilitiesTitle">Configure the event you’re actually running.</h2>
+      <div class="capability-cards">
+        <article><span>BRAND</span><h3>Booth + outputs</h3><p>Welcome screen, Tap to Begin, Strip, Magazine and Living Polaroid, with optional white-labelling and bespoke templates later.</p></article>
+        <article><span>DELIVERY</span><h3>Share, save or email</h3><p>Choose immediate Share/Save or a configured delivery flow. Free and Personal keep normal Share and Save.</p></article>
+        <article><span>DATA</span><h3>Useful, not a giant CRM</h3><p>Event-level attendee and consent records, with a simple export for the organiser.</p></article>
+      </div>
+    </section>
+
+    <section class="activation-builder page-section" aria-labelledby="activationTitle">
+      <div class="activation-intro">
+        <p class="section-number">03 / EVENT FLOW</p>
+        <h2 id="activationTitle">Every event can make its own choices.</h2>
+        <p>This public preview shows the independent switches the Business architecture supports. Nothing is pre-ticked for an attendee.</p>
+      </div>
+      <div class="activation-grid">
+        <fieldset class="config-panel">
+          <legend>ORGANISER CONFIGURATION</legend>
+          <label class="toggle"><input id="businessCollectEmail" type="checkbox"><span>Collect email address</span></label>
+          <label class="toggle"><input id="businessRequireEmail" type="checkbox"><span>Require email before completion</span></label>
+          <label class="toggle"><input id="businessAllowShare" type="checkbox" checked><span>Show Share button</span></label>
+          <label class="toggle"><input id="businessAllowSave" type="checkbox" checked><span>Show Save/download</span></label>
+          <label class="toggle"><input id="businessMarketingConsent" type="checkbox"><span>Offer marketing opt-in</span></label>
+          <label class="toggle"><input id="businessPublicityConsent" type="checkbox"><span>Ask for publicity/photo-use permission</span></label>
+          <label class="toggle"><input id="businessCollectPhotos" type="checkbox"><span>Collect consented photos</span></label>
+          <p class="config-warning">Photo collection stays off by default. Enabling it does not replace the attendee’s separate permission.</p>
+        </fieldset>
+
+        <div class="guest-form-preview">
+          <p class="micro-label">ATTENDEE VIEW</p>
+          <h3>Your photo is ready</h3>
+          <label id="businessEmailPreview">Email address<input type="email" inputmode="email" placeholder="you@example.com"></label>
+          <label id="businessMarketingPreview" class="consent-line"><input type="checkbox"> <span>I’d like to hear about news and offers from <b>Northstar Studio</b>.</span></label>
+          <label id="businessPublicityPreview" class="consent-line"><input type="checkbox"> <span>I give <b>Northstar Studio</b> permission to use my photographs from this event for promotional purposes.</span></label>
+          <small>The wording and version are stored with each recorded choice. Giving an email never implies marketing or photo-use consent.</small>
+          <div class="guest-actions"><button type="button">Share</button><button type="button">Save</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="business-privacy page-section" aria-labelledby="businessPrivacyTitle">
+      <p class="section-number">04 / DATA BOUNDARIES</p>
+      <h2 id="businessPrivacyTitle">Local-first remains the default.</h2>
+      <div class="privacy-flow">
+        <div><strong>FREE + PERSONAL</strong><span>Photos stay on the device</span></div>
+        <i aria-hidden="true"></i>
+        <div><strong>BUSINESS</strong><span>Collection must be enabled</span></div>
+        <i aria-hidden="true"></i>
+        <div><strong>ATTENDEE</strong><span>Separate permission must be given</span></div>
+        <i aria-hidden="true"></i>
+        <div><strong>ONLY THEN</strong><span>The authorised output can upload</span></div>
+      </div>
+      <p class="legal-note">Consent wording must be configured and reviewed for the organisation and use case. Marketing consent and photo-publicity permission are separate decisions.</p>
+    </section>
+
+    <section class="business-final page-section">
+      <p class="product-kicker">FOR YOUR NEXT EVENT</p>
+      <h2>Build the booth around the activation.</h2>
+      <p>Brand the experience, choose how guests receive it, and collect only what the event has genuinely configured and earned permission to use.</p>
+      <a class="product-cta" href="https://mybishbash.app/contact">TALK TO US</a>
+    </section>
+  </div>
+
+  <footer class="site-footer business-footer">
+    <a class="wordmark inverse" href="./" data-product-route="personal"><span><b>MY</b><b>BISH</b><b>BASH</b></span><small>PHOTOBOOTH</small></a>
+    <p>Business photobooths, configured event by event.</p>
+    <nav><a href="./" data-product-route="personal">Personal</a><a href="business" data-product-route="business">For Business</a></nav>
+  </footer>
+</section>
+
+<section id="welcome" class="screen welcome-screen booth-surface">
+  <div class="booth-corner-actions">
+    <button id="backToProduct" class="settings-link back-link" type="button">BACK TO WEBSITE</button>
+    <button id="openSettings" class="settings-link" type="button">CUSTOMISE</button>
+  </div>
   <div class="welcome-inner">
     <p class="eyebrow" id="welcomeEyebrow">PHOTO BOOTH</p>
-    <h1 id="welcomeTitle">Rae's 26th Birthday</h1>
-    <p id="welcomeDate" class="welcome-date">2026</p>
+    <h1 id="welcomeTitle">Your Celebration</h1>
+    <p id="welcomeDate" class="welcome-date"></p>
     <button id="startBtn" class="round-start" type="button">
       <span id="startLabelText">START</span>
       <small id="startHintText">tap to begin</small>
     </button>
+    <p id="welcomePoweredBy" class="booth-powered">Powered by MyBishBash Photobooth</p>
   </div>
 </section>
 
-<section id="camera" class="screen camera-screen">
+<section id="camera" class="screen camera-screen booth-surface">
   <div class="camera-wrap">
     <video id="video" autoplay playsinline muted></video>
     <canvas id="captureCanvas" hidden></canvas>
@@ -40,38 +404,40 @@
     <div id="promptText" class="prompt-text"></div>
     <div id="countdown" class="countdown"></div>
     <div id="flash" class="flash"></div>
+    <p class="camera-brand">MYBISHBASH PHOTOBOOTH</p>
   </div>
 </section>
 
-<section id="review" class="screen review-screen">
+<section id="review" class="screen review-screen booth-surface">
   <div id="confettiLayer" class="confetti-layer" aria-hidden="true"></div>
   <div class="review-grid">
-    <div class="preview-stage">
-      <canvas id="mainCanvas"></canvas>
-      <video id="polaroidVideo" class="polaroid-video" autoplay muted playsinline loop hidden></video>
+    <div class="preview-column">
+      <p class="results-kicker">3 PHOTOS. 3 WAYS TO KEEP THEM.</p>
+      <div class="preview-stage">
+        <canvas id="mainCanvas"></canvas>
+        <video id="polaroidVideo" class="polaroid-video" autoplay muted playsinline loop hidden></video>
+      </div>
     </div>
 
     <aside class="review-panel">
-      <div class="review-nav">
-        <button class="mode-tab active" id="stripTab" data-mode="strip" type="button">Strip</button>
-        <button class="mode-tab" id="magazineTab" data-mode="magazine" type="button">Magazine</button>
-        <button class="mode-tab" id="polaroidTab" data-mode="polaroid" type="button">Polaroid</button>
+      <div class="review-nav" aria-label="Choose output">
+        <button class="mode-tab active" id="stripTab" data-mode="strip" type="button">STRIP</button>
+        <button class="mode-tab" id="magazineTab" data-mode="magazine" type="button">MAGAZINE</button>
+        <button class="mode-tab" id="polaroidTab" data-mode="polaroid" type="button">POLAROID</button>
       </div>
 
       <div id="stripControls" class="mode-controls active">
         <p class="control-label" id="frameLabelText">FRAME</p>
         <div id="frameChoices" class="choice-row"></div>
-
         <p class="control-label" id="filterLabelText">FILTER</p>
         <div id="filterChoices" class="choice-row"></div>
       </div>
 
       <div id="magazineControls" class="mode-controls">
         <div id="magazinePickStep">
-          <p class="control-label" id="pickLabelText">PICK YOUR COVER</p>
+          <p class="control-label" id="pickLabelText">PICK YOUR COVER PHOTO</p>
           <div id="coverPhotoChoices" class="photo-choice-grid"></div>
         </div>
-
         <div id="magazineStyleStep" hidden>
           <p class="control-label" id="styleLabelText">CHOOSE A STYLE</p>
           <div id="magazineStyleChoices" class="mag-style-grid"></div>
@@ -84,178 +450,230 @@
         <p id="polaroidStatus" class="polaroid-status"></p>
       </div>
 
+      <section id="businessCompletion" class="business-completion" hidden aria-labelledby="businessCompletionTitle">
+        <p class="control-label" id="businessCompletionTitle">YOUR DELIVERY DETAILS</p>
+        <label id="guestEmailField">Email address<input id="guestEmail" type="email" inputmode="email" autocomplete="email"></label>
+        <label id="guestMarketingField" class="consent-line"><input id="guestMarketingConsent" type="checkbox"><span id="guestMarketingWording"></span></label>
+        <label id="guestPublicityField" class="consent-line"><input id="guestPublicityConsent" type="checkbox"><span id="guestPublicityWording"></span></label>
+        <button id="businessContinue" class="primary-btn" type="button">Continue</button>
+      </section>
+
+      <p id="outputBrandingNote" class="output-branding-note">Free keepsakes include tasteful MyBishBash Photobooth credit.</p>
       <div class="share-row">
         <button id="shareBtn" class="primary-btn" type="button">Share</button>
         <button id="saveBtn" class="secondary-btn" type="button">Save</button>
       </div>
-
+      <p id="exportStatus" class="export-status" role="status" aria-live="polite"></p>
       <button id="nextGuestBtn" class="next-btn" type="button">Next guest →</button>
       <button id="retakeBtn" class="text-action" type="button">Retake photos</button>
+      <button id="boothHomeBtn" class="booth-home-btn" type="button">Home</button>
     </aside>
   </div>
 </section>
 
-<section id="timeout" class="screen timeout-screen">
+<section id="timeout" class="screen timeout-screen booth-surface">
   <div>
     <p class="eyebrow" id="endEyebrow">SESSION COMPLETE</p>
     <h2 id="endMessage">Thank you ♡</h2>
   </div>
 </section>
 
-<section id="settings" class="screen settings-screen">
+<section id="settings" class="screen settings-screen product-surface">
   <div class="settings-shell">
     <div class="settings-head">
       <div>
-        <p class="eyebrow">ADMIN</p>
-        <h2>Event settings</h2>
+        <p class="eyebrow">PERSONAL SETUP</p>
+        <h2>Customise My Booth</h2>
+        <p id="settingsAccessNote" class="settings-access-note">Preview the Personal experience, then choose access when you are ready to use it.</p>
       </div>
-      <button id="closeSettings" class="close-btn" type="button">×</button>
+      <button id="closeSettings" class="close-btn" type="button" aria-label="Close customisation">×</button>
     </div>
 
-    <div class="admin-grid">
+    <div class="setup-progress" aria-label="Setup progress">
+      <button class="active" data-setup-step="0" type="button"><span>1</span>Name</button>
+      <button data-setup-step="1" type="button"><span>2</span>Colour</button>
+      <button data-setup-step="2" type="button"><span>3</span>Wording</button>
+      <button data-setup-step="3" type="button"><span>4</span>Preview</button>
+      <button data-setup-step="4" type="button"><span>5</span>Start</button>
+    </div>
+
+    <div class="admin-grid guided-grid">
       <div class="settings-fields">
-        <h3>Welcome</h3>
-        <div class="field-grid">
-          <label>Event title<input id="setEventTitle" type="text" maxlength="64"></label>
-          <label>Date / year<input id="setDate" type="text" maxlength="32"></label>
+        <section class="setup-step active" data-setup-panel="0">
+          <p class="step-kicker">STEP 1 OF 5</p>
+          <h3>Name your event</h3>
+          <p class="field-help large">One title gives the Magazine and Polaroid renderers strong automatic wording. You can refine it later if you want to.</p>
+          <div class="field-grid">
+            <label>Event title<input id="setEventTitle" type="text" maxlength="64" placeholder="Rae’s 26th Birthday"></label>
+            <label>Date / year<input id="setDate" type="text" maxlength="32" placeholder="2026"></label>
+          </div>
+          <div class="default-proof"><span>AUTOMATIC</span><p>Magazine masthead, issue lines, Strip signature and Polaroid handwriting update from the event title.</p></div>
+        </section>
+
+        <section class="setup-step" data-setup-panel="1" hidden>
+          <p class="step-kicker">STEP 2 OF 5</p>
+          <h3>Choose your colour</h3>
+          <p class="field-help large">Use one confident accent throughout the booth. Output layouts keep their proven contrast and legibility rules.</p>
+          <label class="accent-picker">Accent colour<input id="setAccent" type="color" value="#ff5b52"></label>
+          <div class="colour-presets" aria-label="Colour suggestions">
+            <button data-accent="#ff5b52" style="--swatch:#ff5b52" type="button">Tomato</button>
+            <button data-accent="#ffd43b" style="--swatch:#ffd43b" type="button">Sunshine</button>
+            <button data-accent="#2357ff" style="--swatch:#2357ff" type="button">Cobalt</button>
+            <button data-accent="#d86c8f" style="--swatch:#d86c8f" type="button">Rose</button>
+            <button data-accent="#39b87f" style="--swatch:#39b87f" type="button">Mint</button>
+          </div>
+        </section>
+
+        <section class="setup-step" data-setup-panel="2" hidden>
+          <p class="step-kicker">STEP 3 OF 5</p>
+          <h3>Personalise your wording</h3>
+          <p class="field-help large">A handful of high-impact lines is enough. Leave anything blank and MyBishBash writes a sensible default.</p>
+          <div class="field-grid">
+            <label>Welcome eyebrow<input id="setWelcomeEyebrow" type="text" maxlength="32"></label>
+            <label>Start button<input id="setStartLabel" type="text" maxlength="20"></label>
+            <label>Start button hint<input id="setStartHint" type="text" maxlength="28"></label>
+            <label>Camera prompts<input id="setPromptLines" type="text" maxlength="120"></label>
+            <label>Strip top line<input id="setStripTop" type="text" maxlength="54"></label>
+            <label>Strip second line<input id="setStripSecond" type="text" maxlength="64"></label>
+            <label>Strip signature<input id="setStripSignature" type="text" maxlength="64"></label>
+            <label>Strip date<input id="setStripDate" type="text" maxlength="40"></label>
+            <label>Polaroid first line<input id="setPolaroidLine1" type="text" maxlength="30"></label>
+            <label>Polaroid final line<input id="setPolaroidLine4" type="text" maxlength="46"></label>
+          </div>
+        </section>
+
+        <section class="setup-step" data-setup-panel="3" hidden>
+          <p class="step-kicker">STEP 4 OF 5</p>
+          <h3>Preview your booth</h3>
+          <p class="field-help large">These tabs use the real output renderers. Try both camera orientations before the event.</p>
+          <div class="mobile-preview-tabs admin-preview-tabs">
+            <button class="admin-preview-tab active" data-preview="strip" type="button">Strip</button>
+            <button class="admin-preview-tab" data-preview="keepsake" type="button">Keepsake</button>
+            <button class="admin-preview-tab" data-preview="editorial" type="button">Editorial</button>
+            <button class="admin-preview-tab" data-preview="noir" type="button">Noir</button>
+            <button class="admin-preview-tab" data-preview="press" type="button">Press</button>
+            <button class="admin-preview-tab" data-preview="polaroid" type="button">Polaroid</button>
+          </div>
+        </section>
+
+        <section class="setup-step" data-setup-panel="4" hidden>
+          <p class="step-kicker">STEP 5 OF 5</p>
+          <h3>Start your booth</h3>
+          <p class="field-help large">Personal access lets you save this event setup and run the personalised booth. Your photographs still stay on this device.</p>
+          <div class="setup-summary">
+            <p><span>EVENT</span><strong id="setupSummaryTitle">Your Celebration</strong></p>
+            <p><span>BRANDING</span><strong>Powered by MyBishBash Photobooth</strong></p>
+            <p><span>PHOTOS</span><strong>Stored locally on this device</strong></p>
+          </div>
+          <div class="final-setup-actions">
+            <button id="saveSettings" class="primary-btn" type="button">Save my booth</button>
+            <button id="launchCustomBooth" class="secondary-btn" type="button">Start personalised booth</button>
+            <button id="choosePersonalPlan" class="text-action" type="button">View Personal pricing</button>
+          </div>
+        </section>
+
+        <div class="setup-step-actions">
+          <button id="setupBack" class="text-action" type="button" hidden>Back</button>
+          <button id="setupNext" class="primary-btn" type="button">Next</button>
         </div>
 
-        <h3>Strip</h3>
-        <div class="field-grid">
-          <label>Top line<input id="setStripTop" type="text" maxlength="54"></label>
-          <label>Second line<input id="setStripSecond" type="text" maxlength="64"></label>
-          <label>Bottom signature<input id="setStripSignature" type="text" maxlength="64"></label>
-          <label>Bottom date<input id="setStripDate" type="text" maxlength="40"></label>
-        </div>
+        <details id="advancedSettings" class="advanced-settings">
+          <summary><span>Advanced settings</span><small>Typography, every Magazine line, camera behaviour and local gallery</small></summary>
+          <div class="advanced-inner">
+            <h3>Magazine Cover</h3>
+            <p class="field-help">One set of cover lines drives all four styles. Leave a field blank and it is written for you from the event title.</p>
+            <div class="field-grid">
+              <label>Masthead<input id="setCoverMasthead" type="text" maxlength="28"></label>
+              <label>Occasion word<input id="setCoverOccasion" type="text" maxlength="28"></label>
+              <label>Script line<input id="setCoverScript" type="text" maxlength="36"></label>
+              <label>Top right 1<input id="setCoverSkyline1" type="text" maxlength="34"></label>
+              <label>Top right 2<input id="setCoverSkyline2" type="text" maxlength="34"></label>
+              <label>Top right 3<input id="setCoverSkyline3" type="text" maxlength="34"></label>
+              <label>Feature 1 headline<input id="setCoverF1Title" type="text" maxlength="46"></label>
+              <label>Feature 1 sub-line<input id="setCoverF1Dek" type="text" maxlength="64"></label>
+              <label>Feature 2 headline<input id="setCoverF2Title" type="text" maxlength="46"></label>
+              <label>Feature 2 sub-line<input id="setCoverF2Dek" type="text" maxlength="64"></label>
+              <label>Feature 3 headline<input id="setCoverF3Title" type="text" maxlength="46"></label>
+              <label>Feature 3 sub-line<input id="setCoverF3Dek" type="text" maxlength="64"></label>
+              <label>Cover line (big)<input id="setCoverBig" type="text" maxlength="26"></label>
+              <label>Cover line sub<input id="setCoverBigDek" type="text" maxlength="64"></label>
+              <label>Footer line<input id="setCoverFooter" type="text" maxlength="52"></label>
+              <label>Barcode text<input id="setCoverBarcode" type="text" maxlength="18"></label>
+            </div>
 
-        <h3>Magazine Cover</h3>
-        <p class="field-help">One set of cover lines drives all four styles. Leave a field blank and it is written for you from the event title.</p>
-        <div class="field-grid">
-          <label>Masthead<input id="setCoverMasthead" type="text" maxlength="28"></label>
-          <label>Occasion word<input id="setCoverOccasion" type="text" maxlength="28"></label>
-          <label>Script line<input id="setCoverScript" type="text" maxlength="36"></label>
-          <label>Top right 1<input id="setCoverSkyline1" type="text" maxlength="34"></label>
-          <label>Top right 2<input id="setCoverSkyline2" type="text" maxlength="34"></label>
-          <label>Top right 3<input id="setCoverSkyline3" type="text" maxlength="34"></label>
-          <label>Feature 1 headline<input id="setCoverF1Title" type="text" maxlength="46"></label>
-          <label>Feature 1 sub-line<input id="setCoverF1Dek" type="text" maxlength="64"></label>
-          <label>Feature 2 headline<input id="setCoverF2Title" type="text" maxlength="46"></label>
-          <label>Feature 2 sub-line<input id="setCoverF2Dek" type="text" maxlength="64"></label>
-          <label>Feature 3 headline<input id="setCoverF3Title" type="text" maxlength="46"></label>
-          <label>Feature 3 sub-line<input id="setCoverF3Dek" type="text" maxlength="64"></label>
-          <label>Cover line (big)<input id="setCoverBig" type="text" maxlength="26"></label>
-          <label>Cover line sub<input id="setCoverBigDek" type="text" maxlength="64"></label>
-          <label>Footer line<input id="setCoverFooter" type="text" maxlength="52"></label>
-          <label>Barcode text<input id="setCoverBarcode" type="text" maxlength="18"></label>
-        </div>
+            <h3>Keepsake Cover</h3>
+            <p class="field-help">Extra lines for Keepsake. Edition numbering is tracked independently from the 20-item local gallery.</p>
+            <div class="field-grid">
+              <label>Eyebrow<input id="setCoverEyebrow" type="text" maxlength="40"></label>
+              <label>Stacked lines<input id="setCoverStack" type="text" maxlength="30"></label>
+              <label>Date line<input id="setCoverDateLine" type="text" maxlength="24"></label>
+              <label>Small script<input id="setCoverScriptSmall" type="text" maxlength="24"></label>
+              <label>Hero script<input id="setCoverHeroScript" type="text" maxlength="34"></label>
+              <label>Hero line<input id="setCoverHero" type="text" maxlength="26"></label>
+              <label>Thank you line<input id="setCoverThanks" type="text" maxlength="70"></label>
+              <label>Hashtag<input id="setCoverHashtag" type="text" maxlength="32"></label>
+              <label>Icon labels<input id="setCoverIcons" type="text" maxlength="80"></label>
+              <label>Guests expected<input id="setCoverEditionOf" type="text" maxlength="5"></label>
+              <label>Badge word “edition”<input id="setCoverEditionWord" type="text" maxlength="16"></label>
+              <label>Badge word “of”<input id="setCoverOfWord" type="text" maxlength="10"></label>
+            </div>
 
-        <h3>Keepsake Cover</h3>
-        <p class="field-help">Extra lines used by the Keepsake style. The edition number counts guests through the booth tonight; set the total below if you know your headcount.</p>
-        <div class="field-grid">
-          <label>Eyebrow<input id="setCoverEyebrow" type="text" maxlength="40"></label>
-          <label>Stacked lines<input id="setCoverStack" type="text" maxlength="30"></label>
-          <label>Date line<input id="setCoverDateLine" type="text" maxlength="24"></label>
-          <label>Small script<input id="setCoverScriptSmall" type="text" maxlength="24"></label>
-          <label>Hero script<input id="setCoverHeroScript" type="text" maxlength="34"></label>
-          <label>Hero line<input id="setCoverHero" type="text" maxlength="26"></label>
-          <label>Thank you line<input id="setCoverThanks" type="text" maxlength="70"></label>
-          <label>Hashtag<input id="setCoverHashtag" type="text" maxlength="32"></label>
-          <label>Icon labels<input id="setCoverIcons" type="text" maxlength="80"></label>
-          <label>Guests expected<input id="setCoverEditionOf" type="text" maxlength="5"></label>
-          <label>Badge word "edition"<input id="setCoverEditionWord" type="text" maxlength="16"></label>
-          <label>Badge word "of"<input id="setCoverOfWord" type="text" maxlength="10"></label>
-        </div>
+            <h3>Typography</h3>
+            <p class="field-help">Five device-safe faces drive every keepsake. Specimens are drawn by the same canvas renderer.</p>
+            <div id="fontRoles" class="font-roles"></div>
+            <input id="setFontDisplay" type="hidden"><input id="setFontText" type="hidden"><input id="setFontCondensed" type="hidden"><input id="setFontScript" type="hidden"><input id="setFontHand" type="hidden">
 
-        <h3>Typography</h3>
-        <p class="field-help">Five faces drive every keepsake. Each specimen below is drawn by the same renderer that prints the covers, using your own event wording — what you see is what a guest gets. Faces missing from this device are marked; check them on the booth iPad before the night.</p>
-        <div id="fontRoles" class="font-roles"></div>
-        <!-- The chosen face per role. Hidden because the specimen grid above
-             is the control; these keep fonts on the same read/write path as
-             every other setting. -->
-        <input id="setFontDisplay" type="hidden">
-        <input id="setFontText" type="hidden">
-        <input id="setFontCondensed" type="hidden">
-        <input id="setFontScript" type="hidden">
-        <input id="setFontHand" type="hidden">
+            <h3>Living Polaroid</h3>
+            <div class="field-grid">
+              <label>Handwritten line 2<input id="setPolaroidLine2" type="text" maxlength="40"></label>
+              <label>Handwritten line 3<input id="setPolaroidLine3" type="text" maxlength="46"></label>
+              <label>Between photos<select id="setPolaroidTransition"><option value="crossfade">Crossfade</option><option value="cut">Hard cut</option></select></label>
+              <label>While it renders<input id="setPolaroidBusyLabel" type="text" maxlength="40"></label>
+              <label>When it is ready<input id="setPolaroidReadyLabel" type="text" maxlength="46"></label>
+              <label>If video is unavailable<input id="setPolaroidStillLabel" type="text" maxlength="52"></label>
+            </div>
 
-        <h3>Living Polaroid</h3>
-        <p class="field-help">The four handwritten lines under the photograph. Same contract as the covers: leave one blank and it is written for you from the event title; leave one blank on purpose to print fewer lines.</p>
-        <div class="field-grid">
-          <label>Handwritten line 1<input id="setPolaroidLine1" type="text" maxlength="30"></label>
-          <label>Handwritten line 2<input id="setPolaroidLine2" type="text" maxlength="40"></label>
-          <label>Handwritten line 3<input id="setPolaroidLine3" type="text" maxlength="46"></label>
-          <label>Handwritten line 4<input id="setPolaroidLine4" type="text" maxlength="46"></label>
-          <label>Between photos
-            <select id="setPolaroidTransition">
-              <option value="crossfade">Crossfade</option>
-              <option value="cut">Hard cut</option>
-            </select>
-          </label>
-          <label>While it renders<input id="setPolaroidBusyLabel" type="text" maxlength="40"></label>
-          <label>When it is ready<input id="setPolaroidReadyLabel" type="text" maxlength="46"></label>
-          <label>If video is unavailable<input id="setPolaroidStillLabel" type="text" maxlength="52"></label>
-        </div>
+            <h3>Screen Text</h3>
+            <div class="field-grid">
+              <label>Cancel button<input id="setCancelLabel" type="text" maxlength="20"></label>
+              <label>Shot counter<input id="setShotLabelFormat" type="text" maxlength="30"></label>
+              <label>Strip tab<input id="setStripTabLabel" type="text" maxlength="20"></label>
+              <label>Magazine tab<input id="setMagazineTabLabel" type="text" maxlength="20"></label>
+              <label>Polaroid tab<input id="setPolaroidTabLabel" type="text" maxlength="20"></label>
+              <label>Polaroid label<input id="setPolaroidLabel" type="text" maxlength="24"></label>
+              <label>Frame label<input id="setFrameLabel" type="text" maxlength="24"></label>
+              <label>Filter label<input id="setFilterLabel" type="text" maxlength="24"></label>
+              <label>Pick-photo label<input id="setPickLabel" type="text" maxlength="34"></label>
+              <label>Choose-style label<input id="setStyleLabel" type="text" maxlength="34"></label>
+              <label>Change-photo link<input id="setChangePhotoLabel" type="text" maxlength="34"></label>
+              <label>Share button<input id="setShareLabel" type="text" maxlength="20"></label>
+              <label>Save button<input id="setSaveLabel" type="text" maxlength="20"></label>
+              <label>Next-guest button<input id="setNextLabel" type="text" maxlength="24"></label>
+              <label>Retake link<input id="setRetakeLabel" type="text" maxlength="24"></label>
+              <label>End-screen eyebrow<input id="setEndEyebrow" type="text" maxlength="32"></label>
+              <label>End-screen message<input id="setEndMessage" type="text" maxlength="40"></label>
+            </div>
 
-        <h3>Screen Text</h3>
-        <p class="field-help">Every word a guest sees. Blank uses the shipped wording shown in grey. The shot counter accepts {n} and {total}; camera prompts are comma-separated, one per shot.</p>
-        <div class="field-grid">
-          <label>Welcome eyebrow<input id="setWelcomeEyebrow" type="text" maxlength="32"></label>
-          <label>Start button<input id="setStartLabel" type="text" maxlength="20"></label>
-          <label>Start button hint<input id="setStartHint" type="text" maxlength="28"></label>
-          <label>Cancel button<input id="setCancelLabel" type="text" maxlength="20"></label>
-          <label>Shot counter<input id="setShotLabelFormat" type="text" maxlength="30"></label>
-          <label>Camera prompts<input id="setPromptLines" type="text" maxlength="120"></label>
-          <label>Strip tab<input id="setStripTabLabel" type="text" maxlength="20"></label>
-          <label>Magazine tab<input id="setMagazineTabLabel" type="text" maxlength="20"></label>
-          <label>Polaroid tab<input id="setPolaroidTabLabel" type="text" maxlength="20"></label>
-          <label>Polaroid label<input id="setPolaroidLabel" type="text" maxlength="24"></label>
-          <label>Frame label<input id="setFrameLabel" type="text" maxlength="24"></label>
-          <label>Filter label<input id="setFilterLabel" type="text" maxlength="24"></label>
-          <label>Pick-photo label<input id="setPickLabel" type="text" maxlength="34"></label>
-          <label>Choose-style label<input id="setStyleLabel" type="text" maxlength="34"></label>
-          <label>Change-photo link<input id="setChangePhotoLabel" type="text" maxlength="34"></label>
-          <label>Share button<input id="setShareLabel" type="text" maxlength="20"></label>
-          <label>Save button<input id="setSaveLabel" type="text" maxlength="20"></label>
-          <label>Next-guest button<input id="setNextLabel" type="text" maxlength="24"></label>
-          <label>Retake link<input id="setRetakeLabel" type="text" maxlength="24"></label>
-          <label>End-screen eyebrow<input id="setEndEyebrow" type="text" maxlength="32"></label>
-          <label>End-screen message<input id="setEndMessage" type="text" maxlength="40"></label>
-        </div>
+            <h3>Booth behaviour</h3>
+            <div class="field-grid"><label>Countdown<select id="setCountdown"><option value="3">3 seconds</option><option value="5">5 seconds</option></select></label></div>
+            <div class="toggle-grid">
+              <label class="toggle"><input id="setMirror" type="checkbox"><span>Mirror front camera</span></label>
+              <label class="toggle"><input id="setPrompts" type="checkbox"><span>Group prompts</span></label>
+              <label class="toggle"><input id="setShutter" type="checkbox"><span>Shutter sound</span></label>
+              <label class="toggle"><input id="setFlash" type="checkbox"><span>Flash effect</span></label>
+              <label class="toggle"><input id="setConfetti" type="checkbox"><span>Confetti reveal</span></label>
+            </div>
 
-        <h3>Booth</h3>
-        <div class="field-grid">
-          <label>Accent colour<input id="setAccent" type="color"></label>
-          <label>Countdown
-            <select id="setCountdown">
-              <option value="3">3 seconds</option>
-              <option value="5">5 seconds</option>
-            </select>
-          </label>
-        </div>
-        <div class="toggle-grid">
-          <label class="toggle"><input id="setMirror" type="checkbox"><span>Mirror front camera</span></label>
-          <label class="toggle"><input id="setPrompts" type="checkbox"><span>Group prompts</span></label>
-          <label class="toggle"><input id="setShutter" type="checkbox"><span>Shutter sound</span></label>
-          <label class="toggle"><input id="setFlash" type="checkbox"><span>Flash effect</span></label>
-          <label class="toggle"><input id="setConfetti" type="checkbox"><span>Confetti reveal</span></label>
-        </div>
-
-
-        <h3>Event Gallery</h3>
-        <div class="gallery-tools">
-          <p class="gallery-help">Recent booth sessions stored only on this iPad.</p>
-          <button id="clearGallery" class="text-action gallery-clear" type="button">Clear event gallery</button>
-        </div>
-        <div id="eventGallery" class="event-gallery"></div>
-
-        <div class="settings-actions">
-          <button id="resetSettings" class="text-action" type="button">Reset defaults</button>
-          <button id="saveSettings" class="primary-btn" type="button">Save settings</button>
-        </div>
+            <h3>Event Gallery</h3>
+            <div class="gallery-tools"><p class="gallery-help">Recent booth sessions stored only on this device.</p><button id="clearGallery" class="text-action gallery-clear" type="button">Clear event gallery</button></div>
+            <div id="eventGallery" class="event-gallery"></div>
+            <div class="settings-actions"><button id="resetSettings" class="text-action" type="button">Reset defaults</button></div>
+          </div>
+        </details>
       </div>
 
       <aside class="admin-preview">
-        <div class="admin-preview-tabs">
+        <div class="admin-preview-tabs desktop-preview-tabs">
           <button class="admin-preview-tab active" data-preview="strip" type="button">Strip</button>
           <button class="admin-preview-tab" data-preview="keepsake" type="button">Keepsake</button>
           <button class="admin-preview-tab" data-preview="editorial" type="button">Editorial</button>
@@ -268,7 +686,7 @@
           <button class="admin-orientation-tab" data-orientation="portrait" type="button">Portrait</button>
         </div>
         <canvas id="adminPreviewCanvas"></canvas>
-        <p class="preview-note">Live preview with a stand-in photo.</p>
+        <p class="preview-note">Live preview using the real renderers.</p>
       </aside>
     </div>
   </div>
@@ -279,6 +697,8 @@
 <script src="covers.js"></script>
 <script src="polaroid.js"></script>
 <script src="mp4.js"></script>
+<script src="product.js"></script>
 <script src="app.js"></script>
+<script src="marketing.js"></script>
 </body>
 </html>

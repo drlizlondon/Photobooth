@@ -1,0 +1,61 @@
+name = "mybishbash-photobooth-api"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Copy this file to wrangler.toml and replace every placeholder. Do not commit
+# production database IDs, bucket names, routes, or secrets.
+
+[vars]
+ENVIRONMENT = "development"
+PUBLIC_APP_ORIGIN = "http://localhost:8788"
+ALLOWED_ORIGINS = "http://localhost:8788"
+STRIPE_EXPECTED_LIVEMODE = "false"
+STRIPE_PRICE_PERSONAL_6_MONTH = "price_replace_me"
+STRIPE_PRICE_PERSONAL_12_MONTH = "price_replace_me"
+STRIPE_PRICE_FOUNDING_LIFETIME = "price_replace_me"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mybishbash-photobooth-dev"
+database_id = "replace-me"
+migrations_dir = "migrations"
+
+# Deliberately separate buckets: brand artwork is not guest media.
+[[r2_buckets]]
+binding = "BRAND_ASSETS"
+bucket_name = "mybishbash-photobooth-brand-assets-dev"
+
+[[r2_buckets]]
+binding = "CONSENTED_GUEST_OUTPUTS"
+bucket_name = "mybishbash-photobooth-consented-guest-outputs-dev"
+
+# This Worker only publishes restore mail jobs. A separate, narrowly scoped
+# mail-delivery consumer owns the provider credentials and template.
+[[queues.producers]]
+binding = "ENTITLEMENT_EMAIL_QUEUE"
+queue = "mybishbash-photobooth-entitlement-email-dev"
+
+[[ratelimits]]
+name = "CHECKOUT_RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+[[ratelimits]]
+name = "PUBLIC_API_RATE_LIMITER"
+namespace_id = "1002"
+
+  [ratelimits.simple]
+  limit = 120
+  period = 60
+
+# Set with `wrangler secret put`, never in this file:
+# STRIPE_SECRET_KEY
+# STRIPE_WEBHOOK_SECRET
+# TOKEN_SIGNING_SECRET
+# PLATFORM_ADMIN_BEARER_TOKEN

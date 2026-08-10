@@ -566,4 +566,182 @@ Named so nobody drifts into them and calls it diligence:
 
 ---
 
-*Sixteen packets. Four Blockers cleared by the end of P1. The engine is not touched anywhere in this programme.*
+---
+
+# Amendment 001 — Four experiences, event lifecycle, and the £19/£49 model
+
+**Date:** 2026-08-10
+**Trigger:** Commercial and product decisions taken by Lizzie after the audit was accepted.
+**Status:** Authoritative. Where this amendment and §1–§12 disagree, **this amendment wins**; §1–§12 are otherwise unchanged and still binding.
+
+## A1.1 — What changed at the product level
+
+The programme was written against a product with one booth and four entitlement booleans. The decisions now taken define **four conceptually distinct experiences** — Landing Demo, Free Photobooth, Personalised consumer Photobooth, Business Photobooth — of which only the first and a partial second exist today.
+
+Three of those are new **domain concepts**, not new capability flags: a persistent free booth with its own identity, an event lifecycle with an activation clock, and a consumable one-event licence. §7 of this spec froze `CAPABILITY_MATRIX` precisely so that a packet could not quietly widen the entitlement model to make a commercial idea fit. That freeze holds. The correct response is a packet that owns the widening explicitly — **PB-21** — not an exception granted to PB-11.
+
+## A1.2 — Factual corrections to the programme's assumptions
+
+Five things the original spec assumed, which inspection disproved. Each changes a packet.
+
+1. **The landing demo never touches the camera or storage.** It is `marketing.js` rendering `assets/demo-photos.png` through the real `Covers`/`Polaroid` renderers onto canvases. It is therefore *already* disposable, and needs no work to make it so. What does not exist is a distinction between "try the demo" and "create a real booth" — `START PHOTOBOOTH` goes straight to the camera.
+
+2. **Free does not persist configuration today — it is actively wiped.** `launchFreeBooth` ([app.js:1501](../../app.js:1501)) sets `settings={...DEFAULTS}` and stashes the previous values in `temporarySettingsSnapshot`. Free persistence is a behaviour change, not a configuration change.
+
+3. **Free photos DO persist, and are silently deleted after 20 sessions.** `saveSessionToGallery` runs regardless of entitlement and calls `trimGallery(20)` ([app.js:301](../../app.js:301)). A 40-guest party silently loses its first 20 sessions. This is exactly the arbitrary limit the new decisions forbid, and the audit did not surface it because the capture path was never exercised.
+
+4. **Stored photos are full-resolution base64 JPEG data URLs.** `capturePhoto` returns `toDataURL("image/jpeg",.96)` at capture resolution ([app.js:859](../../app.js:859)), stored directly into IndexedDB. Measured at 1920×1080 q0.96: **548,468 bytes raw → 731,290 bytes as a data URL → 2.19 MB per three-photo session → a 43.9 MB ceiling at the current 20-session cap.** Real party captures will exceed this, since the measured source has less high-frequency detail than a live scene.
+
+5. **There is no storage-exhaustion handling of any kind.** No `QuotaExceededError` handling, no `navigator.storage.estimate()`, and `saveSessionToGallery` ends in `catch(e){}` — so when quota is hit mid-event, photos stop saving silently and nobody is told.
+
+6. **`boothExampleMode` is never consulted by any render or export path.** Preview outputs are byte-identical to real ones. The preview-must-be-marked requirement has no existing mechanism to extend.
+
+7. **`FOUNDING_LIFETIME` cannot be deleted.** It is referenced in the Worker's D1 queries (`worker/src/billing.ts:230,520,563`) and asserted in 8 places in `tests/product.test.js`. **Retire it from sale via `PLAN_METADATA`; do not remove the entitlement constant.**
+
+## A1.3 — Revised decisions
+
+These supersede the corresponding rows in §6.
+
+| # | Original decision | Revised | Why |
+|---|---|---|---|
+| 4 | Per-event pricing; Founding Lifetime unchanged at £100 | **FREE £0 · ONE EVENT £19 · ANNUAL £49/yr. No Lifetime tier on sale.** `FOUNDING_LIFETIME` retired from sale, constant retained | Owner decision. The £19/£49 ladder breaks even at 3 events, which resolves the tier-domination problem raised against the earlier £9/£50 proposal |
+| 5 | Business keeps no public price | **Unchanged and reinforced** — "Request a demo / Contact us", no invented figures | Owner decision: test willingness to pay through pilots first |
+| — | *(new)* | **Free gets generic celebration identity by event type; full custom event identity is the paid lever** | Makes personalisation the conversion mechanism rather than crippling |
+| — | *(new)* | **Storage management is an engineering concern, never a pricing mechanism** | `trimGallery(20)` must go, but only after storage is managed |
+
+**Unchanged and still binding:** decisions 1 (billing after migration), 2 (gallery not carried across origins), 3 (grandfathering ends at origin change); challenges C1–C6; and the §12 out-of-scope list, extended in A1.6.
+
+## A1.4 — Amendments to existing packets
+
+| Packet | Amendment |
+|---|---|
+| **PB-02** | The founding-list framing is retired with the Lifetime tier. The interest-capture route remains; its wording must not reference a founding or lifetime offer. |
+| **PB-11** | **Now depends on PB-21.** Prices `FREE £0`, `ONE_EVENT £19`, `PERSONAL_12_MONTH £49`. Adds a not-for-sale flag to `FOUNDING_LIFETIME` rather than deleting it. Its constraint is otherwise unchanged: `PLAN_METADATA` only, `CAPABILITY_MATRIX` byte-identical. **`tests/product.test.js` lines 64–70 assert the old amounts and must be updated in the same packet** — that is expected, not a violation. |
+| **PB-12** | The free side of the comparison is no longer `DEFAULTS.eventTitle = "Your Celebration"`; it is the event-type identity introduced by PB-18. **Now depends on PB-18.** |
+| **PB-14** | Promoted from a migration utility to a standing product feature: device-loss insurance, not just an origin hand-off. Adds a truthful storage-location statement in the UX and a private-browsing warning where detectable. Schema versioning was already required and remains. |
+| **PB-16** | Gate preconditions extended: Annual must not be offered for sale until entitlement recovery exists, per A1.5. |
+
+No other packet changes. **PB-01, PB-03…PB-10, PB-13, PB-15 are unaffected and remain executable exactly as written.**
+
+## A1.5 — New packets
+
+Numbers continue from PB-16 and are **identity, not execution order** — the tracker's `#` column is the execution position. Never renumber a landed packet.
+
+---
+
+### Packet PB-17 — Make local photo storage survivable
+**Phase:** P3 · **Objective:** Replace silent data loss and silent quota failure with a managed, measurable storage strategy — the prerequisite for removing the 20-session cap.
+**Depends on:** nothing
+**Files:** `app.js` (`capturePhoto` [859](../../app.js:859), `saveSessionToGallery` [290](../../app.js:290), `trimGallery` [301](../../app.js:301)), `index.html`/`styles.css` for a warning surface.
+**Constraints:** **Do not change what the guest sees rendered.** The strip, cover and Polaroid must be pixel-identical to today at their output sizes — the retained representation may change, the product may not. Do not introduce a commercial limit; this packet exists so that limits are unnecessary. Do not remove `trimGallery` in this packet — replace the arbitrary 20 with a storage-aware policy. `catch(e){}` swallowing write failures must end.
+**Acceptance criteria:**
+- [ ] The retained per-session representation is measured before and after, and the reduction is recorded in the tracker (baseline: 2.19 MB/session, 731,290 bytes/photo as a data URL).
+- [ ] Photos are no longer retained as base64 data URLs where a binary representation is available to the storage layer.
+- [ ] Capture resolution and rendered output quality are unchanged; the full-resolution capture remains available for the duration of the guest's session so the cover finish is unaffected.
+- [ ] `QuotaExceededError` and a failed write are handled explicitly and surfaced to the booth operator, not swallowed.
+- [ ] Remaining storage is checked via `navigator.storage.estimate()` where supported, and the operator is warned before exhaustion rather than at it.
+- [ ] The session cap is storage-derived, not the hardcoded 20; the change in effective capacity is recorded.
+- [ ] Preflight green.
+**Verification:** Fill the gallery to quota in a constrained profile and confirm a visible warning and no silent loss. Compare a strip, cover and Polaroid rendered before and after the change at identical settings.
+**Complexity:** High
+**Rollback:** Revert. **Sessions written under the new representation may not be readable by the reverted build — state the migration posture in the packet commit.**
+
+---
+
+### Packet PB-18 — Make Free a real, persistent photobooth with its own identity
+**Phase:** P3 · **Objective:** Turn Free from a settings-wiped single run into a booth someone can set up at a party and return to, with generic celebration identity by event type.
+**Depends on:** **PB-17** (removing the cap before storage is managed kills the booth mid-party)
+**Files:** `app.js` (`launchFreeBooth` [1501](../../app.js:1501), `DEFAULTS` [1](../../app.js:1), settings persistence [226](../../app.js:226)/[367](../../app.js:367)), `index.html`, `styles.css`.
+**Constraints:** **Free must not gain full custom event identity** — that is the paid lever. Free chooses an event *type* and receives generic identity (`MY BIRTHDAY`, `MY PARTY`, `CELEBRATE`), never `Rae's 26th Birthday`. Free keeps heavy MyBishBash branding; `OUTPUT_BRANDING_POLICIES.FREE` is unchanged and `product.js` is not touched. Do not gate the camera, impose photo limits, or degrade capture quality to drive conversion. Do not require an account. Storage keys are contracts — persisting free settings must not collide with or overwrite the paid settings key without a stated migration.
+**Acceptance criteria:**
+- [ ] A free user's booth configuration persists across page reloads and across separate guest sessions on the same device.
+- [ ] `launchFreeBooth` no longer discards the user's configuration into a temporary snapshot.
+- [ ] Free offers an event-type choice; each type yields a generic identity used by the welcome screen and all three outputs.
+- [ ] No free path produces a fully custom event title.
+- [ ] Free exports still carry the `FREE` branding policy unchanged.
+- [ ] There is no session, photo or time limit on Free beyond the storage-derived policy from PB-17.
+- [ ] Preflight green; the entitled-user settings path is unchanged.
+**Verification:** Configure a free booth, run three guest sessions, reload, confirm configuration and gallery survive. Confirm no free route reaches a custom title. Confirm a paid-path save still behaves as before.
+**Complexity:** High
+
+---
+
+### Packet PB-19 — "Your Photobooth": return access and three honest entry routes
+**Phase:** P3 · **Objective:** Stop marching an existing booth owner through the marketing journey, and make the demo/free/mine distinction legible in seconds.
+**Depends on:** **PB-18**
+**Files:** `index.html` (landing hero and nav), `app.js` (boot-time state detection, routing), `styles.css`.
+**Constraints:** Extend the existing surface/history model (`HISTORY_SURFACE`, `showProductRoute`, `enterEventHome`) — **do not mint a parallel routing concept**. The demo must remain camera-free and storage-free; do not wire it to `getUserMedia`. Do not add an account, a login or a magic link. A visitor with no booth must still reach a free booth in one action.
+**Acceptance criteria:**
+- [ ] On load, locally persisted booth state is detected and an `OPEN MY PHOTOBOOTH` route is offered with the booth's identity shown.
+- [ ] A visitor with no booth sees `TRY THE DEMO` and `CREATE MY FREE PHOTOBOOTH` as distinct actions with distinct outcomes.
+- [ ] The demo neither requests camera access nor writes to storage.
+- [ ] An existing owner reaches their booth without passing through setup.
+- [ ] An `Edit setup` route exists from the booth identity.
+- [ ] Back/forward behaviour remains coherent across all three routes.
+- [ ] Preflight green.
+**Verification:** With empty storage, confirm two routes and that the demo touches neither camera nor storage. With a booth configured, reload and confirm the return route appears with the correct identity. Exercise back/forward across all three.
+**Complexity:** Medium
+
+---
+
+### Packet PB-20 — Event lifecycle as a domain concept
+**Phase:** P4 · **Objective:** Introduce `DRAFT → PREVIEW → LIVE → ENDED` with explicit activation and a 48-hour live period, and make preview outputs unmistakably preview.
+**Depends on:** PB-18
+**Files:** `app.js` (new lifecycle state and persistence, `boothExampleMode` call sites), `index.html`, `styles.css`.
+**Constraints:** **This packet does not sell anything and does not touch `product.js`.** It models the lifecycle for both free and paid use; the entitlement that consumes it arrives in PB-21. **The clock starts on explicit activation only** — never on configuration, never on opening the booth. **The design must remain editable while LIVE**; correcting a typo mid-party is a requirement, not a bug. Preview marking must be rendered *into* the exported asset, consistent with how attribution already works — not overlaid in the DOM, which would not survive Save. Do not build purchase, extension or refund mechanics.
+**Acceptance criteria:**
+- [ ] The four states exist as an explicit, schema-versioned, persisted domain concept — not a boolean.
+- [ ] Activation is a deliberate user action; entering PREVIEW or editing a DRAFT never starts the clock.
+- [ ] The LIVE period is 48 hours from activation, held as configuration rather than a literal.
+- [ ] Every PREVIEW output — strip, cover, Polaroid still and every MP4 frame — carries a conspicuous preview mark rendered into the asset.
+- [ ] Configuration remains editable in LIVE; the first live photo does not freeze the design.
+- [ ] Reaching ENDED does not delete or lock the guest's existing local photos.
+- [ ] `boothExampleMode` is either folded into this model or removed; two parallel preview concepts must not survive this packet.
+- [ ] Preflight green.
+**Verification:** Configure, preview, confirm marks on all four output types including saved files. Activate, confirm the clock starts only then. Edit copy while LIVE and confirm it applies. Force ENDED and confirm prior photos remain accessible.
+**Complexity:** High
+
+---
+
+### Packet PB-21 — Extend the entitlement model for ONE_EVENT
+**Phase:** P4 · **Objective:** Add the one-event consumable entitlement to `product.js` — the single packet authorised to widen the frozen boundary.
+**Depends on:** **PB-20** (a consumable licence is meaningless without a lifecycle to consume)
+**Files:** `product.js` (`ENTITLEMENTS`, `CAPABILITY_MATRIX`, and the one-event scope rules), `tests/product.test.js`.
+**Constraints:** **This packet, and only this packet, may add to `ENTITLEMENTS` and `CAPABILITY_MATRIX`.** §7's freeze is otherwise unchanged and resumes immediately afterwards. Do not delete or rename any existing entitlement — `FOUNDING_LIFETIME` is referenced in `worker/src/billing.ts` D1 queries and 8 test assertions. Do not add pricing here; PB-11 owns `PLAN_METADATA`. Do not implement checkout, purchase credit or upgrade mechanics. **Do not implement client-side consumption enforcement as if it were secure** — record honestly that a one-event licence tracked locally fails *open* when storage is cleared, which is why sale is gated behind PB-16.
+**Acceptance criteria:**
+- [ ] `ONE_EVENT` exists as an entitlement with a capability row consistent with the licensing principle: full personal event identity, lighter attribution, **no commercial rights**.
+- [ ] No personal entitlement — `ONE_EVENT`, `PERSONAL_12_MONTH`, `FOUNDING_LIFETIME` — grants any `business: true` capability.
+- [ ] The one-event scope is expressed against PB-20's lifecycle, not as a photo or session count.
+- [ ] Prices, labels and copy grant nothing; the §2.3 separation holds.
+- [ ] The local-enforcement limitation is documented in code where a future reader will meet it.
+- [ ] Existing entitlement constants are unchanged; the Worker's D1 queries still match.
+- [ ] Preflight green with new assertions covering the added entitlement.
+**Verification:** `node tests/product.test.js`. `git diff product.js` — every addition is a new key; no existing key is modified or removed. `grep FOUNDING_LIFETIME worker/src/billing.ts` still matches.
+**Complexity:** High
+
+---
+
+## A1.6 — Revised sequencing
+
+Execution order, with the two prerequisite chains that matter:
+
+**Storage before freedom:** PB-17 → PB-18 → PB-19. Removing the 20-session cap before storage is managed converts a silent trim into a dead booth at a live party.
+
+**Lifecycle before licence before price:** PB-20 → PB-21 → PB-11 → PB-16. This inverts the original plan, where PB-11 came first. PB-11 cannot price `ONE_EVENT` before the entitlement exists, and the entitlement cannot bound an event before the lifecycle does. C4 still holds — **pricing remains the freezing step and still lands before the billing gate.**
+
+Full order: PB-01 · PB-02 · PB-03 · PB-04 · PB-05 · PB-06 · PB-07 · PB-08 · PB-09 · PB-10 · **PB-17 · PB-18 · PB-19** · PB-13 · PB-14 · PB-15 · **PB-20 · PB-21** · PB-11 · PB-12 · PB-16.
+
+## A1.7 — What stays gated, and why
+
+- **Annual (£49) must not be offered for sale until entitlement recovery exists.** A 12-month entitlement held only in `localStorage` means a legitimate customer who clears storage loses eleven months they paid for. Model it in PB-21, price it in PB-11, sell it only after PB-16 passes.
+- **One Event (£19) sale is gated the same way**, and additionally fails *open* locally. Early manual recovery is acceptable if PB-16 records it as a deliberate, temporary posture.
+- **All Business capability** — brand kits, multi-device, lead capture, analytics, consent databases, agency use — remains out of scope. Lead generation and attendee PII require a separately governed data architecture that does not exist.
+- **The Business speculative-preview sales motion** is a manual process for now; PB-20's preview marking is the only architectural support it needs. **No website ingestion, no automated branding engine.**
+
+## A1.8 — Additions to §12 out of scope
+
+Extends, does not replace, the original list: accounts, authentication and magic links; cross-device synchronisation of any kind; automatic cloud recovery of booth or gallery; lead capture, attendee databases and analytics; automated brand ingestion; purchase-credit and upgrade mechanics; a 7-day or any additional duration tier; music, audio tracks and mute controls in any form — the existing shutter sound is unrelated and stays.
+
+---
+
+*Twenty-one packets. The engine is still not touched. `CAPABILITY_MATRIX` is widened exactly once, by exactly one packet, on the record.*

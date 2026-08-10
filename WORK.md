@@ -11,17 +11,25 @@ Update this file **in the same commit** as each packet. Keep it terse — reason
 
 - **Current phase:** P0 — Stop the site lying. Not started.
 - **Completed packets:** none
-- **Next packet:** PB-01 — replace the dead Business contact URL with a working `mailto:`. No dependencies. **Blocked on one input from Lizzie: the address to use.**
+- **Next packet:** PB-01 — replace the dead Business contact URL with a working `mailto:`. No dependencies. **Blocked on one input from Lizzie: the address to use.** PB-03 and PB-06 through PB-10 are unblocked and can run in the meantime.
 - **Programme started:** —
+- **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. Added PB-17…PB-21, amended PB-02/11/12/14/16, reordered the tail. See spec Amendment 001.
+- **Live defect found during Amendment 001, not in the audit:** `trimGallery(20)` ([app.js:301](app.js:301)) silently deletes a party's earliest sessions past 20, and `saveSessionToGallery` swallows write failures with `catch(e){}`. Owned by PB-17.
 
 ## Packet checklist (execute strictly in this order)
 
-The order is not a preference. Two prerequisite pairs and one freezing step are load-bearing: **PB-11 must land before PB-16** (pricing freezes once Stripe products exist), and **PB-13 + PB-14 must both land before PB-15** (cutting over with only one produces either an unstyled site or stranded users).
+**The `#` column is execution position. `PB-nn` is identity and never changes.** Amendment 001 inserted five packets and reordered the tail, so the numbers are deliberately out of sequence — follow the `#` column, not the packet number.
+
+Three chains are load-bearing:
+
+- **PB-17 → PB-18 → PB-19** — storage before freedom. Removing the 20-session cap before storage is managed turns a silent trim into a dead booth at a live party.
+- **PB-20 → PB-21 → PB-11 → PB-16** — lifecycle before licence before price before sale. PB-11 cannot price `ONE_EVENT` before the entitlement exists; the entitlement cannot bound an event before the lifecycle does. Pricing is still the freezing step and still lands before the billing gate.
+- **PB-13 + PB-14 → PB-15** — prerequisite pair; cutting over with only one produces either an unstyled site or stranded users.
 
 | # | Packet | Phase | Status | Commit |
 |---|--------|-------|--------|--------|
 | 1 | PB-01 Replace the dead Business contact URL | P0 | ☐ | — |
-| 2 | PB-02 Make the commerce state honest | P0 | ☐ | — |
+| 2 | PB-02 Make the commerce state honest *(amended 001)* | P0 | ☐ | — |
 | 3 | PB-03 Never silently discard a guest's configuration | P0 | ☐ | — |
 | 4 | PB-04 Publish terms, privacy and cancellation | P1 | ☐ | — |
 | 5 | PB-05 Origin constant + complete social metadata | P2 | ☐ | — |
@@ -30,12 +38,17 @@ The order is not a preference. Two prerequisite pairs and one freezing step are 
 | 8 | PB-08 Fix the mobile navigation containing block | P3 | ☐ | — |
 | 9 | PB-09 Differentiate camera failures, remove the alert | P3 | ☐ | — |
 | 10 | PB-10 Close the measured accessibility gaps | P3 | ☐ | — |
-| 11 | PB-11 Reprice Personal around the event | P4 | ☐ | — |
-| 12 | PB-12 Free-vs-paid cover comparison + purchase moment | P4 | ☐ | — |
-| 13 | PB-13 Make the app subpath-ready | P5 | ☐ | — |
-| 14 | PB-14 Settings export/import | P5 | ☐ | — |
-| 15 | PB-15 Cut over to mybishbash.app/photobooth | P5 | ☐ | — |
-| 16 | PB-16 GATE: decide whether to activate billing | P6 | ☐ | — |
+| 11 | **PB-17 Make local photo storage survivable** | P3 | ☐ | — |
+| 12 | **PB-18 Persistent Free booth with event-type identity** | P3 | ☐ | — |
+| 13 | **PB-19 "Your Photobooth" return access + three entry routes** | P3 | ☐ | — |
+| 14 | PB-13 Make the app subpath-ready | P5 | ☐ | — |
+| 15 | PB-14 Settings export/import *(amended 001 — now a product feature)* | P5 | ☐ | — |
+| 16 | PB-15 Cut over to mybishbash.app/photobooth | P5 | ☐ | — |
+| 17 | **PB-20 Event lifecycle domain model** | P4 | ☐ | — |
+| 18 | **PB-21 Extend the entitlement model for ONE_EVENT** | P4 | ☐ | — |
+| 19 | PB-11 Reprice: FREE £0 / ONE EVENT £19 / ANNUAL £49 *(amended 001)* | P4 | ☐ | — |
+| 20 | PB-12 Free-vs-paid comparison + purchase moment *(amended 001)* | P4 | ☐ | — |
+| 21 | PB-16 GATE: decide whether to activate billing *(amended 001)* | P6 | ☐ | — |
 
 Record the real commit hash when a packet lands. Placeholders like "this commit" or "pending" stop being meaningful the moment the session ends.
 
@@ -54,7 +67,8 @@ Record the real commit hash when a packet lands. Placeholders like "this commit"
 ## Protected assets — no packet may modify these except where named
 
 - `covers.js`, `polaroid.js`, `mp4.js`, `fonts.js` — the rendering engine. **No packet in this programme touches them.**
-- `product.js` — **PB-11 only**, and only inside `PLAN_METADATA`.
+- `product.js` — **PB-11 only** for `PLAN_METADATA`, and **PB-21 only** for `ENTITLEMENTS` / `CAPABILITY_MATRIX`. The freeze resumes the moment PB-21 lands. No other packet may touch this file for any reason.
+- `FOUNDING_LIFETIME` — **may be retired from sale, never deleted.** Referenced in `worker/src/billing.ts:230,520,563` and asserted 8× in `tests/product.test.js`.
 - `worker/` — **no packet modifies it**; PB-16 only reads and reports.
 - `sw.js` `ASSETS` — **PB-06 only** (filename), and the list stays finite.
 - The capture path in `app.js` — **PB-09 only**, and only its `catch` branch.
@@ -74,9 +88,14 @@ A packet that would "fix" one of these must not run until the behaviour is confi
 ## Inputs needed from Lizzie
 
 - [ ] **PB-01:** the monitored email address for Business enquiries.
-- [ ] **PB-04:** sign-off on the legal content. The executor drafts; it does not sign off.
-- [ ] **PB-11:** the event price point. The spec settles the *model* (per event, not per duration); the number is Lizzie's.
+- [ ] **PB-04:** sign-off on the legal content. The executor drafts; it does not sign off. **Amendment 001 adds:** the £19 licence is non-refundable once the first live photo is taken — that must appear in the cancellation terms, and it is a distance-selling exception that needs stating correctly.
 - [ ] **PB-15:** approval to cut over, and whether/when to announce the new URL.
+- [ ] **PB-18:** the event-type list for Free. Working assumption: Birthday · Wedding · Party · Celebration, yielding `MY BIRTHDAY` / `MY PARTY` / `CELEBRATE`.
+- [ ] **PB-20:** what ENDED actually ends. Working assumption: the licence stops new *personalised* sessions; it never removes access to photos already taken. Confirm — the alternative strands a customer's own party photos behind an expired licence.
+- [ ] **PB-20:** whether an ENDED event can be reactivated by buying another £19 licence, or whether a new event must be created.
+- [ ] **PB-16:** whether Annual may be sold before entitlement recovery exists. Recommended: no. Selling a 12-month entitlement that a storage clear destroys is a refund queue, not a product.
+
+*(PB-11's price point is now settled — £0 / £19 / £49 — and no longer needs an input.)*
 
 ## Decision log
 
@@ -91,3 +110,11 @@ A packet that would "fix" one of these must not run until the behaviour is confi
 | 2026-08-09 | Business keeps **no public price**; a qualifying line replaces bare "contact us" | Spec decision 5, PB-01 |
 | 2026-08-09 | Client-side entitlement accepted as posture, not engineered around | Spec C1; ADR due in PB-04 |
 | 2026-08-09 | Live Stripe deployment is **out of scope** for this programme | Spec §12, PB-16 |
+| 2026-08-10 | **Amendment 001** accepted: four distinct experiences; pricing becomes FREE £0 / ONE EVENT £19 / ANNUAL £49 | Spec Amendment 001 |
+| 2026-08-10 | Lifetime tier **retired from sale**; `FOUNDING_LIFETIME` constant **retained** (Worker D1 + 8 test assertions depend on it) | Spec A1.2.7, A1.4 |
+| 2026-08-10 | Free becomes a **persistent** booth with generic event-type identity; full custom identity is the paid lever | Spec A1.3, PB-18 |
+| 2026-08-10 | Event lifecycle (DRAFT/PREVIEW/LIVE/ENDED, 48h from explicit activation) modelled as a **domain concept**, not a boolean | Spec PB-20 |
+| 2026-08-10 | `CAPABILITY_MATRIX` freeze widened **exactly once**, by PB-21, on the record — not by an exception to PB-11 | Spec PB-21 |
+| 2026-08-10 | Sequencing inverted: lifecycle → licence → price → sale. PB-11 now depends on PB-21 | Spec A1.6 |
+| 2026-08-10 | Storage management is an **engineering** concern, never a pricing mechanism; `trimGallery(20)` goes only after PB-17 | Spec A1.3, PB-17 |
+| 2026-08-10 | Annual sale gated behind entitlement recovery; One Event fails **open** locally and is gated the same way | Spec A1.7 |

@@ -284,6 +284,8 @@ Execute strictly in order. Later packets assume earlier constants and vocabulary
 - [ ] All three are linked from the footer on **both** the Personal and Business surfaces.
 - [ ] The privacy policy states the local-first position, and separately describes the Business consent-record processing that `product.js` already implements.
 - [ ] The refund statement covers UK distance-selling cancellation rights for the tiers named in `PLAN_METADATA`.
+- [ ] **Cancellation treatment is legally classified before sale.** Do **not** implement a blanket "non-refundable after the first live photo" rule as a product policy. UK rules treat digital content and services differently: for digital content supplied within the 14-day cancellation period, losing the cancellation right requires the consumer's **express consent to immediate supply and their acknowledgement that the right is lost**; for a service begun during the cooling-off period, the position can instead involve **proportionate payment** for what has been supplied, with the right ending only on full performance plus the required request and acknowledgement. The one-event entitlement has characteristics of **both**, so the classification must be made — not assumed — and checkout must capture whatever express consent and acknowledgement the applicable regime requires.
+- [ ] The classification reached, and who made it, is recorded in the tracker decision log.
 - [ ] Pages render with JavaScript disabled.
 - [ ] Two ADRs are recorded in the tracker decision log per C1: grandfathering posture, and client-side entitlement posture.
 - [ ] Preflight green.
@@ -656,7 +658,7 @@ Numbers continue from PB-16 and are **identity, not execution order** — the tr
 **Acceptance criteria:**
 - [ ] A free user's booth configuration persists across page reloads and across separate guest sessions on the same device.
 - [ ] `launchFreeBooth` no longer discards the user's configuration into a temporary snapshot.
-- [ ] Free offers an event-type choice; each type yields a generic identity used by the welcome screen and all three outputs.
+- [ ] Free offers exactly four event types — **Birthday · Wedding · Party · Celebration** (locked 2026-08-10; `Celebration` is the deliberate catch-all, so no further taxonomy is added) — each yielding a generic identity used by the welcome screen and all three outputs.
 - [ ] No free path produces a fully custom event title.
 - [ ] Free exports still carry the `FREE` branding policy unchanged.
 - [ ] There is no session, photo or time limit on Free beyond the storage-derived policy from PB-17.
@@ -685,20 +687,27 @@ Numbers continue from PB-16 and are **identity, not execution order** — the tr
 ---
 
 ### Packet PB-20 — Event lifecycle as a domain concept
-**Phase:** P4 · **Objective:** Introduce `DRAFT → PREVIEW → LIVE → ENDED` with explicit activation and a 48-hour live period, and make preview outputs unmistakably preview.
+**Phase:** P4 · **Objective:** Introduce `DRAFT → LIVE → ENDED` with explicit activation and a 48-hour live period, mark DRAFT outputs unmistakably, and make repeat purchase frictionless by duplicating a previous event's design.
 **Depends on:** PB-18
 **Files:** `app.js` (new lifecycle state and persistence, `boothExampleMode` call sites), `index.html`, `styles.css`.
-**Constraints:** **This packet does not sell anything and does not touch `product.js`.** It models the lifecycle for both free and paid use; the entitlement that consumes it arrives in PB-21. **The clock starts on explicit activation only** — never on configuration, never on opening the booth. **The design must remain editable while LIVE**; correcting a typo mid-party is a requirement, not a bug. Preview marking must be rendered *into* the exported asset, consistent with how attribution already works — not overlaid in the DOM, which would not survive Save. Do not build purchase, extension or refund mechanics.
+
+**Locked decisions (2026-08-10) — these are settled; do not re-derive them:**
+- **Three states, not four.** PREVIEW is folded into DRAFT. DRAFT is editable, costs nothing, and permits test capture whose outputs are marked.
+- **ENDED never removes the customer's photos.** It stops new *personalised* capture and export under that event entitlement. The complete existing gallery stays viewable, downloadable and shareable, permanently. Expiry must never become hostage-taking of customer-created content.
+- **ENDED events are not reactivated.** A further purchase creates a *new* event entitlement. Offer "Use these settings again" to duplicate the previous event's design and settings into the new DRAFT.
+
+**Constraints:** **This packet does not sell anything and does not touch `product.js`.** It models the lifecycle for both free and paid use; the entitlement that consumes it arrives in PB-21. **The clock starts on explicit activation only** — never on configuration, never on opening the booth, never on taking a DRAFT test photo. **The design must remain editable while LIVE**; correcting a typo mid-party is a requirement, not a bug. Draft marking must be rendered *into* the exported asset, consistent with how attribution already works — a DOM overlay would not survive Save. Do not build purchase, extension, reactivation or refund mechanics. "Use these settings again" copies configuration only — never photos, never an entitlement.
 **Acceptance criteria:**
-- [ ] The four states exist as an explicit, schema-versioned, persisted domain concept — not a boolean.
-- [ ] Activation is a deliberate user action; entering PREVIEW or editing a DRAFT never starts the clock.
+- [ ] The three states exist as an explicit, schema-versioned, persisted domain concept — not a boolean.
+- [ ] Activation is a deliberate user action; editing a DRAFT or taking a DRAFT test photo never starts the clock.
 - [ ] The LIVE period is 48 hours from activation, held as configuration rather than a literal.
-- [ ] Every PREVIEW output — strip, cover, Polaroid still and every MP4 frame — carries a conspicuous preview mark rendered into the asset.
+- [ ] Every DRAFT output — strip, cover, Polaroid still and **every MP4 frame** — carries a conspicuous mark rendered into the asset, so a draft output cannot substitute for the live experience.
 - [ ] Configuration remains editable in LIVE; the first live photo does not freeze the design.
-- [ ] Reaching ENDED does not delete or lock the guest's existing local photos.
-- [ ] `boothExampleMode` is either folded into this model or removed; two parallel preview concepts must not survive this packet.
+- [ ] In ENDED, the full existing gallery remains viewable, downloadable and shareable; only new personalised capture stops.
+- [ ] Creating a new event offers "Use these settings again", which copies design and settings into a fresh DRAFT and copies no photos and no entitlement.
+- [ ] `boothExampleMode` is folded into this model or removed; two parallel preview concepts must not survive this packet.
 - [ ] Preflight green.
-**Verification:** Configure, preview, confirm marks on all four output types including saved files. Activate, confirm the clock starts only then. Edit copy while LIVE and confirm it applies. Force ENDED and confirm prior photos remain accessible.
+**Verification:** Confirm marks on all four output types **as saved files**, not just on screen. Activate; confirm the clock starts only then, and that a DRAFT test photo did not start it. Edit copy while LIVE and confirm it applies. Force ENDED, then confirm every prior photo still opens, downloads and shares, and that new personalised capture is refused with a reason and a route. Duplicate settings into a new event and confirm no photos and no entitlement came with them.
 **Complexity:** High
 
 ---
@@ -733,14 +742,35 @@ Full order: PB-01 · PB-02 · PB-03 · PB-04 · PB-05 · PB-06 · PB-07 · PB-08
 
 ## A1.7 — What stays gated, and why
 
-- **Annual (£49) must not be offered for sale until entitlement recovery exists.** A 12-month entitlement held only in `localStorage` means a legitimate customer who clears storage loses eleven months they paid for. Model it in PB-21, price it in PB-11, sell it only after PB-16 passes.
-- **One Event (£19) sale is gated the same way**, and additionally fails *open* locally. Early manual recovery is acceptable if PB-16 records it as a deliberate, temporary posture.
+- **Both paid products are gated behind PB-16 (locked 2026-08-10).** Annual (£49) must not be offered for sale until entitlement recovery exists: a 12-month entitlement held only in `localStorage` means a customer who clears storage loses eleven months they paid for, which is a refund queue rather than a product. One Event (£19) is gated identically, and additionally fails *open* locally — the worse failure mode, but not the one that decides the gate. Model both in PB-21, price both in PB-11, sell neither until PB-16 passes. Early manual recovery for One Event is acceptable only if PB-16 records it as a deliberate, temporary posture.
 - **All Business capability** — brand kits, multi-device, lead capture, analytics, consent databases, agency use — remains out of scope. Lead generation and attendee PII require a separately governed data architecture that does not exist.
 - **The Business speculative-preview sales motion** is a manual process for now; PB-20's preview marking is the only architectural support it needs. **No website ingestion, no automated branding engine.**
 
 ## A1.8 — Additions to §12 out of scope
 
 Extends, does not replace, the original list: accounts, authentication and magic links; cross-device synchronisation of any kind; automatic cloud recovery of booth or gallery; lead capture, attendee databases and analytics; automated brand ingestion; purchase-credit and upgrade mechanics; a 7-day or any additional duration tier; music, audio tracks and mute controls in any form — the existing shutter sound is unrelated and stays.
+
+---
+
+---
+
+## A1.9 — Amendment 002: decisions locked 2026-08-10
+
+The four questions Amendment 001 raised are now settled, plus one correction to it. All are folded into the packets above; this section records that they were decided, not assumed.
+
+| # | Locked decision | Packet |
+|---|---|---|
+| 1 | **ENDED never removes the customer's photos.** It stops new personalised capture and export; the gallery stays viewable, downloadable and shareable permanently | PB-20 |
+| 2 | **No reactivation.** A further £19 creates a *new* event entitlement, with "Use these settings again" to duplicate the previous design | PB-20 |
+| 3 | **Four free event types only** — Birthday · Wedding · Party · Celebration. `Celebration` is the catch-all; no further taxonomy | PB-18 |
+| 4 | **Neither paid product goes on sale before entitlement recovery exists.** PB-16 gates both | PB-16, A1.7 |
+| — | **Lifecycle simplified to three states**, DRAFT → LIVE → ENDED. PREVIEW folds into DRAFT, which is editable, free, and permits marked test capture | PB-20 |
+
+**Correction to Amendment 001.** A1 previously carried an instruction to state in the cancellation terms that the £19 licence becomes non-refundable once the first live photo is taken. **That is withdrawn.** It asserted a conclusion about which statutory exception applies, which is not a product decision to make by assertion. PB-04 now requires the cancellation treatment to be *legally classified before sale*, and requires checkout to capture whatever express consent and acknowledgement the applicable UK regime demands. The rationale — that the entitlement has characteristics of both digital content and an ongoing service, which are treated differently — is written into PB-04's criteria.
+
+**Commercial note.** The £19/£49 ladder breaks even at **2.6 events**, against the six required by the earlier £9/£50 proposal. The tier-domination objection raised against that model does not apply to this one.
+
+**Execution priority.** PB-17 is promoted to the next executable packet. The 20-session silent deletion and the swallowed quota failure are live defects in a shipped product, not future commercial architecture, and they are independent of every gated decision above.
 
 ---
 

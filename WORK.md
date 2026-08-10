@@ -11,7 +11,7 @@ Update this file **in the same commit** as each packet. Keep it terse — reason
 
 - **Current phase:** P0 — Stop the site lying. Not started.
 - **Completed packets:** none
-- **Next packet:** PB-01 — replace the dead Business contact URL with a working `mailto:`. No dependencies. **Blocked on one input from Lizzie: the address to use.** PB-03 and PB-06 through PB-10 are unblocked and can run in the meantime.
+- **Next packet:** **PB-17 — make local photo storage survivable.** Promoted 2026-08-10 ahead of the P0/P1 sequence: the 20-session silent deletion and the swallowed quota failure are live defects in a shipped product, not future commercial architecture, and they depend on none of the gated decisions. PB-01 remains blocked on the contact address; PB-03 and PB-06…PB-10 are unblocked and can run in parallel sessions.
 - **Programme started:** —
 - **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. Added PB-17…PB-21, amended PB-02/11/12/14/16, reordered the tail. See spec Amendment 001.
 - **Live defect found during Amendment 001, not in the audit:** `trimGallery(20)` ([app.js:301](app.js:301)) silently deletes a party's earliest sessions past 20, and `saveSessionToGallery` swallows write failures with `catch(e){}`. Owned by PB-17.
@@ -87,15 +87,11 @@ A packet that would "fix" one of these must not run until the behaviour is confi
 
 ## Inputs needed from Lizzie
 
-- [ ] **PB-01:** the monitored email address for Business enquiries.
-- [ ] **PB-04:** sign-off on the legal content. The executor drafts; it does not sign off. **Amendment 001 adds:** the £19 licence is non-refundable once the first live photo is taken — that must appear in the cancellation terms, and it is a distance-selling exception that needs stating correctly.
+- [ ] **PB-01:** the monitored email address for Business enquiries. **This is the only thing blocking a packet today.**
+- [ ] **PB-04:** sign-off on the legal content, **and** the cancellation classification — whether the one-event entitlement is treated as digital content, a service, or both, since the consent and acknowledgement checkout must capture differs. The executor drafts and flags; it does not decide this.
 - [ ] **PB-15:** approval to cut over, and whether/when to announce the new URL.
-- [ ] **PB-18:** the event-type list for Free. Working assumption: Birthday · Wedding · Party · Celebration, yielding `MY BIRTHDAY` / `MY PARTY` / `CELEBRATE`.
-- [ ] **PB-20:** what ENDED actually ends. Working assumption: the licence stops new *personalised* sessions; it never removes access to photos already taken. Confirm — the alternative strands a customer's own party photos behind an expired licence.
-- [ ] **PB-20:** whether an ENDED event can be reactivated by buying another £19 licence, or whether a new event must be created.
-- [ ] **PB-16:** whether Annual may be sold before entitlement recovery exists. Recommended: no. Selling a 12-month entitlement that a storage clear destroys is a refund queue, not a product.
 
-*(PB-11's price point is now settled — £0 / £19 / £49 — and no longer needs an input.)*
+**Resolved 2026-08-10 — no longer inputs:** PB-11 price point (£0 / £19 / £49) · PB-18 event types (Birthday · Wedding · Party · Celebration) · PB-20 ENDED behaviour (photos always survive) · PB-20 reactivation (none; new purchase creates a new event) · PB-16 Annual gating (gated, along with One Event).
 
 ## Decision log
 
@@ -118,3 +114,9 @@ A packet that would "fix" one of these must not run until the behaviour is confi
 | 2026-08-10 | Sequencing inverted: lifecycle → licence → price → sale. PB-11 now depends on PB-21 | Spec A1.6 |
 | 2026-08-10 | Storage management is an **engineering** concern, never a pricing mechanism; `trimGallery(20)` goes only after PB-17 | Spec A1.3, PB-17 |
 | 2026-08-10 | Annual sale gated behind entitlement recovery; One Event fails **open** locally and is gated the same way | Spec A1.7 |
+| 2026-08-10 | **Amendment 002** — four open decisions locked; lifecycle simplified to DRAFT → LIVE → ENDED | Spec A1.9 |
+| 2026-08-10 | **ENDED never removes photos.** Stops new personalised capture only; gallery stays viewable, downloadable, shareable permanently | Spec PB-20 |
+| 2026-08-10 | **No reactivation of an ENDED event.** A further £19 creates a new event; "Use these settings again" duplicates the design | Spec PB-20 |
+| 2026-08-10 | Free event types locked to four: Birthday · Wedding · Party · Celebration | Spec PB-18 |
+| 2026-08-10 | **Withdrawn:** the Amendment 001 instruction to declare the £19 licence non-refundable after the first live photo. It asserted which statutory exception applies; PB-04 now requires legal classification before sale and consent capture at checkout | Spec A1.9, PB-04 |
+| 2026-08-10 | PB-17 promoted to next executable packet — live defects, no gated dependencies | Spec A1.9 |

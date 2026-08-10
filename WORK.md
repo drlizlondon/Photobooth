@@ -35,7 +35,7 @@ Three chains are load-bearing:
 | 5 | PB-05 Origin constant + complete social metadata | P2 | ☐ | — |
 | 6 | PB-06 Cut the demo contact sheet to under 200 KB | P2 | ☐ | — |
 | 7 | PB-07 robots.txt, sitemap.xml, branded 404 | P2 | ☐ | — |
-| 8 | PB-08 Fix the mobile navigation containing block | P3 | ☐ | — |
+| 8 | PB-08 Fix the mobile navigation containing block | P3 | ☑ | `4366054` |
 | 9 | PB-09 Differentiate camera failures, remove the alert | P3 | ☐ | — |
 | 10 | PB-10 Close the measured accessibility gaps | P3 | ☐ | — |
 | 11 | **PB-17 Make local photo storage survivable** | P3 | ☐ | — |

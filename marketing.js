@@ -19,8 +19,8 @@ var COMPARISON_BASE=470;
 var BUSINESS_BASE=560;
 var POLAROID_BASE=520;
 var EVENT=global.MyBishBashEvent||null;
-var DEMO_PALETTE=EVENT&&typeof EVENT.resolvePalette==="function"?
-  EVENT.resolvePalette("pink-party"):null;
+var DEMO_THEME=EVENT&&typeof EVENT.resolveTheme==="function"?
+  EVENT.resolveTheme("after-dark"):null;
 
 var SETTINGS={
   eventTitle:"Rae's 26th Birthday",
@@ -29,10 +29,11 @@ var SETTINGS={
   stripSecond:"Rae's 26th Birthday",
   stripSignature:"Rae's 26th Birthday",
   stripDate:"2026",
-  paletteId:DEMO_PALETTE&&DEMO_PALETTE.id||"pink-party",
-  palettePrimary:DEMO_PALETTE&&DEMO_PALETTE.primary||"",
-  paletteSecondary:DEMO_PALETTE&&DEMO_PALETTE.secondary||"",
-  paletteHighlight:DEMO_PALETTE&&DEMO_PALETTE.highlight||"",
+  themeId:DEMO_THEME&&DEMO_THEME.id||"after-dark",
+  themePrimary:DEMO_THEME&&DEMO_THEME.primary||"#d86c8f",
+  themeSecondary:DEMO_THEME&&DEMO_THEME.secondary||"#242126",
+  themeHighlight:DEMO_THEME&&DEMO_THEME.highlight||"#eee6ff",
+  themeBackground:DEMO_THEME&&DEMO_THEME.background||"#0b0b0b",
   polaroidTransition:"crossfade"
 };
 
@@ -149,7 +150,7 @@ function renderStripCanvas(canvas){
       frameStyle:state.frameStyle,
       filterStyle:state.filterStyle,
       branding:personalBranding(),
-      paletteMode:"personal"
+      themeMode:"personal"
     });
   });
 }
@@ -179,7 +180,7 @@ function renderMagazineCanvas(canvas,base,template,branding,accent){
       width:size.width,
       height:size.height,
       copy:coverCopy(),
-      accent:accent||SETTINGS.palettePrimary,
+      accent:accent||SETTINGS.themePrimary,
       template:template,
       edition:{no:26},
       branding:branding
@@ -192,7 +193,7 @@ function renderMagazine(){
   var rendered=false;
   ids.forEach(function(id){
     rendered=renderMagazineCanvas(
-      byId(id),COVER_BASE,state.template,personalBranding(),SETTINGS.palettePrimary
+      byId(id),COVER_BASE,state.template,personalBranding(),SETTINGS.themePrimary
     )||rendered;
   });
   return rendered;
@@ -271,7 +272,7 @@ function renderPolaroid(){
       hand:global.Fonts&&typeof global.Fonts.stack==="function"?
         global.Fonts.stack("hand",SETTINGS):undefined,
       transition:SETTINGS.polaroidTransition,
-      backdrop:SETTINGS.paletteSecondary,
+      backdrop:SETTINGS.themeBackground,
       attribution:personalBranding()
     });
     canvases.forEach(function(canvas){
@@ -296,10 +297,10 @@ function renderComparison(){
   var freeCanvas=byId("compareFreeCanvas");
   var personalCanvas=byId("comparePersonalCanvas");
   var a=renderMagazineCanvas(
-    freeCanvas,COMPARISON_BASE,"keepsake",freeBranding(),SETTINGS.palettePrimary
+    freeCanvas,COMPARISON_BASE,"keepsake",freeBranding(),SETTINGS.themePrimary
   );
   var b=renderMagazineCanvas(
-    personalCanvas,COMPARISON_BASE,"keepsake",personalBranding(),SETTINGS.palettePrimary
+    personalCanvas,COMPARISON_BASE,"keepsake",personalBranding(),SETTINGS.themePrimary
   );
   return a||b;
 }

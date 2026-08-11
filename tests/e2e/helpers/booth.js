@@ -32,12 +32,18 @@ async function installRuntimeProbes(page) {
             brandingSecondary: branding && branding.secondaryColor
           };
         } else {
-          window.__e2eRendererOptions[counter] = {
+          const renderOptions = {
             accent: options && options.accent,
             accentInk: options && options.accentInk,
             brandingPrimary: branding && branding.primaryColor,
             brandingSecondary: branding && branding.secondaryColor
           };
+          if (counter === "strip") {
+            renderOptions.frameStyle = options && options.frameStyle;
+            renderOptions.filterStyle = options && options.filterStyle;
+          }
+          if (counter === "magazine") renderOptions.template = options && options.template;
+          window.__e2eRendererOptions[counter] = renderOptions;
         }
         return original.apply(this, args);
       };

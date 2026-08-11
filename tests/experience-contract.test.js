@@ -132,8 +132,8 @@ test("Magazine asks for a favourite from all three captured photos", function ()
   assert.match(controls, /b\.onclick=\(\)=>\{[\s\S]*?coverIndex=i/);
   assert.match(controls, /\$\("coverPhotoChoices"\)\.appendChild\(b\)/);
   assert.match(thumbnails, /loadImage\(photos\[coverIndex\]\)/);
-  assert.match(thumbnails, /const palette=outputPalette\(settings\)/);
-  assert.match(thumbnails, /accent:palette\.primary,accentInk:safeForeground\(palette\.primary\)/);
+  assert.match(thumbnails, /const theme=outputTheme\(settings\)/);
+  assert.match(thumbnails, /accent:theme\.primary,accentInk:safeForeground\(theme\.primary\)/);
   assert.match(ready, /if\(currentMode==="magazine"&&coverIndex===null\)return false/);
 });
 
@@ -172,8 +172,8 @@ test("Moving Polaroid composes all three shared photos for preview, motion and s
   assert.match(still, /const imgs=await Promise\.all\(photos\.map\(loadImage\)\)/);
   assert.match(still, /Polaroid\.compose\(Object\.assign\(\{base:POLAROID_PRINT_BASE\},polaroidOptions\(imgs\)\)\)/);
   assert.match(still, /job\.drawStill\(ctx,0\)/);
-  assert.match(options, /const palette=outputPalette\(settings\)/);
-  assert.match(options, /backdrop:palette\.secondary/);
+  assert.match(options, /const theme=outputTheme\(settings\)/);
+  assert.match(options, /backdrop:theme\.background/);
 });
 
 test("Next Guest starts fresh while Retake replaces the current shared session", function () {

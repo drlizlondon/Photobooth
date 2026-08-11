@@ -4,6 +4,7 @@ var test = require("node:test");
 var assert = require("node:assert/strict");
 var fs = require("node:fs");
 var path = require("node:path");
+var EventConfig = require("../event.js");
 
 var ROOT = path.resolve(__dirname, "..");
 function source(name) {
@@ -21,6 +22,16 @@ var manifest = source("manifest.webmanifest");
 var serviceWorker = source("sw.js");
 var vercelIgnore = source(".vercelignore");
 var vercel = JSON.parse(source("vercel.json"));
+
+function relativeLuminance(hex) {
+  var channels = String(hex).slice(1).match(/.{2}/g).map(function (part) {
+    return parseInt(part, 16) / 255;
+  });
+  return channels.reduce(function (total, channel, index) {
+    var linear = channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+    return total + linear * [0.2126, 0.7152, 0.0722][index];
+  }, 0);
+}
 
 test("sends public Start directly into one shared three-photo capture", function () {
   var launch = app.slice(app.indexOf("function launchFreeBooth"), app.indexOf("function previewExampleBooth"));
@@ -102,8 +113,43 @@ test("keeps the public landing white, pastel and product-first", function () {
   assert.equal(JSON.parse(manifest).theme_color, "#ffffff");
 });
 
+test("places three honest ways to start directly after the output demos", function () {
+  var pathsStart = html.indexOf('<section id="personalPaths"');
+  var pathsEnd = html.indexOf("</section>", pathsStart) + "</section>".length;
+  var paths = html.slice(pathsStart, pathsEnd);
+  var expected = [
+    { heading: "Use for Free", price: /FREE/i, action: "ENTER" },
+    { heading: "Customise Your Own", price: /FROM £9/i, action: "CUSTOMISE" },
+    { heading: "Buy as a Gift", price: /GIFT/i, action: "BUY AS A GIFT" }
+  ];
+  var cursor = 0;
+
+  assert.ok(pathsStart >= 0, "the post-demo entry section must exist");
+  assert.match(html.slice(Math.max(0, pathsStart - 180), pathsStart), /<\/article>\s*<\/div>\s*$/,
+    "the three entry paths must immediately follow the output demo grid");
+  assert.equal((paths.match(/class="personal-entry-card [^"]+-path"/g) || []).length, 3);
+  expected.forEach(function (entry) {
+    var heading = paths.indexOf("<h3>" + entry.heading + "</h3>", cursor);
+    assert.ok(heading >= cursor, entry.heading + " must appear in the promised order");
+    var cardStart = paths.lastIndexOf("<article", heading);
+    var cardEnd = paths.indexOf("</article>", heading);
+    var card = paths.slice(cardStart, cardEnd);
+    assert.match(card, entry.price);
+    assert.match(card, new RegExp(">" + entry.action + "<"));
+    cursor = cardEnd;
+  });
+
+  assert.match(paths, /<button data-start-photobooth type="button">ENTER<\/button>/);
+  assert.match(app, /document\.querySelectorAll\("\[data-start-photobooth\]"\)\.forEach\(button=>button\.onclick=launchFreeBooth\)/);
+  assert.match(paths, /<button id="openPersonalSetupSecondary" type="button">CUSTOMISE<\/button>/);
+  assert.match(app, /\$\("openPersonalSetupSecondary"\)\.onclick=\(\)=>openPersonalSettings\("landing"\)/);
+  assert.match(paths, /<a href="#giftAccess">BUY AS A GIFT<\/a>/);
+  assert.match(html, /id="giftAccess"/);
+  assert.doesNotMatch(paths, /href="#"(?:\s|>)/);
+});
+
 test("keeps the locked Personal pricing visible while checkout stays honest", function () {
-  ["£0", "£19", "£49"].forEach(function (price) {
+  ["£0", "£9", "£49"].forEach(function (price) {
     assert.ok(html.includes(price), price + " must be visible");
   });
   assert.doesNotMatch(html, /Founding Lifetime|£100|£30|£50/);
@@ -234,6 +280,45 @@ test("marks host draft previews through the canonical output surfaces", function
   assert.doesNotMatch(watermark, /fillRect|strokeRect|DRAFT PREVIEW/, "Magazine watermark remains text-only");
 });
 
+test("keeps a live production-styled Event Home beside the three real outputs", function () {
+  var eventPreview = app.slice(app.indexOf("function renderAdminEventHomePreview"), app.indexOf("async function renderAdminPreview"));
+  var admin = app.slice(app.indexOf("async function renderAdminPreview"), app.indexOf("function scheduleAdminPreview"));
+  var inputs = app.slice(app.indexOf('document.querySelectorAll("#settings input,#settings select")'), app.indexOf("window.addEventListener(\"resize\""));
+  var settings = html.slice(html.indexOf('<section id="settings"'), html.indexOf("</main>"));
+
+  assert.match(settings, /data-preview="event-home"/);
+  assert.match(settings, /id="adminEventHomePreview"[^>]*class="[^"]*admin-event-home-preview[^"]*welcome-screen[^"]*"[^>]*role="tabpanel"[^>]*aria-labelledby="adminPreviewTabEventHome"/);
+  assert.match(settings, /id="adminPreviewTabEventHome"[^>]*role="tab"[^>]*aria-selected="true"[^>]*tabindex="0"/);
+  assert.equal((settings.match(/class="admin-preview-tab"[^>]*tabindex="-1"/g) || []).length, 3);
+  assert.match(html, /id="welcome"[^>]*class="[^"]*welcome-screen[^"]*"/);
+  ["adminEventPreviewEyebrow", "adminEventPreviewTitle", "adminEventPreviewMeta", "adminEventPreviewLine",
+    "adminEventPreviewStart", "adminEventPreviewHint"].forEach(function (id) {
+    assert.match(settings, new RegExp('id="' + id + '"'));
+  });
+  assert.match(eventPreview, /applyEventTheme\(preview,s\)/);
+  assert.match(eventPreview, /adminEventPreviewTitle"\)\.textContent=String\(s\.eventTitle/);
+  assert.match(eventPreview, /adminEventPreviewEyebrow[^\n]*welcomeEyebrow[^\n]*PHOTO BOOTH/);
+  assert.match(eventPreview, /adminEventPreviewMeta"\)\.textContent=meta/);
+  assert.match(eventPreview, /adminEventPreviewLine"\)\.textContent=line/);
+  assert.match(eventPreview, /adminEventPreviewStart"\)\.textContent=String\(s\.startLabel/);
+  assert.match(eventPreview, /preview\.setAttribute\("aria-label","Event Home live preview for "/);
+  assert.match(admin, /const s=draftSettings\(\),theme=themeFor\(s\)/);
+  assert.match(admin, /eventHomePreview=adminPreviewType==="event-home"/);
+  assert.match(admin, /c\.hidden=eventHomePreview/);
+  assert.match(admin, /eventPreview\.hidden=!eventHomePreview/);
+  assert.match(admin, /if\(eventHomePreview\)\{\s*renderAdminEventHomePreview\(s\);\s*return/);
+  assert.match(inputs, /scheduleAdminPreview\(\)/,
+    "event title, location, date and wording must repaint Event Home without saving");
+  assert.match(app, /document\.querySelectorAll\('input\[name="eventTheme"\]'\)[\s\S]*?renderAdminPreview\(\)/,
+    "theme selection must repaint the active Event Home immediately");
+  ["pop", "after-dark", "editorial", "sunshine"].forEach(function (id) {
+    assert.match(styles, new RegExp(':is\\(\\.event-entrance-card,\\.personal-compare \\.booth-example,\\.welcome-screen\\)\\[data-theme="' + id + '"\\]'),
+      id + " must use the shared Event Home treatment selector");
+  });
+  assert.match(app, /applyEventTheme\(\$\("welcome"\),settings\)/,
+    "the real Event Home and admin Event Home preview must use the same role applicator");
+});
+
 test("keeps uploaded design photos separate and feeds all real output renderers", function () {
   var defaults = app.slice(0, app.indexOf("const FRAMES"));
   var globals = app.slice(app.indexOf("let settings;"), app.indexOf("const $="));
@@ -295,7 +380,7 @@ test("selected states, screen focus and host colours have explicit semantics", f
   var focus = app.slice(app.indexOf("function focusScreenHeading"), app.indexOf("function delay"));
   var setup = app.slice(app.indexOf("function setSetupStep"), app.indexOf("function openPersonalSettings"));
   var contrast = app.slice(app.indexOf("function colourLuminance"), app.indexOf("function eventMeta"));
-  var paletteSync = app.slice(app.indexOf("function syncPaletteUI"), app.indexOf("function eventMeta"));
+  var themeSync = app.slice(app.indexOf("function syncThemeUI"), app.indexOf("function eventMeta"));
 
   assert.match(html, /id="reviewModeNav"[^>]*role="tablist"/);
   assert.match(sync, /setAttribute\("aria-selected",String\(selected\)\)/);
@@ -314,61 +399,105 @@ test("selected states, screen focus and host colours have explicit semantics", f
   assert.match(contrast, /function contrastRatio\(first,second\)/);
   assert.match(contrast, /contrastRatio\(background,"#111111"\)>=contrastRatio\(background,"#ffffff"\)/);
   assert.match(contrast, /EVENT\.safeForeground\(background\)/);
-  assert.match(contrast, /style\.setProperty\("--accent-ink",safeForeground\(palette\.primary\)\)/);
-  assert.match(contrast, /style\.setProperty\("--event-accent-ink",safeForeground\(palette\.primary\)\)/);
-  assert.match(paletteSync, /document\.querySelectorAll\('input\[name="eventPalette"\]'\)/);
-  assert.match(paletteSync, /input\.checked=input\.value===palette\.id/);
-  assert.match(paletteSync, /--palette-primary-ink",safeForeground\(option\.primary\)/);
-  assert.match(paletteSync, /--palette-secondary-ink",safeForeground\(option\.secondary\)/);
-  assert.match(paletteSync, /--palette-highlight-ink",safeForeground\(option\.highlight\)/);
+  assert.match(contrast, /style\.setProperty\("--accent-ink",safeForeground\(theme\.primary\)\)/);
+  assert.match(contrast, /style\.setProperty\("--event-accent-ink",safeForeground\(theme\.primary\)\)/);
+  assert.match(themeSync, /document\.querySelectorAll\('input\[name="eventTheme"\]'\)/);
+  assert.match(themeSync, /input\.checked=input\.value===theme\.id/);
+  assert.match(themeSync, /--theme-background",option\.background/);
+  assert.match(themeSync, /--theme-foreground",option\.foreground/);
+  assert.match(themeSync, /--theme-button",option\.button/);
+  assert.match(themeSync, /--theme-button-ink",option\.buttonInk/);
+  assert.match(themeSync, /card\.dataset\.decoration=option\.decoration/);
+  assert.match(themeSync, /card\.dataset\.typography=option\.typography/);
 });
 
-test("propagates one curated palette through host state and every personalised surface", function () {
+test("propagates one curated theme through host state and every personalised surface", function () {
   var defaults = app.slice(0, app.indexOf("const FRAMES"));
-  var eventPalette = app.slice(app.indexOf("function applyEventPalette"), app.indexOf("function syncPaletteUI"));
+  var eventTheme = app.slice(app.indexOf("function applyEventTheme"), app.indexOf("function syncThemeUI"));
   var draft = app.slice(app.indexOf("function draftSettings"), app.indexOf("function releaseMediaStream"));
   var branding = app.slice(app.indexOf("function normaliseBranding"), app.indexOf("function setEntitlement"));
   var polaroidOptions = app.slice(app.indexOf("function polaroidOptions"), app.indexOf("function invalidatePolaroid"));
-  var paletteHandler = app.slice(app.indexOf("document.querySelectorAll('input[name=\"eventPalette\"]')"), app.indexOf('$("resetSettings")'));
+  var themeHandler = app.slice(app.indexOf("document.querySelectorAll('input[name=\"eventTheme\"]')"), app.indexOf('$("resetSettings")'));
   var panel = html.slice(html.indexOf('id="setupPanel1"'), html.indexOf('id="setupPanel2"'));
-  var paletteIds = Array.from(panel.matchAll(/name="eventPalette"[^>]*value="([^"]+)"/g), function (match) { return match[1]; });
+  var themeIds = Array.from(panel.matchAll(/name="eventTheme"[^>]*value="([^"]+)"/g), function (match) { return match[1]; });
+  var expectedIds = ["pop", "after-dark", "editorial", "sunshine"];
+  var defaultTheme = EventConfig.resolveTheme("pop");
+  var afterDark = EventConfig.resolveTheme("after-dark");
+  var editorial = EventConfig.resolveTheme("editorial");
 
-  assert.match(defaults, /schemaVersion:2/);
-  assert.match(defaults, /paletteId:"lilac-pop"/);
-  assert.match(defaults, /palettePrimary:"#66519c"/);
-  assert.match(defaults, /paletteSecondary:"#eee6ff"/);
-  assert.match(defaults, /paletteHighlight:"#ffdce8"/);
+  assert.match(defaults, /schemaVersion:3/);
+  assert.match(defaults, new RegExp('themeId:"' + defaultTheme.id + '"'));
+  assert.match(defaults, new RegExp('themePrimary:"' + defaultTheme.primary + '"', "i"));
+  assert.match(defaults, new RegExp('themeSecondary:"' + defaultTheme.secondary + '"', "i"));
+  assert.match(defaults, new RegExp('themeHighlight:"' + defaultTheme.highlight + '"', "i"));
+  assert.match(defaults, new RegExp('themeBackground:"' + defaultTheme.background + '"', "i"));
+  assert.match(defaults, new RegExp('themeForeground:"' + defaultTheme.foreground + '"', "i"));
   assert.doesNotMatch(defaults, /(?:^|\s)(?:look|accent):/m);
 
-  assert.deepEqual(paletteIds, ["lilac-pop", "pink-party", "blue-sky", "sunshine"]);
-  assert.match(panel, /fieldset[^>]+aria-labelledby="chooseLookTitle"[^>]+aria-describedby="eventPaletteHelp"/);
-  assert.equal((panel.match(/class="palette-card"/g) || []).length, 4);
+  assert.deepEqual(EventConfig.PALETTE_IDS, expectedIds);
+  assert.deepEqual(EventConfig.THEME_IDS, expectedIds);
+  assert.deepEqual(themeIds, expectedIds);
+  assert.match(panel, /fieldset[^>]+aria-labelledby="chooseVibeTitle"[^>]+aria-describedby="eventThemeHelp"/);
+  assert.equal((panel.match(/class="theme-card"/g) || []).length, 4);
+  ["Pop", "After Dark", "Editorial", "Sunshine"].forEach(function (name) {
+    assert.match(panel, new RegExp("<strong>" + name + "</strong>", "i"));
+  });
   assert.doesNotMatch(panel, /id="setLook"|id="setAccent"|data-accent/);
 
-  assert.match(eventPalette, /--event-surface",palette\.secondary/);
-  assert.match(eventPalette, /--event-accent",palette\.primary/);
-  assert.match(eventPalette, /--event-accent-ink",safeForeground\(palette\.primary\)/);
-  assert.match(eventPalette, /--event-shape",palette\.highlight/);
-  assert.match(eventPalette, /--event-ink",safeForeground\(palette\.secondary\)/);
-  assert.match(draft, /input\[name="eventPalette"\]:checked/);
-  assert.match(draft, /paletteId:palette\.id/);
-  assert.match(draft, /palettePrimary:palette\.primary/);
-  assert.match(draft, /paletteSecondary:palette\.secondary/);
-  assert.match(draft, /paletteHighlight:palette\.highlight/);
-  assert.match(branding, /primaryColor:x\.primaryColor\|\|palette\.primary/);
-  assert.match(branding, /secondaryColor:x\.secondaryColor\|\|palette\.highlight/);
-  assert.match(polaroidOptions, /backdrop:palette\.secondary/);
-  assert.ok((app.match(/accent:palette\.primary/g) || []).length >= 4);
-  assert.ok((app.match(/accentInk:safeForeground\(palette\.primary\)/g) || []).length >= 3);
-  assert.ok((app.match(/backdrop:palette\.secondary/g) || []).length >= 3);
-  assert.match(paletteHandler, /syncPaletteUI\(input\.value\)/);
-  assert.match(paletteHandler, /applyRootPalette\(input\.value\)/);
-  assert.match(paletteHandler, /renderAdminPreview\(\)/);
+  var afterDarkLuminances = [afterDark.primary, afterDark.secondary, afterDark.highlight,
+    afterDark.background, afterDark.foreground, afterDark.button].map(relativeLuminance);
+  assert.ok(Math.min.apply(Math, afterDarkLuminances) <= 0.08, "After Dark must contain a genuinely dark role");
+  assert.ok(Math.max.apply(Math, afterDarkLuminances) >= 0.9, "After Dark must contain a genuinely white/light role");
+  assert.ok([afterDark.primary, afterDark.secondary, afterDark.highlight, afterDark.background].some(function (colour) {
+    return EventConfig.safeForeground(colour) === "#ffffff";
+  }), "After Dark must derive white text for its dark role");
+
+  ["pop", "after-dark", "sunshine"].forEach(function (id) {
+    var other = EventConfig.resolveTheme(id);
+    var differences = ["primary", "secondary", "highlight"].filter(function (role) {
+      return editorial[role] !== other[role];
+    });
+    assert.ok(differences.length >= 2, "Editorial must materially differ from " + id);
+  });
+  expectedIds.forEach(function (id) {
+    var theme = EventConfig.resolveTheme(id);
+    [theme.primary, theme.secondary, theme.highlight, theme.background, theme.button, theme.border].forEach(function (background) {
+      assert.ok(EventConfig.contrastRatio(background, EventConfig.safeForeground(background)) >= 4.5,
+        id + " must derive a contrast-safe foreground for every role");
+    });
+    assert.ok(EventConfig.contrastRatio(theme.background, theme.foreground) >= 4.5,
+      id + " must carry a safe Event Home foreground");
+    assert.ok(EventConfig.contrastRatio(theme.button, theme.buttonInk) >= 4.5,
+      id + " must carry safe button ink");
+  });
+
+  assert.match(eventTheme, /--event-surface",theme\.background/);
+  assert.match(eventTheme, /--event-accent",theme\.primary/);
+  assert.match(eventTheme, /--event-accent-ink",safeForeground\(theme\.primary\)/);
+  assert.match(eventTheme, /--event-secondary",theme\.secondary/);
+  assert.match(eventTheme, /--event-shape",theme\.highlight/);
+  assert.match(eventTheme, /--event-ink",theme\.foreground/);
+  assert.match(eventTheme, /--event-button",theme\.button/);
+  assert.match(eventTheme, /--event-button-ink",theme\.buttonInk/);
+  assert.match(eventTheme, /target\.dataset\.decoration=theme\.decoration/);
+  assert.match(eventTheme, /target\.dataset\.typography=theme\.typography/);
+  assert.match(draft, /input\[name="eventTheme"\]:checked/);
+  assert.match(draft, /\.\.\.themeSettings\(theme\)/);
+  assert.match(branding, /primaryColor:x\.primaryColor\|\|theme\.primary/);
+  assert.match(branding, /secondaryColor:x\.secondaryColor\|\|theme\.highlight/);
+  assert.match(polaroidOptions, /backdrop:theme\.background/);
+  assert.ok((app.match(/accent:theme\.primary/g) || []).length >= 4);
+  assert.ok((app.match(/accentInk:safeForeground\(theme\.primary\)/g) || []).length >= 3);
+  assert.ok((app.match(/backdrop:theme\.background/g) || []).length >= 3);
+  assert.match(themeHandler, /syncThemeUI\(input\.value\)/);
+  assert.match(themeHandler, /applyThemeRendererDefaults\(input\.value\)/);
+  assert.match(themeHandler, /applyRootTheme\(input\.value\)/);
+  assert.match(themeHandler, /renderAdminPreview\(\)/);
   assert.doesNotMatch(app, /setLook|setAccent|data-accent|EVENT_LOOKS|settings\.accent|s\.accent/);
 });
 
 test("keeps Business output colours isolated while Personal previews stay curated", function () {
-  var resolver = app.slice(app.indexOf("function outputPalette"), app.indexOf("function applyRootPalette"));
+  var resolver = app.slice(app.indexOf("function outputTheme"), app.indexOf("function applyRootTheme"));
   var movingCapture = app.slice(app.indexOf("async function captureMovingPolaroid"), app.indexOf("async function beginSession"));
   var thumbnails = app.slice(app.indexOf("async function renderStyleThumbs"), app.indexOf("function setMode"));
   var magazine = app.slice(app.indexOf("function renderMagazine"), app.indexOf("function drawDraftPreview"));
@@ -376,20 +505,20 @@ test("keeps Business output colours isolated while Personal previews stay curate
   var stripRenderer = app.slice(app.indexOf("function renderStrip"), app.indexOf("window.MyBishBashRenderers"));
   var admin = app.slice(app.indexOf("async function renderAdminPreview"), app.indexOf("function scheduleAdminPreview"));
 
-  assert.match(resolver, /if\(options&&options\.personal\)return palette/);
+  assert.match(resolver, /if\(options&&options\.personal\)return theme/);
   assert.match(resolver, /entitlement===ENTITLEMENTS\.BUSINESS/);
-  assert.match(resolver, /primary=businessBrand\.primaryColor\|\|palette\.primary/);
-  assert.match(resolver, /secondary=businessBrand\.secondaryColor\|\|palette\.secondary/);
-  assert.match(resolver, /return \{\.\.\.palette,primary,secondary,highlight:secondary\}/);
-  assert.match(movingCapture, /const palette=outputPalette\(settings\)/);
-  assert.match(thumbnails, /const palette=outputPalette\(settings\)/);
-  assert.match(magazine, /palette=outputPalette\(settings\)/);
-  assert.match(polaroidOptions, /const palette=outputPalette\(settings\)/);
-  assert.match(stripRenderer, /outputPalette\(s,\{personal:creative&&creative\.paletteMode==="personal"\}\)/);
-  assert.match(admin, /paletteMode:"personal"/);
-  assert.match(marketing, /paletteMode:"personal"/);
-  assert.match(styles, /\.confetti:nth-child\(3n\)\{background:var\(--palette-secondary,#eee6ff\)\}/);
-  assert.match(styles, /\.confetti:nth-child\(4n\)\{background:var\(--palette-highlight,#ffdce8\)\}/);
+  assert.match(resolver, /primary=businessBrand\.primaryColor\|\|theme\.primary/);
+  assert.match(resolver, /secondary=businessBrand\.secondaryColor\|\|theme\.secondary/);
+  assert.match(resolver, /return \{\.\.\.theme,primary,secondary,highlight:secondary,background:secondary/);
+  assert.match(movingCapture, /const theme=outputTheme\(settings\)/);
+  assert.match(thumbnails, /const theme=outputTheme\(settings\)/);
+  assert.match(magazine, /theme=outputTheme\(settings\)/);
+  assert.match(polaroidOptions, /const theme=outputTheme\(settings\)/);
+  assert.match(stripRenderer, /outputTheme\(s,\{personal:creative&&\(creative\.themeMode==="personal"\|\|creative\.paletteMode==="personal"\)\}\)/);
+  assert.match(admin, /themeMode:"personal"/);
+  assert.match(marketing, /themeMode:"personal"/);
+  assert.match(styles, /\.confetti:nth-child\(3n\)\{background:var\(--theme-secondary,/);
+  assert.match(styles, /\.confetti:nth-child\(4n\)\{background:var\(--theme-highlight,/);
 });
 
 test("derives safe Magazine foregrounds without changing renderer geometry", function () {
@@ -453,10 +582,7 @@ test("persists migrated EventConfig identity and keeps Setup Passes sparse", fun
     app.indexOf("settings=loadSettings()") > app.indexOf("function migrateSettings"),
     "legacy migration constants must exist before settings are loaded"
   );
-  assert.match(load, /delete eventDefaults\.paletteId/);
-  assert.match(load, /delete eventDefaults\.palettePrimary/);
-  assert.match(load, /delete eventDefaults\.paletteSecondary/);
-  assert.match(load, /delete eventDefaults\.paletteHighlight/);
+  assert.match(load, /Object\.keys\(eventDefaults\)\.filter\(key=>key\.startsWith\("theme"\)\)\.forEach\(key=>delete eventDefaults\[key\]\)/);
   assert.match(setupPass, /EVENT\.encodeSetupPass\(draft,\{defaults:DEFAULTS\}\)/);
 });
 
@@ -509,7 +635,7 @@ test("does not force-reload safe-worker booths or cache product API responses", 
   assert.doesNotMatch(legacySet, /rae-photo-booth-live-v(?:8|9|10|11)/);
   var assetList = serviceWorker.slice(serviceWorker.indexOf("const ASSETS"), serviceWorker.indexOf("const CACHEABLE_ASSET_URLS"));
   assert.doesNotMatch(assetList, /\/v1\//);
-  assert.match(serviceWorker, /const CACHE="mybishbash-photobooth-v8"/);
+  assert.match(serviceWorker, /const CACHE="mybishbash-photobooth-v9"/);
 });
 
 test("keeps internal plans, tests and credentials out of the static deployment", function () {

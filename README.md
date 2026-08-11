@@ -1,7 +1,7 @@
 # MyBishBash Photobooth
 
 MyBishBash is a personalised photobooth experience for a real event. A host
-creates the event identity and Look before the party, opens its event entrance
+creates the event identity and vibe before the party, opens its event entrance
 on a suitable phone or tablet, and deliberately starts the event. Guests then
 take three photographs once, use all three for a Photo Strip or Moving Polaroid,
 pick their favourite for a Magazine Cover, and save or share what they make. The
@@ -56,10 +56,11 @@ prefix registry. A session seeing a foreign prefix here should stop and ask.
 - `/business` is the separate For Business surface. `vercel.json` rewrites the
   static route back to `index.html`, where the client selects the surface.
 - Host setup creates a small personalised event entrance and configures event
-  identity, Look, optional Guest PIN and output defaults. Advanced controls stay
+  identity, one of four curated vibes, optional Guest PIN and output defaults. Advanced controls stay
   in host mode and do not appear in the normal live guest flow.
-- Customisation is preview-first: Photo Strip, Magazine and Moving Polaroid use
-  the production renderers in a large live workspace. A host can keep the built-in
+- Customisation is preview-first: Event Home shares the production entrance
+  treatment, while Photo Strip, Magazine and Moving Polaroid use the production
+  renderers in a large live workspace. A host can keep the built-in
   sample or choose up to three device-local design photos; those photos remain
   in memory only and never become Event Gallery sessions.
 - **Test real camera** runs the normal shared three-photo capture and Review loop
@@ -94,7 +95,7 @@ uses its reserved footer; Magazine draws after the selected real template; and
 Polaroid draws on the stationary print chrome shared by the still and every
 video frame.
 
-The locked catalogue is Free £0, One Party £19 and Annual £49. Founding Lifetime
+The locked catalogue is Free £0, One Party £9 and Annual £49. Founding Lifetime
 and the old six-month plan are retired from sale, while their identifiers and
 recovery compatibility are retained. Checkout and the recovery service remain
 gated; these amounts describe the intended products and do not make a purchase
@@ -106,12 +107,13 @@ the planned date and Setup Pass import do not. Reaching ENDED stops new
 personalised capture but never removes already-created gallery records. One Party
 is scoped to that event lifecycle, not to a photo or guest-session count.
 
-EventConfig schema 2 stores one curated `paletteId` plus the canonical flat
-`palettePrimary`, `paletteSecondary` and `paletteHighlight` roles defined in
-`event.js`. Version 1 `look`/`accent` settings migrate to the closest curated
-scheme and are then removed, so Event Home and every output resolve colour from
-one source. The role fields also leave a clean extension point for a later
-validated custom-palette product without exposing that option today.
+EventConfig schema 3 stores one curated `themeId` plus canonical flat roles for
+colour, background, foreground, buttons, borders, decoration, typography and
+the existing renderer defaults defined in `event.js`. Version 1 `look`/`accent`
+and version 2 palette settings migrate to the closest curated theme and are then
+removed, so Event Home and every output resolve their visual treatment from one
+source. The role-shaped boundary leaves a clean extension point for later
+validated custom colours without exposing that option today.
 
 ## Local-first data and migration
 
@@ -149,7 +151,7 @@ production credentials are included in this repository.
 The checked-in Worker still speaks the retired catalogue and does not yet bind
 `ONE_EVENT` to EventConfig lifecycle. That is an intentional release gate: keep
 `BILLING_LIVE` off until the Worker schema, Stripe products, restore path and
-event binding have been migrated to £19 / £49 and verified together.
+event binding have been migrated to £9 / £49 and verified together.
 
 ## Guest flow
 Event entrance → take three photos → choose what to make → Save / Share → Next Guest.

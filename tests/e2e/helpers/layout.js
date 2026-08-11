@@ -104,7 +104,30 @@ async function assertPreviewIsProminent(page, selector, canvasSelector = "#admin
     .toBeGreaterThanOrEqual(0.95);
 }
 
+async function assertDomPreviewIsProminent(page, selector) {
+  const preview = page.locator(selector);
+  await expect(preview).toBeVisible();
+  await preview.scrollIntoViewIfNeeded();
+  const metrics = await preview.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const visibleWidth = Math.max(0, Math.min(window.innerWidth, box.right) - Math.max(0, box.left));
+    const visibleHeight = Math.max(0, Math.min(window.innerHeight, box.bottom) - Math.max(0, box.top));
+    return {
+      width: box.width,
+      height: box.height,
+      visibleRatio: visibleWidth * visibleHeight / Math.max(1, box.width * box.height),
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight
+    };
+  });
+  expect(metrics.width).toBeGreaterThanOrEqual(Math.min(220, metrics.viewportWidth * 0.55));
+  expect(metrics.height).toBeGreaterThanOrEqual(Math.min(280, metrics.viewportHeight * 0.32));
+  expect(metrics.visibleRatio, "the Event Home preview must be materially visible without clipping")
+    .toBeGreaterThanOrEqual(0.9);
+}
+
 module.exports = {
+  assertDomPreviewIsProminent,
   assertFocusWithin,
   assertNoHorizontalOverflow,
   assertPreviewIsProminent,

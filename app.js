@@ -1,5 +1,5 @@
 const DEFAULTS = {
-  schemaVersion:2,
+  schemaVersion:3,
   eventId:"",
   eventType:"party",
   eventTitle:"Your Celebration",
@@ -7,10 +7,22 @@ const DEFAULTS = {
   eventLine:"",
   date:String(new Date().getFullYear()),
   datePrecision:"unknown",
-  paletteId:"lilac-pop",
-  palettePrimary:"#66519c",
-  paletteSecondary:"#eee6ff",
-  paletteHighlight:"#ffdce8",
+  themeId:"pop",
+  themeName:"Pop",
+  themeTagline:"Colourful · playful · bold",
+  themePrimary:"#b52167",
+  themeSecondary:"#eee6ff",
+  themeHighlight:"#fff0aa",
+  themeBackground:"#ffdce8",
+  themeForeground:"#111111",
+  themeButton:"#b52167",
+  themeButtonInk:"#ffffff",
+  themeBorder:"#111111",
+  themeDecoration:"playful-shapes",
+  themeTypography:"bold-sans",
+  themeStripFrame:"white",
+  themeStripFilter:"original",
+  themeMagazineTemplate:"keepsake",
   eventStatus:"DRAFT",
   activatedAt:"",
   endsAt:"",
@@ -311,7 +323,7 @@ let sessionOrientation="landscape";
 let captureSessionId=0;
 let idleTimer=null;
 let audioCtx=null;
-let adminPreviewType="strip";
+let adminPreviewType="event-home";
 let adminOrientation="landscape";
 let adminPreviewTimer=0;
 let adminPreviewPhotos=[];
@@ -390,11 +402,8 @@ function loadSettings(){
     if(stored&&!Object.prototype.hasOwnProperty.call(raw,"eventType"))delete eventDefaults.eventType;
     if(stored&&!Object.prototype.hasOwnProperty.call(raw,"datePrecision"))delete eventDefaults.datePrecision;
     if(stored&&!Object.prototype.hasOwnProperty.call(raw,"schemaVersion"))delete eventDefaults.schemaVersion;
-    if(stored&&!Object.prototype.hasOwnProperty.call(raw,"paletteId")){
-      delete eventDefaults.paletteId;
-      delete eventDefaults.palettePrimary;
-      delete eventDefaults.paletteSecondary;
-      delete eventDefaults.paletteHighlight;
+    if(stored&&!Object.prototype.hasOwnProperty.call(raw,"themeId")){
+      Object.keys(eventDefaults).filter(key=>key.startsWith("theme")).forEach(key=>delete eventDefaults[key]);
     }
     const legacy={...eventDefaults,...Fonts.migrate(migrateSettings(raw))};
     const migrated=EVENT?EVENT.migrateEventConfig(legacy,{defaults:eventDefaults}):legacy;
@@ -440,73 +449,137 @@ function safeForeground(background){
 function prefersReducedMotion(){
   return !!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 }
-function paletteFor(value){
-  if(EVENT&&typeof EVENT.resolvePalette==="function"){
-    const resolved=EVENT.resolvePalette(value||DEFAULTS);
+function themeFor(value){
+  if(EVENT&&typeof EVENT.resolveTheme==="function"){
+    const resolved=EVENT.resolveTheme(value||DEFAULTS);
     return {
       ...resolved,
-      id:resolved.id||resolved.paletteId||DEFAULTS.paletteId,
-      primary:resolved.primary||resolved.palettePrimary||DEFAULTS.palettePrimary,
-      secondary:resolved.secondary||resolved.paletteSecondary||DEFAULTS.paletteSecondary,
-      highlight:resolved.highlight||resolved.paletteHighlight||DEFAULTS.paletteHighlight
+      id:resolved.id||resolved.themeId||DEFAULTS.themeId,
+      name:resolved.name||resolved.themeName||DEFAULTS.themeName,
+      tagline:resolved.tagline||resolved.themeTagline||DEFAULTS.themeTagline,
+      primary:resolved.primary||resolved.themePrimary||DEFAULTS.themePrimary,
+      secondary:resolved.secondary||resolved.themeSecondary||DEFAULTS.themeSecondary,
+      highlight:resolved.highlight||resolved.themeHighlight||DEFAULTS.themeHighlight,
+      background:resolved.background||resolved.themeBackground||DEFAULTS.themeBackground,
+      foreground:resolved.foreground||resolved.themeForeground||DEFAULTS.themeForeground,
+      button:resolved.button||resolved.themeButton||DEFAULTS.themeButton,
+      buttonInk:resolved.buttonInk||resolved.themeButtonInk||DEFAULTS.themeButtonInk,
+      border:resolved.border||resolved.themeBorder||DEFAULTS.themeBorder,
+      decoration:resolved.decoration||resolved.themeDecoration||DEFAULTS.themeDecoration,
+      typography:resolved.typography||resolved.themeTypography||DEFAULTS.themeTypography,
+      stripFrame:resolved.stripFrame||resolved.themeStripFrame||DEFAULTS.themeStripFrame,
+      stripFilter:resolved.stripFilter||resolved.themeStripFilter||DEFAULTS.themeStripFilter,
+      magazineTemplate:resolved.magazineTemplate||resolved.themeMagazineTemplate||DEFAULTS.themeMagazineTemplate
     };
   }
   const source=value&&typeof value==="object"?value:DEFAULTS;
   return {
-    id:typeof value==="string"?value:(source.paletteId||DEFAULTS.paletteId),
-    name:"Lilac Pop",
-    primary:source.palettePrimary||DEFAULTS.palettePrimary,
-    secondary:source.paletteSecondary||DEFAULTS.paletteSecondary,
-    highlight:source.paletteHighlight||DEFAULTS.paletteHighlight
+    id:typeof value==="string"?value:(source.themeId||DEFAULTS.themeId),
+    name:source.themeName||DEFAULTS.themeName,
+    tagline:source.themeTagline||DEFAULTS.themeTagline,
+    primary:source.themePrimary||DEFAULTS.themePrimary,
+    secondary:source.themeSecondary||DEFAULTS.themeSecondary,
+    highlight:source.themeHighlight||DEFAULTS.themeHighlight,
+    background:source.themeBackground||DEFAULTS.themeBackground,
+    foreground:source.themeForeground||DEFAULTS.themeForeground,
+    button:source.themeButton||DEFAULTS.themeButton,
+    buttonInk:source.themeButtonInk||DEFAULTS.themeButtonInk,
+    border:source.themeBorder||DEFAULTS.themeBorder,
+    decoration:source.themeDecoration||DEFAULTS.themeDecoration,
+    typography:source.themeTypography||DEFAULTS.themeTypography,
+    stripFrame:source.themeStripFrame||DEFAULTS.themeStripFrame,
+    stripFilter:source.themeStripFilter||DEFAULTS.themeStripFilter,
+    magazineTemplate:source.themeMagazineTemplate||DEFAULTS.themeMagazineTemplate
   };
 }
-/* Personal events use their curated three-role scheme. Business guest
-   outputs remain governed by the brand colours entered in the Business
-   configurator, so a cached Personal palette can never leak into them. The
-   explicit personal flag is used by the public and host design previews,
-   which must keep showing the curated event scheme even on a Business
-   account. */
-function outputPalette(value,options){
-  const palette=paletteFor(value);
-  if(options&&options.personal)return palette;
+function themeSettings(theme){
+  return {
+    themeId:theme.id,
+    themeName:theme.name,
+    themeTagline:theme.tagline,
+    themePrimary:theme.primary,
+    themeSecondary:theme.secondary,
+    themeHighlight:theme.highlight,
+    themeBackground:theme.background,
+    themeForeground:theme.foreground,
+    themeButton:theme.button,
+    themeButtonInk:theme.buttonInk,
+    themeBorder:theme.border,
+    themeDecoration:theme.decoration,
+    themeTypography:theme.typography,
+    themeStripFrame:theme.stripFrame,
+    themeStripFilter:theme.stripFilter,
+    themeMagazineTemplate:theme.magazineTemplate
+  };
+}
+/* Personal events use their curated theme. Business guest outputs remain
+   governed by the brand colours entered in the Business configurator, so a
+   cached Personal theme can never leak into them. */
+function outputTheme(value,options){
+  const theme=themeFor(value);
+  if(options&&options.personal)return theme;
   if(entitlement===ENTITLEMENTS.BUSINESS){
-    const primary=businessBrand.primaryColor||palette.primary;
-    const secondary=businessBrand.secondaryColor||palette.secondary;
-    return {...palette,primary,secondary,highlight:secondary};
+    const primary=businessBrand.primaryColor||theme.primary;
+    const secondary=businessBrand.secondaryColor||theme.secondary;
+    return {...theme,primary,secondary,highlight:secondary,background:secondary,foreground:safeForeground(secondary),button:primary,buttonInk:safeForeground(primary),border:primary};
   }
-  return palette;
+  return theme;
 }
-function applyRootPalette(value){
-  const palette=paletteFor(value),root=document.documentElement;
-  root.style.setProperty("--accent",palette.primary);
-  root.style.setProperty("--accent-ink",safeForeground(palette.primary));
-  root.style.setProperty("--palette-secondary",palette.secondary);
-  root.style.setProperty("--palette-highlight",palette.highlight);
+function applyRootTheme(value){
+  const theme=themeFor(value),root=document.documentElement;
+  root.style.setProperty("--accent",theme.primary);
+  root.style.setProperty("--accent-ink",safeForeground(theme.primary));
+  root.style.setProperty("--theme-primary",theme.primary);
+  root.style.setProperty("--theme-secondary",theme.secondary);
+  root.style.setProperty("--theme-highlight",theme.highlight);
+  root.style.setProperty("--theme-background",theme.background);
+  root.style.setProperty("--theme-foreground",theme.foreground);
+  root.style.setProperty("--theme-button",theme.button);
+  root.style.setProperty("--theme-button-ink",theme.buttonInk);
+  root.style.setProperty("--theme-border",theme.border);
 }
-function applyEventPalette(target,value){
+function applyEventTheme(target,value){
   if(!target)return;
-  const palette=paletteFor(value);
-  target.style.setProperty("--event-surface",palette.secondary);
-  target.style.setProperty("--event-accent",palette.primary);
-  target.style.setProperty("--event-accent-ink",safeForeground(palette.primary));
-  target.style.setProperty("--event-shape",palette.highlight);
-  target.style.setProperty("--event-ink",safeForeground(palette.secondary));
-  target.dataset.palette=palette.id;
+  const theme=themeFor(value);
+  target.style.setProperty("--event-surface",theme.background);
+  target.style.setProperty("--event-primary",theme.primary);
+  target.style.setProperty("--event-accent",theme.primary);
+  target.style.setProperty("--event-accent-ink",safeForeground(theme.primary));
+  target.style.setProperty("--event-secondary",theme.secondary);
+  target.style.setProperty("--event-highlight",theme.highlight);
+  target.style.setProperty("--event-shape",theme.highlight);
+  target.style.setProperty("--event-ink",theme.foreground);
+  target.style.setProperty("--event-button",theme.button);
+  target.style.setProperty("--event-button-ink",theme.buttonInk);
+  target.style.setProperty("--event-border",theme.border);
+  target.dataset.theme=theme.id;
+  target.dataset.decoration=theme.decoration;
+  target.dataset.typography=theme.typography;
 }
-function syncPaletteUI(value){
-  const palette=paletteFor(value);
-  document.querySelectorAll(".host-palette-picker .palette-card[data-palette]").forEach(card=>{
-    const option=paletteFor(card.dataset.palette);
-    card.style.setProperty("--palette-primary",option.primary);
-    card.style.setProperty("--palette-secondary",option.secondary);
-    card.style.setProperty("--palette-highlight",option.highlight);
-    card.style.setProperty("--palette-primary-ink",safeForeground(option.primary));
-    card.style.setProperty("--palette-secondary-ink",safeForeground(option.secondary));
-    card.style.setProperty("--palette-highlight-ink",safeForeground(option.highlight));
+function syncThemeUI(value){
+  const theme=themeFor(value);
+  document.querySelectorAll(".host-theme-picker .theme-card[data-theme]").forEach(card=>{
+    const option=themeFor(card.dataset.theme);
+    card.style.setProperty("--theme-primary",option.primary);
+    card.style.setProperty("--theme-secondary",option.secondary);
+    card.style.setProperty("--theme-highlight",option.highlight);
+    card.style.setProperty("--theme-background",option.background);
+    card.style.setProperty("--theme-foreground",option.foreground);
+    card.style.setProperty("--theme-button",option.button);
+    card.style.setProperty("--theme-button-ink",option.buttonInk);
+    card.style.setProperty("--theme-border",option.border);
+    card.dataset.decoration=option.decoration;
+    card.dataset.typography=option.typography;
   });
-  document.querySelectorAll('input[name="eventPalette"]').forEach(input=>{
-    input.checked=input.value===palette.id;
+  document.querySelectorAll('input[name="eventTheme"]').forEach(input=>{
+    input.checked=input.value===theme.id;
   });
+}
+function applyThemeRendererDefaults(value){
+  const theme=themeFor(value);
+  if($("setStripFrame"))$("setStripFrame").value=theme.stripFrame;
+  if($("setStripFilter"))$("setStripFilter").value=theme.stripFilter;
+  if($("setMagazineTemplate"))$("setMagazineTemplate").value=theme.magazineTemplate;
 }
 function eventMeta(s){
   const bits=[];
@@ -838,19 +911,19 @@ function showScreen(id,options){
 function delay(ms){return new Promise(r=>setTimeout(r,ms));}
 
 function normaliseBranding(policy,extra){
-  const p=policy||{},x=extra||{},palette=paletteFor(settings);
+  const p=policy||{},x=extra||{},theme=themeFor(settings);
   return {
     mode:p.mode||x.mode||"free",
     text:x.text!==undefined?x.text:(p.myBishBashText||""),
     brandName:x.brandName||"",
-    primaryColor:x.primaryColor||palette.primary,
-    secondaryColor:x.secondaryColor||palette.highlight,
+    primaryColor:x.primaryColor||theme.primary,
+    secondaryColor:x.secondaryColor||theme.highlight,
     logoImage:x.logoImage||null
   };
 }
 function currentBranding(){
-  const palette=paletteFor(settings);
-  if(!PRODUCT)return {mode:"free",text:"MYBISHBASH PHOTOBOOTH",primaryColor:palette.primary,secondaryColor:palette.highlight};
+  const theme=themeFor(settings);
+  if(!PRODUCT)return {mode:"free",text:"MYBISHBASH PHOTOBOOTH",primaryColor:theme.primary,secondaryColor:theme.highlight};
   const policy=PRODUCT.getOutputBrandingPolicy(entitlement,{whiteLabel:businessBrand.whiteLabel});
   if(entitlement===ENTITLEMENTS.BUSINESS){
     return normaliseBranding(policy,{
@@ -864,11 +937,11 @@ function currentBranding(){
   return normaliseBranding(policy);
 }
 function personalPreviewBranding(sourceSettings){
-  const s=sourceSettings||settings,palette=paletteFor(s);
-  if(!PRODUCT)return {mode:"personal",text:"POWERED BY MYBISHBASH PHOTOBOOTH",primaryColor:palette.primary,secondaryColor:palette.highlight};
+  const s=sourceSettings||settings,theme=themeFor(s);
+  if(!PRODUCT)return {mode:"personal",text:"POWERED BY MYBISHBASH PHOTOBOOTH",primaryColor:theme.primary,secondaryColor:theme.highlight};
   return normaliseBranding(PRODUCT.getOutputBrandingPolicy(ENTITLEMENTS.ONE_EVENT||ENTITLEMENTS.PERSONAL_6_MONTH),{
-    primaryColor:palette.primary,
-    secondaryColor:palette.highlight
+    primaryColor:theme.primary,
+    secondaryColor:theme.highlight
   });
 }
 function setEntitlement(next,record){
@@ -1010,8 +1083,8 @@ function showProductRoute(route,push,replace){
 function routeFromLocation(){return /(?:^|\/)business\/?$/.test(location.pathname)?"business":"personal";}
 function applyExampleBoothSettings(){
   if(!temporarySettingsSnapshot)temporarySettingsSnapshot=settings;
-  const pink=paletteFor("pink-party");
-  const example={...DEFAULTS,eventType:"birthday",eventTitle:"Rae's 26th Birthday",location:"London",date:"08.08.26",datePrecision:"exact",eventLine:"Good people. Great pictures.",paletteId:pink.id,palettePrimary:pink.primary,paletteSecondary:pink.secondary,paletteHighlight:pink.highlight,stripTop:"",stripSecond:"",stripSignature:"Rae's 26th Birthday",stripDate:"08.08.26"};
+  const afterDark=themeFor("after-dark");
+  const example={...DEFAULTS,...themeSettings(afterDark),eventType:"birthday",eventTitle:"Rae's 26th Birthday",location:"London",date:"08.08.26",datePrecision:"exact",eventLine:"Good people. Great pictures.",stripFrame:afterDark.stripFrame,stripFilter:afterDark.stripFilter,magazineTemplate:afterDark.magazineTemplate,stripTop:"",stripSecond:"",stripSignature:"Rae's 26th Birthday",stripDate:"08.08.26"};
   settings=EVENT?EVENT.createEventConfig(example,{defaults:DEFAULTS}):example;
 }
 function updateWelcomeMode(hostView){
@@ -1056,7 +1129,7 @@ function showEventHome(example,hostView){
   guestPinThrottle=EVENT?EVENT.createGuestPinThrottleState():guestPinThrottle;
   activationConfirmationPending=false;
   fillSettingsUI();
-  applyEventPalette($("welcome"),settings);
+  applyEventTheme($("welcome"),settings);
   refreshHostEventStatus();
   updateWelcomeMode(!!hostView);
   showScreen("welcome");
@@ -1172,7 +1245,7 @@ function fillSettingsUI(){
   $("welcomeDate").hidden=!meta;
   $("welcomeEventLine").textContent=settings.eventLine||"";
   $("welcomeEventLine").hidden=!settings.eventLine;
-  applyRootPalette(settings);
+  applyRootTheme(settings);
   applyScreenText();
 
   const map={
@@ -1184,7 +1257,7 @@ function fillSettingsUI(){
   Object.entries(map).forEach(([id,key])=>{if($(id))$(id).value=settings[key];});
   if($("setEventType"))$("setEventType").value=String(settings.eventType||"party").replace(/_/g,"-");
   refreshCoverPlaceholders();
-  syncPaletteUI(settings);
+  syncThemeUI(settings);
   $("setPolaroidTransition").value=settings.polaroidTransition;
   $("setCountdown").value=String(settings.countdown);
   $("setMirror").checked=settings.mirror;
@@ -1338,8 +1411,8 @@ function refreshFontSpecimens(){
 }
 
 function draftSettings(){
-  const selectedPalette=document.querySelector('input[name="eventPalette"]:checked');
-  const palette=paletteFor(selectedPalette?selectedPalette.value:settings);
+  const selectedTheme=document.querySelector('input[name="eventTheme"]:checked');
+  const theme=themeFor(selectedTheme?selectedTheme.value:settings);
   const draft={
     ...settings,
     eventType:String($("setEventType").value||"party").replace(/-/g,"_"),
@@ -1348,10 +1421,7 @@ function draftSettings(){
     date:$("setDate").value.trim(),
     datePrecision:$("setDatePrecision").value,
     eventLine:$("setEventLine").value.trim(),
-    paletteId:palette.id,
-    palettePrimary:palette.primary,
-    paletteSecondary:palette.secondary,
-    paletteHighlight:palette.highlight,
+    ...themeSettings(theme),
     stripFrame:$("setStripFrame").value,
     stripFilter:$("setStripFilter").value,
     magazineTemplate:$("setMagazineTemplate").value,
@@ -1531,12 +1601,12 @@ function resetCreativeState(experience){
 
 async function captureMovingPolaroid(sid){
   const canvas=$("motionCanvas"),video=$("video");
-  const palette=outputPalette(settings);
+  const theme=outputTheme(settings);
   const compositor=Polaroid.composeLive({
     base:POLAROID_VIDEO_BASE,
     copy:Polaroid.copyFor(settings),
     hand:Fonts.stack("hand",settings),
-    backdrop:palette.secondary,
+    backdrop:theme.background,
     attribution:currentBranding(),
     mirror:settings.mirror,
     draftPreview:eventIsDraft()
@@ -1868,14 +1938,14 @@ async function renderStyleThumbs(){
   if(token!==thumbToken)return;
   const copy=Covers.copyFor(settings);
   const size=Covers.coverSize(sessionOrientation,440);
-  const palette=outputPalette(settings);
+  const theme=outputTheme(settings);
   nodes.forEach(cv=>{
     cv.width=size.width;cv.height=size.height;
     Covers.render(cv.getContext("2d"),{
       img:img||Covers.placeholder(),
       fonts:Fonts.faces(settings),
       width:size.width,height:size.height,
-      copy,accent:palette.primary,accentInk:safeForeground(palette.primary),
+      copy,accent:theme.primary,accentInk:safeForeground(theme.primary),
       template:cv.dataset.template,
       edition:{no:sessionEdition},
       branding:currentBranding()
@@ -1973,15 +2043,15 @@ async function render(token){
 /* No `photoFilter`: the guest's filter choice is a strip-only system. Covers
    carry the editorial finish instead, so every cover from a booth matches. */
 function renderMagazine(ctx,c,img){
-  const size=Covers.coverSize(sessionOrientation,1200),palette=outputPalette(settings);
+  const size=Covers.coverSize(sessionOrientation,1200),theme=outputTheme(settings);
   c.width=size.width;c.height=size.height;
   Covers.render(ctx,{
     img,
     width:size.width,height:size.height,
     copy:Covers.copyFor(settings),
     fonts:Fonts.faces(settings),
-    accent:palette.primary,
-    accentInk:safeForeground(palette.primary),
+    accent:theme.primary,
+    accentInk:safeForeground(theme.primary),
     template:magazineStyle,
     edition:{no:sessionEdition},
     branding:currentBranding()
@@ -2028,13 +2098,13 @@ let polaroidHandoffTimer=0;
 let polaroidVisibilityHandler=null;
 
 function polaroidOptions(images){
-  const palette=outputPalette(settings);
+  const theme=outputTheme(settings);
   return {
     images,
     copy:Polaroid.copyFor(settings),
     hand:Fonts.stack("hand",settings),
     transition:settings.polaroidTransition||"crossfade",
-    backdrop:palette.secondary,
+    backdrop:theme.background,
     attribution:currentBranding(),
     draftPreview:eventIsDraft()
   };
@@ -2281,7 +2351,7 @@ function renderStrip(ctx,c,imgs,s,orientation,creative){
   const chosenFrame=creative&&creative.frameStyle||frameStyle;
   const chosenFilter=creative&&creative.filterStyle||filterStyle;
   const branding=creative&&Object.prototype.hasOwnProperty.call(creative,"branding")?creative.branding:currentBranding();
-  const copy=stripCopyFor(s),palette=outputPalette(s,{personal:creative&&creative.paletteMode==="personal"});
+  const copy=stripCopyFor(s),theme=outputTheme(s,{personal:creative&&(creative.themeMode==="personal"||creative.paletteMode==="personal")});
   if(!STRIP)throw new Error("The Photo Strip renderer is unavailable.");
   return STRIP.render(ctx,{
     canvas:c,
@@ -2289,7 +2359,7 @@ function renderStrip(ctx,c,imgs,s,orientation,creative){
     frameStyle:chosenFrame,
     filterStyle:chosenFilter,
     fonts:typography(s),
-    accent:palette.primary,
+    accent:theme.primary,
     event:{name:copy.signature||s.eventTitle,location:s.location,date:copy.date||s.date},
     footer:{primary:copy.signature||s.eventTitle,location:s.location,date:copy.date||s.date},
     branding,
@@ -2514,6 +2584,22 @@ async function adminPreviewImages(){
   return images.slice(0,3);
 }
 
+function renderAdminEventHomePreview(s){
+  const preview=$("adminEventHomePreview");
+  if(!preview)return;
+  applyEventTheme(preview,s);
+  const meta=eventMeta(s),line=String(s.eventLine||"").trim();
+  $("adminEventPreviewEyebrow").textContent=String(s.welcomeEyebrow||"").trim()||"PHOTO BOOTH";
+  $("adminEventPreviewTitle").textContent=String(s.eventTitle||DEFAULTS.eventTitle).trim()||DEFAULTS.eventTitle;
+  $("adminEventPreviewMeta").textContent=meta;
+  $("adminEventPreviewMeta").hidden=!meta;
+  $("adminEventPreviewLine").textContent=line;
+  $("adminEventPreviewLine").hidden=!line;
+  $("adminEventPreviewStart").textContent=String(s.startLabel||"").trim()||"ENTER";
+  $("adminEventPreviewHint").textContent=String(s.startHint||"").trim()||"photobooth";
+  preview.setAttribute("aria-label","Event Home live preview for "+$("adminEventPreviewTitle").textContent);
+}
+
 /* Every host output uses the same production renderer as Review. The smaller
    preview surface changes only the working resolution, never the geometry or
    composition rules. */
@@ -2521,27 +2607,35 @@ async function renderAdminPreview(){
   if(adminPreviewTimer){clearTimeout(adminPreviewTimer);adminPreviewTimer=0;}
   stopAdminPreviewMotion();
   const token=++adminPreviewRenderToken;
-  const s=draftSettings(),palette=paletteFor(s),c=$("adminPreviewCanvas");
+  const s=draftSettings(),theme=themeFor(s),c=$("adminPreviewCanvas");
   if(!c)return;
   const ctx=c.getContext("2d"),adminDraft=String(s.eventStatus||"DRAFT")==="DRAFT";
-  applyRootPalette(palette.id);
+  applyRootTheme(theme.id);
+  const eventPreview=$("adminEventHomePreview");
+  const orientationControl=document.querySelector(".orientation-control");
+  const playMotion=$("adminPreviewPlayMotion");
+  const eventHomePreview=adminPreviewType==="event-home";
+  c.hidden=eventHomePreview;
+  if(eventPreview)eventPreview.hidden=!eventHomePreview;
+  if(orientationControl)orientationControl.hidden=eventHomePreview||adminPreviewType==="polaroid";
+  if(playMotion)playMotion.hidden=true;
+  if(eventHomePreview){
+    renderAdminEventHomePreview(s);
+    return;
+  }
   let images;
   try{images=await adminPreviewImages();}
   catch(error){if($("previewPhotoStatus"))$("previewPhotoStatus").textContent="Those photos could not be drawn. Try another image.";return;}
   if(token!==adminPreviewRenderToken)return;
   c.dataset.renderer=adminPreviewType;
   c.setAttribute("aria-label",(adminPreviewType==="strip"?"Photo Strip":adminPreviewType==="magazine"?"Magazine":"Moving Polaroid")+" live output preview");
-  const orientationControl=document.querySelector(".orientation-control");
-  if(orientationControl)orientationControl.hidden=adminPreviewType==="polaroid";
-  const playMotion=$("adminPreviewPlayMotion");
-  if(playMotion)playMotion.hidden=true;
 
   if(adminPreviewType==="strip"){
     renderStrip(ctx,c,images,s,adminOrientation,{
       frameStyle:s.stripFrame,
       filterStyle:s.stripFilter,
       branding:personalPreviewBranding(s),
-      paletteMode:"personal",
+      themeMode:"personal",
       draft:adminDraft
     });
     return;
@@ -2554,7 +2648,7 @@ async function renderAdminPreview(){
       copy:Polaroid.copyFor(s),
       hand:Fonts.stack("hand",s),
       transition:s.polaroidTransition,
-      backdrop:palette.secondary,
+      backdrop:theme.background,
       attribution:personalPreviewBranding(s),
       draftPreview:adminDraft
     });
@@ -2581,8 +2675,8 @@ async function renderAdminPreview(){
     width:size.width,height:size.height,
     copy:Covers.copyFor(s),
     fonts:Fonts.faces(s),
-    accent:palette.primary,
-    accentInk:safeForeground(palette.primary),
+    accent:theme.primary,
+    accentInk:safeForeground(theme.primary),
     template:s.magazineTemplate||"keepsake",
     edition:{no:14},
     branding:personalPreviewBranding(s)
@@ -3052,10 +3146,11 @@ $("clearPreviewPhotos").onclick=clearAdminPreviewPhotos;
 $("copySetupPass").onclick=copySetupPass;
 $("shareSetupPass").onclick=shareSetupPass;
 $("setGuestPinEnabled").onchange=()=>{$("setGuestPinField").hidden=!$("setGuestPinEnabled").checked;if($("setGuestPinEnabled").checked)$("setGuestPin").focus();};
-document.querySelectorAll('input[name="eventPalette"]').forEach(input=>input.onchange=()=>{
+document.querySelectorAll('input[name="eventTheme"]').forEach(input=>input.onchange=()=>{
   if(!input.checked)return;
-  syncPaletteUI(input.value);
-  applyRootPalette(input.value);
+  syncThemeUI(input.value);
+  applyThemeRendererDefaults(input.value);
+  applyRootTheme(input.value);
   renderAdminPreview();
 });
 $("resetSettings").onclick=()=>{
@@ -3118,21 +3213,40 @@ $("businessContinue").onclick=()=>{
   businessCompletionSatisfied=true;applyBusinessEventFlow();setExportStatus("");
 };
 
-document.querySelectorAll(".admin-preview-tab").forEach(b=>b.onclick=()=>{
-  const nextType=b.dataset.preview;
+const adminPreviewTabs=[...document.querySelectorAll(".admin-preview-tab")];
+function selectAdminPreview(nextType,focus){
   if(nextType!==adminPreviewType){
     adminPreviewMotionRequested=false;
     adminPolaroidPreviewEpoch=nextType==="polaroid"?performance.now():0;
   }
   adminPreviewType=nextType;
-  document.querySelectorAll(".admin-preview-tab").forEach(x=>{
+  adminPreviewTabs.forEach(x=>{
     const selected=x.dataset.preview===adminPreviewType;
     x.classList.toggle("active",selected);
     x.setAttribute("aria-selected",String(selected));
-    x.setAttribute("aria-pressed",String(selected));
-    x.tabIndex=0;
+    x.tabIndex=selected?0:-1;
+    if(selected&&focus)x.focus();
   });
+  if(adminPreviewType!=="event-home"){
+    $("adminPreviewCanvas").setAttribute("aria-labelledby",adminPreviewTabs.find(x=>x.dataset.preview===adminPreviewType).id);
+  }
   renderAdminPreview();
+}
+adminPreviewTabs.forEach((button,index)=>{
+  const selected=button.dataset.preview===adminPreviewType;
+  button.tabIndex=selected?0:-1;
+  button.setAttribute("aria-selected",String(selected));
+  button.onclick=()=>selectAdminPreview(button.dataset.preview,false);
+  button.onkeydown=event=>{
+    let next=-1;
+    if(event.key==="ArrowRight"||event.key==="ArrowDown")next=(index+1)%adminPreviewTabs.length;
+    if(event.key==="ArrowLeft"||event.key==="ArrowUp")next=(index-1+adminPreviewTabs.length)%adminPreviewTabs.length;
+    if(event.key==="Home")next=0;
+    if(event.key==="End")next=adminPreviewTabs.length-1;
+    if(next<0)return;
+    event.preventDefault();
+    selectAdminPreview(adminPreviewTabs[next].dataset.preview,true);
+  };
 });
 document.querySelectorAll(".admin-orientation-tab").forEach(b=>b.onclick=()=>{
   adminOrientation=b.dataset.orientation;

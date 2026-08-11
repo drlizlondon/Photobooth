@@ -6,26 +6,26 @@
 
 var ENTRANCE_KEY="mybishbashPhotoboothEntranceSeenV1";
 var EVENT=global.MyBishBashEvent||null;
-var DEFAULT_PALETTE_ID="lilac-pop";
-var currentPaletteId=DEFAULT_PALETTE_ID;
+var DEFAULT_THEME_ID="pop";
+var currentThemeId=DEFAULT_THEME_ID;
 
 function byId(id){return document.getElementById(id);}
 function text(value,max){return String(value||"").trim().slice(0,max||100);}
 function title(value){return text(value,64)||"Your Event";}
 function metaLine(location,date){return [text(location,48),text(date,32)].filter(Boolean).join(" · ");}
 
-function paletteFor(value){
-  if(EVENT&&typeof EVENT.resolvePalette==="function")return EVENT.resolvePalette(value);
-  var registry=EVENT&&EVENT.PALETTES||{};
-  return registry[value]||registry[DEFAULT_PALETTE_ID]||null;
+function themeFor(value){
+  if(EVENT&&typeof EVENT.resolveTheme==="function")return EVENT.resolveTheme(value);
+  var registry=EVENT&&EVENT.THEMES||{};
+  return registry[value]||registry[DEFAULT_THEME_ID]||null;
 }
 
-function paletteInk(background){
+function themeInk(background){
   return EVENT&&typeof EVENT.safeForeground==="function"?EVENT.safeForeground(background):"";
 }
 
 function demoConfig(){
-  var palette=paletteFor(currentPaletteId);
+  var theme=themeFor(currentThemeId);
   return {
     eventType:text(byId("landingEventType")&&byId("landingEventType").value,24)||"party",
     eventTitle:title(byId("landingEventName")&&byId("landingEventName").value),
@@ -33,34 +33,65 @@ function demoConfig(){
     date:text(byId("landingEventDate")&&byId("landingEventDate").value,32),
     datePrecision:"exact",
     eventLine:text(byId("landingEventLine")&&byId("landingEventLine").value,72),
-    paletteId:palette&&palette.id||DEFAULT_PALETTE_ID,
-    palettePrimary:palette&&palette.primary||"",
-    paletteSecondary:palette&&palette.secondary||"",
-    paletteHighlight:palette&&palette.highlight||""
+    themeId:theme&&theme.id||DEFAULT_THEME_ID,
+    themeName:theme&&theme.name||"",
+    themeTagline:theme&&theme.tagline||"",
+    themePrimary:theme&&theme.primary||"",
+    themeSecondary:theme&&theme.secondary||"",
+    themeHighlight:theme&&theme.highlight||"",
+    themeBackground:theme&&theme.background||"",
+    themeForeground:theme&&theme.foreground||"",
+    themeButton:theme&&theme.button||"",
+    themeButtonInk:theme&&theme.buttonInk||"",
+    themeBorder:theme&&theme.border||"",
+    themeDecoration:theme&&theme.decoration||"",
+    themeTypography:theme&&theme.typography||"",
+    themeStripFrame:theme&&theme.stripFrame||"",
+    themeStripFilter:theme&&theme.stripFilter||"",
+    themeMagazineTemplate:theme&&theme.magazineTemplate||"",
+    /* These are the host-editable output choices. Seeding them from the
+       selected theme makes the landing preview match the same defaults the
+       full host picker applies, while EventConfig still preserves later
+       manual overrides independently. */
+    stripFrame:theme&&theme.stripFrame||"white",
+    stripFilter:theme&&theme.stripFilter||"original",
+    magazineTemplate:theme&&theme.magazineTemplate||"keepsake"
   };
 }
 
-function applyPalette(node,value){
-  var palette=paletteFor(value);
-  if(!node||!palette)return;
-  node.setAttribute("data-palette",palette.id);
-  node.style.setProperty("--event-surface",palette.secondary);
-  node.style.setProperty("--event-accent",palette.primary);
-  node.style.setProperty("--event-accent-ink",paletteInk(palette.primary));
-  node.style.setProperty("--event-shape",palette.highlight);
-  node.style.setProperty("--event-ink",paletteInk(palette.secondary));
+function applyTheme(node,value){
+  var theme=themeFor(value);
+  if(!node||!theme)return;
+  node.setAttribute("data-theme",theme.id);
+  node.setAttribute("data-decoration",theme.decoration);
+  node.setAttribute("data-typography",theme.typography);
+  node.style.setProperty("--event-primary",theme.primary);
+  node.style.setProperty("--event-secondary",theme.secondary);
+  node.style.setProperty("--event-highlight",theme.highlight);
+  node.style.setProperty("--event-shape",theme.highlight);
+  node.style.setProperty("--event-surface",theme.background);
+  node.style.setProperty("--event-ink",theme.foreground||themeInk(theme.background));
+  node.style.setProperty("--event-accent",theme.primary);
+  node.style.setProperty("--event-accent-ink",themeInk(theme.primary));
+  node.style.setProperty("--event-button",theme.button);
+  node.style.setProperty("--event-button-ink",theme.buttonInk||themeInk(theme.button));
+  node.style.setProperty("--event-border",theme.border);
 }
 
-function hydratePaletteCards(){
-  document.querySelectorAll(".palette-card[data-palette]").forEach(function(card){
-    var palette=paletteFor(card.getAttribute("data-palette"));
-    if(!palette)return;
-    card.style.setProperty("--palette-primary",palette.primary);
-    card.style.setProperty("--palette-secondary",palette.secondary);
-    card.style.setProperty("--palette-highlight",palette.highlight);
-    card.style.setProperty("--palette-primary-ink",paletteInk(palette.primary));
-    card.style.setProperty("--palette-secondary-ink",paletteInk(palette.secondary));
-    card.style.setProperty("--palette-highlight-ink",paletteInk(palette.highlight));
+function hydrateThemeCards(){
+  document.querySelectorAll(".theme-card[data-theme]").forEach(function(card){
+    var theme=themeFor(card.getAttribute("data-theme"));
+    if(!theme)return;
+    card.setAttribute("data-decoration",theme.decoration);
+    card.setAttribute("data-typography",theme.typography);
+    card.style.setProperty("--theme-primary",theme.primary);
+    card.style.setProperty("--theme-secondary",theme.secondary);
+    card.style.setProperty("--theme-highlight",theme.highlight);
+    card.style.setProperty("--theme-background",theme.background);
+    card.style.setProperty("--theme-foreground",theme.foreground||themeInk(theme.background));
+    card.style.setProperty("--theme-button",theme.button);
+    card.style.setProperty("--theme-button-ink",theme.buttonInk||themeInk(theme.button));
+    card.style.setProperty("--theme-border",theme.border);
   });
 }
 
@@ -78,15 +109,15 @@ function renderDemo(){
   if(compareTitle)compareTitle.textContent=config.eventTitle;
   if(compareLabel)compareLabel.textContent=config.eventTitle;
   if(compareLine)compareLine.textContent=line;
-  applyPalette(preview,currentPaletteId);
+  applyTheme(preview,currentThemeId);
   var example=document.querySelector(".personal-welcome-browser .booth-example");
-  applyPalette(example,currentPaletteId);
+  applyTheme(example,currentThemeId);
 }
 
-function choosePalette(input){
-  var palette=input&&input.checked&&paletteFor(input.value);
-  if(!palette)return;
-  currentPaletteId=palette.id;
+function chooseTheme(input){
+  var theme=input&&input.checked&&themeFor(input.value);
+  if(!theme)return;
+  currentThemeId=theme.id;
   renderDemo();
 }
 
@@ -133,15 +164,15 @@ function initEntrance(){
 
 function initDemo(){
   var form=byId("landingEventForm");
-  hydratePaletteCards();
+  hydrateThemeCards();
   if(form)form.addEventListener("input",function(event){
-    if(event.target&&event.target.hasAttribute("data-landing-palette"))choosePalette(event.target);
+    if(event.target&&event.target.hasAttribute("data-landing-theme"))chooseTheme(event.target);
     else renderDemo();
   },false);
   var preview=byId("previewCreatedBooth");
   if(preview)preview.addEventListener("click",dispatchPreview,false);
-  var selected=document.querySelector('[name="landingPalette"]:checked');
-  if(selected)choosePalette(selected);else renderDemo();
+  var selected=document.querySelector('[name="landingTheme"]:checked');
+  if(selected)chooseTheme(selected);else renderDemo();
 }
 
 function init(){initDemo();initEntrance();}

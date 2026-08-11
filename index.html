@@ -138,7 +138,7 @@
           <p class="section-number">01 / YOUR EVENT</p>
           <h2 id="transformTitle">Now <span>make yours.</span></h2>
         </div>
-        <p>Give the photobooth your event name and Look. The entrance changes as you type.</p>
+        <p>Give the photobooth your event name and choose the vibe that feels like you. The entrance changes as you type.</p>
       </div>
 
       <div class="input-story event-creation-story">
@@ -161,40 +161,44 @@
             <label>Date<input id="landingEventDate" type="text" maxlength="32" value="16.05.27"></label>
             <label class="event-line-field">Event line <small>optional</small><input id="landingEventLine" type="text" maxlength="72" placeholder="One last fling before the ring"></label>
           </div>
-          <fieldset class="palette-picker landing-palette-picker">
-            <legend>Choose your Look</legend>
-            <p id="landingPaletteHelp" class="palette-picker-help">Pick the vibe that feels most like your event. We have already made the colours work together.</p>
-            <div class="palette-grid" aria-describedby="landingPaletteHelp">
-              <div class="palette-choice">
-                <input id="landingPaletteLilacPop" class="palette-radio" name="landingPalette" type="radio" value="lilac-pop" data-landing-palette checked>
-                <label class="palette-card" for="landingPaletteLilacPop" data-palette="lilac-pop">
-                  <span class="palette-card-head"><strong>Lilac Pop</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
-                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
-                  <span class="palette-description">Grape accent · Lilac base · Blush highlight</span>
+          <fieldset class="theme-picker landing-theme-picker" aria-describedby="landingThemeHelp">
+            <legend>CHOOSE YOUR VIBE</legend>
+            <p id="landingThemeHelp" class="theme-picker-help">What kind of event does this feel like? Pick one and we will make the whole visual treatment work together.</p>
+            <div class="theme-grid landing-theme-grid">
+              <div class="theme-choice">
+                <input id="landingThemePop" class="theme-radio" name="landingTheme" type="radio" value="pop" data-landing-theme checked>
+                <label class="theme-card" for="landingThemePop" data-theme="pop">
+                  <span class="theme-mini-event" aria-hidden="true"><span class="theme-mini-shape one"></span><span class="theme-mini-shape two"></span><span class="theme-mini-kicker">WELCOME TO</span><span class="theme-mini-title">MIA'S 18TH</span><span class="theme-mini-button">START</span></span>
+                  <span class="theme-card-head"><strong>POP</strong><span class="theme-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="theme-description">Colourful · playful · bold</span>
+                  <span class="theme-colours" aria-hidden="true"><i></i><i></i><i></i></span>
                 </label>
               </div>
-              <div class="palette-choice">
-                <input id="landingPalettePinkParty" class="palette-radio" name="landingPalette" type="radio" value="pink-party" data-landing-palette>
-                <label class="palette-card" for="landingPalettePinkParty" data-palette="pink-party">
-                  <span class="palette-card-head"><strong>Pink Party</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
-                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
-                  <span class="palette-description">Raspberry accent · Pink base · Lilac highlight</span>
+              <div class="theme-choice">
+                <input id="landingThemeAfterDark" class="theme-radio" name="landingTheme" type="radio" value="after-dark" data-landing-theme>
+                <label class="theme-card" for="landingThemeAfterDark" data-theme="after-dark">
+                  <span class="theme-mini-event" aria-hidden="true"><span class="theme-mini-shape one"></span><span class="theme-mini-shape two"></span><span class="theme-mini-kicker">TONIGHT</span><span class="theme-mini-title">RAE'S 30TH</span><span class="theme-mini-button">ENTER</span></span>
+                  <span class="theme-card-head"><strong>AFTER DARK</strong><span class="theme-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="theme-description">Dark · cool · confident</span>
+                  <span class="theme-colours" aria-hidden="true"><i></i><i></i><i></i></span>
                 </label>
               </div>
-              <div class="palette-choice">
-                <input id="landingPaletteBlueSky" class="palette-radio" name="landingPalette" type="radio" value="blue-sky" data-landing-palette>
-                <label class="palette-card" for="landingPaletteBlueSky" data-palette="blue-sky">
-                  <span class="palette-card-head"><strong>Blue Sky</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
-                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
-                  <span class="palette-description">Blue accent · Sky base · Butter highlight</span>
+              <div class="theme-choice">
+                <input id="landingThemeEditorial" class="theme-radio" name="landingTheme" type="radio" value="editorial" data-landing-theme>
+                <label class="theme-card" for="landingThemeEditorial" data-theme="editorial">
+                  <span class="theme-mini-event" aria-hidden="true"><span class="theme-mini-shape one"></span><span class="theme-mini-shape two"></span><span class="theme-mini-kicker">THE CELEBRATION</span><span class="theme-mini-title">THE WEDDING</span><span class="theme-mini-button">BEGIN</span></span>
+                  <span class="theme-card-head"><strong>EDITORIAL</strong><span class="theme-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="theme-description">Clean · sophisticated · minimal</span>
+                  <span class="theme-colours" aria-hidden="true"><i></i><i></i><i></i></span>
                 </label>
               </div>
-              <div class="palette-choice">
-                <input id="landingPaletteSunshine" class="palette-radio" name="landingPalette" type="radio" value="sunshine" data-landing-palette>
-                <label class="palette-card" for="landingPaletteSunshine" data-palette="sunshine">
-                  <span class="palette-card-head"><strong>Sunshine</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
-                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
-                  <span class="palette-description">Honey accent · Butter base · Pink highlight</span>
+              <div class="theme-choice">
+                <input id="landingThemeSunshine" class="theme-radio" name="landingTheme" type="radio" value="sunshine" data-landing-theme>
+                <label class="theme-card" for="landingThemeSunshine" data-theme="sunshine">
+                  <span class="theme-mini-event" aria-hidden="true"><span class="theme-mini-shape one"></span><span class="theme-mini-shape two"></span><span class="theme-mini-kicker">GOOD TIMES</span><span class="theme-mini-title">SUMMER PARTY</span><span class="theme-mini-button">LET'S GO</span></span>
+                  <span class="theme-card-head"><strong>SUNSHINE</strong><span class="theme-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="theme-description">Bright · warm · optimistic</span>
+                  <span class="theme-colours" aria-hidden="true"><i></i><i></i><i></i></span>
                 </label>
               </div>
             </div>
@@ -203,7 +207,7 @@
         <span class="story-arrow" aria-hidden="true">→</span>
         <div class="booth-browser event-demo-browser">
           <div class="booth-browser-bar" aria-hidden="true"><span></span><span></span><span></span><small>your event photobooth</small></div>
-          <div id="landingEventPreview" class="booth-example event-entrance-card" data-palette="lilac-pop">
+          <div id="landingEventPreview" class="booth-example event-entrance-card" data-theme="pop">
             <p class="eyebrow">WELCOME TO</p>
             <h3 id="landingPreviewTitle">SOPHIE'S HEN</h3>
             <p id="landingPreviewMeta" class="booth-example-date">IBIZA · 16.05.27</p>
@@ -284,6 +288,34 @@
           <p class="motion-note"><span aria-hidden="true"></span> Made from the same three party moments.</p>
         </article>
       </div>
+
+      <section id="personalPaths" class="personal-entry-paths" aria-labelledby="personalPathsTitle">
+        <div class="personal-entry-intro">
+          <p class="micro-label">CHOOSE HOW TO START</p>
+          <h2 id="personalPathsTitle">Your photobooth, your way in.</h2>
+          <p>Jump straight into the free booth, build an event that feels completely yours, or give the experience to somebody else.</p>
+        </div>
+        <div class="personal-entry-grid">
+          <article class="personal-entry-card free-path">
+            <span>FREE</span>
+            <h3>Use for Free</h3>
+            <p>Open the full three-photo photobooth now with MyBishBash-branded keepsakes. No sign-up needed.</p>
+            <button data-start-photobooth type="button">ENTER</button>
+          </article>
+          <article class="personal-entry-card customise-path">
+            <span>FROM £9</span>
+            <h3>Customise Your Own</h3>
+            <p>Add your event name, choose a complete vibe and test every real output before the day.</p>
+            <button id="openPersonalSetupSecondary" type="button">CUSTOMISE</button>
+          </article>
+          <article class="personal-entry-card gift-path">
+            <span>GIFT</span>
+            <h3>Buy as a Gift</h3>
+            <p>Give someone their own event photobooth to personalise and enjoy. Gift checkout is coming soon.</p>
+            <a href="#giftAccess">BUY AS A GIFT</a>
+          </article>
+        </div>
+      </section>
     </section>
 
     <section class="personal-value-section page-section" aria-labelledby="personalValueTitle">
@@ -334,14 +366,15 @@
           </ul>
           <button id="openPersonalSetup" class="product-link" type="button">See the host setup</button>
         </div>
-        <button id="openPersonalSetupSecondary" class="product-cta" type="button">BUILD MY EVENT PREVIEW</button>
+        <a class="product-cta" href="#personalPaths">CHOOSE HOW TO START</a>
       </div>
     </section>
 
     <section id="pricing" class="pricing-section page-section" aria-labelledby="pricingTitle">
       <p class="section-number">04 / PERSONAL PRICING</p>
-      <h2 id="pricingTitle">Start free. Make one party yours for £19.</h2>
+      <h2 id="pricingTitle">Start free. Make one party yours for £9.</h2>
       <p id="pricingNotice" class="pricing-notice" role="status" hidden>One Party and Annual are coming soon. The free photobooth is ready to use today.</p>
+      <p id="giftAccess" class="gift-availability"><strong>Buying as a gift?</strong> Gift checkout is coming soon. Personal event previews are free to build now, and no payment is taken on this page.</p>
       <div class="pricing-grid">
         <article class="price-card">
           <p>Free</p>
@@ -351,8 +384,8 @@
         </article>
         <article class="price-card one-party-card">
           <p>One Party</p>
-          <h3>£19</h3>
-          <span>Your personalised event entrance, Look and live photobooth for one 48-hour event.</span>
+          <h3>£9</h3>
+          <span>Your personalised event entrance, chosen vibe and live photobooth for one 48-hour event.</span>
           <small>No per-session cap during the active event.</small>
           <button data-checkout-plan="ONE_EVENT" type="button">One Party — coming soon</button>
         </article>
@@ -665,7 +698,7 @@
 
     <div class="setup-progress" role="tablist" aria-label="Customise your photobooth">
       <button id="setupStep0" class="active" data-setup-step="0" type="button" role="tab" aria-selected="true" aria-controls="setupPanel0"><span>1</span>Event</button>
-      <button id="setupStep1" data-setup-step="1" type="button" role="tab" aria-selected="false" aria-controls="setupPanel1"><span>2</span>Look</button>
+      <button id="setupStep1" data-setup-step="1" type="button" role="tab" aria-selected="false" aria-controls="setupPanel1"><span>2</span>Vibe</button>
       <button id="setupStep2" data-setup-step="2" type="button" role="tab" aria-selected="false" aria-controls="setupPanel2"><span>3</span>Words</button>
       <button id="setupStep3" data-setup-step="3" type="button" role="tab" aria-selected="false" aria-controls="setupPanel3"><span>4</span>Test</button>
       <button id="setupStep4" data-setup-step="4" type="button" role="tab" aria-selected="false" aria-controls="setupPanel4"><span>5</span>Ready</button>
@@ -690,40 +723,44 @@
 
         <section id="setupPanel1" class="setup-step" data-setup-panel="1" role="tabpanel" aria-labelledby="setupStep1" hidden>
           <p class="step-kicker">STEP 2 OF 5</p>
-          <h3 id="chooseLookTitle">Choose your Look</h3>
-          <p id="eventPaletteHelp" class="field-help large">Pick the vibe that feels most like your event. Each scheme coordinates the entrance, decorations and keepsake accents for you.</p>
-          <fieldset class="palette-picker host-palette-picker" aria-labelledby="chooseLookTitle" aria-describedby="eventPaletteHelp">
-            <div class="palette-grid host-palette-grid">
-              <div class="palette-choice">
-                <input id="paletteLilacPop" class="palette-radio" name="eventPalette" type="radio" value="lilac-pop" data-event-palette checked>
-                <label class="palette-card" for="paletteLilacPop" data-palette="lilac-pop">
-                  <span class="palette-card-head"><strong>Lilac Pop</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
-                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
-                  <span class="palette-description">Grape accent · Lilac base · Blush highlight</span>
+          <h3 id="chooseVibeTitle">CHOOSE YOUR VIBE</h3>
+          <p id="eventThemeHelp" class="field-help large">What kind of event does this feel like? Choose one complete visual treatment and we will make the colours, type and details work together.</p>
+          <fieldset class="theme-picker host-theme-picker" aria-labelledby="chooseVibeTitle" aria-describedby="eventThemeHelp">
+            <div class="theme-grid host-theme-grid">
+              <div class="theme-choice">
+                <input id="themePop" class="theme-radio" name="eventTheme" type="radio" value="pop" data-event-theme checked>
+                <label class="theme-card" for="themePop" data-theme="pop">
+                  <span class="theme-mini-event" aria-hidden="true"><span class="theme-mini-shape one"></span><span class="theme-mini-shape two"></span><span class="theme-mini-kicker">WELCOME TO</span><span class="theme-mini-title">MIA'S 18TH</span><span class="theme-mini-button">START</span></span>
+                  <span class="theme-card-head"><strong>POP</strong><span class="theme-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="theme-description">Colourful · playful · bold</span>
+                  <span class="theme-colours" aria-hidden="true"><i></i><i></i><i></i></span>
                 </label>
               </div>
-              <div class="palette-choice">
-                <input id="palettePinkParty" class="palette-radio" name="eventPalette" type="radio" value="pink-party" data-event-palette>
-                <label class="palette-card" for="palettePinkParty" data-palette="pink-party">
-                  <span class="palette-card-head"><strong>Pink Party</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
-                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
-                  <span class="palette-description">Raspberry accent · Pink base · Lilac highlight</span>
+              <div class="theme-choice">
+                <input id="themeAfterDark" class="theme-radio" name="eventTheme" type="radio" value="after-dark" data-event-theme>
+                <label class="theme-card" for="themeAfterDark" data-theme="after-dark">
+                  <span class="theme-mini-event" aria-hidden="true"><span class="theme-mini-shape one"></span><span class="theme-mini-shape two"></span><span class="theme-mini-kicker">TONIGHT</span><span class="theme-mini-title">RAE'S 30TH</span><span class="theme-mini-button">ENTER</span></span>
+                  <span class="theme-card-head"><strong>AFTER DARK</strong><span class="theme-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="theme-description">Dark · cool · confident</span>
+                  <span class="theme-colours" aria-hidden="true"><i></i><i></i><i></i></span>
                 </label>
               </div>
-              <div class="palette-choice">
-                <input id="paletteBlueSky" class="palette-radio" name="eventPalette" type="radio" value="blue-sky" data-event-palette>
-                <label class="palette-card" for="paletteBlueSky" data-palette="blue-sky">
-                  <span class="palette-card-head"><strong>Blue Sky</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
-                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
-                  <span class="palette-description">Blue accent · Sky base · Butter highlight</span>
+              <div class="theme-choice">
+                <input id="themeEditorial" class="theme-radio" name="eventTheme" type="radio" value="editorial" data-event-theme>
+                <label class="theme-card" for="themeEditorial" data-theme="editorial">
+                  <span class="theme-mini-event" aria-hidden="true"><span class="theme-mini-shape one"></span><span class="theme-mini-shape two"></span><span class="theme-mini-kicker">THE CELEBRATION</span><span class="theme-mini-title">THE WEDDING</span><span class="theme-mini-button">BEGIN</span></span>
+                  <span class="theme-card-head"><strong>EDITORIAL</strong><span class="theme-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="theme-description">Clean · sophisticated · minimal</span>
+                  <span class="theme-colours" aria-hidden="true"><i></i><i></i><i></i></span>
                 </label>
               </div>
-              <div class="palette-choice">
-                <input id="paletteSunshine" class="palette-radio" name="eventPalette" type="radio" value="sunshine" data-event-palette>
-                <label class="palette-card" for="paletteSunshine" data-palette="sunshine">
-                  <span class="palette-card-head"><strong>Sunshine</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
-                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
-                  <span class="palette-description">Honey accent · Butter base · Pink highlight</span>
+              <div class="theme-choice">
+                <input id="themeSunshine" class="theme-radio" name="eventTheme" type="radio" value="sunshine" data-event-theme>
+                <label class="theme-card" for="themeSunshine" data-theme="sunshine">
+                  <span class="theme-mini-event" aria-hidden="true"><span class="theme-mini-shape one"></span><span class="theme-mini-shape two"></span><span class="theme-mini-kicker">GOOD TIMES</span><span class="theme-mini-title">SUMMER PARTY</span><span class="theme-mini-button">LET'S GO</span></span>
+                  <span class="theme-card-head"><strong>SUNSHINE</strong><span class="theme-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="theme-description">Bright · warm · optimistic</span>
+                  <span class="theme-colours" aria-hidden="true"><i></i><i></i><i></i></span>
                 </label>
               </div>
             </div>
@@ -899,13 +936,23 @@
           </div>
           <p>Your wording, colours and choices update here using the real production renderers.</p>
         </div>
-        <div class="admin-preview-tabs" role="tablist" aria-label="Choose an output to preview">
-          <button class="admin-preview-tab active" data-preview="strip" type="button" role="tab" aria-selected="true" aria-controls="adminPreviewCanvas">PHOTO STRIP</button>
-          <button class="admin-preview-tab" data-preview="magazine" type="button" role="tab" aria-selected="false" aria-controls="adminPreviewCanvas">MAGAZINE</button>
-          <button class="admin-preview-tab" data-preview="polaroid" type="button" role="tab" aria-selected="false" aria-controls="adminPreviewCanvas">MOVING POLAROID</button>
+        <div class="admin-preview-tabs" role="tablist" aria-label="Choose an event surface to preview">
+          <button id="adminPreviewTabEventHome" class="admin-preview-tab active" data-preview="event-home" type="button" role="tab" aria-selected="true" aria-controls="adminEventHomePreview" tabindex="0">EVENT HOME</button>
+          <button id="adminPreviewTabStrip" class="admin-preview-tab" data-preview="strip" type="button" role="tab" aria-selected="false" aria-controls="adminPreviewCanvas" tabindex="-1">PHOTO STRIP</button>
+          <button id="adminPreviewTabMagazine" class="admin-preview-tab" data-preview="magazine" type="button" role="tab" aria-selected="false" aria-controls="adminPreviewCanvas" tabindex="-1">MAGAZINE</button>
+          <button id="adminPreviewTabPolaroid" class="admin-preview-tab" data-preview="polaroid" type="button" role="tab" aria-selected="false" aria-controls="adminPreviewCanvas" tabindex="-1">MOVING POLAROID</button>
         </div>
         <div class="admin-preview-stage">
-          <canvas id="adminPreviewCanvas" role="img" aria-label="Live preview of your customised Photo Strip"></canvas>
+          <div id="adminEventHomePreview" class="admin-event-home-preview welcome-screen" data-theme="pop" role="tabpanel" aria-labelledby="adminPreviewTabEventHome">
+            <div class="welcome-inner">
+              <p id="adminEventPreviewEyebrow" class="eyebrow">PHOTO BOOTH</p>
+              <h3 id="adminEventPreviewTitle">Your Celebration</h3>
+              <p id="adminEventPreviewMeta" class="welcome-date">YOUR EVENT</p>
+              <p id="adminEventPreviewLine" class="welcome-event-line" hidden></p>
+              <span class="round-start compact admin-event-home-button" aria-hidden="true"><span id="adminEventPreviewStart">PRESS TO START</span><small id="adminEventPreviewHint">enter photobooth</small></span>
+            </div>
+          </div>
+          <canvas id="adminPreviewCanvas" role="tabpanel" aria-labelledby="adminPreviewTabStrip" aria-label="Live preview of your customised Photo Strip" hidden></canvas>
         </div>
         <button id="adminPreviewPlayMotion" class="admin-preview-play-motion" type="button" hidden>PLAY MOTION</button>
         <div class="admin-preview-controls">

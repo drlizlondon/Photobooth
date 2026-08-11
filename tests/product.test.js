@@ -63,7 +63,7 @@ test("exports the six canonical entitlements and fails closed for unknown values
 test("keeps plan pricing central and independent from behaviour", function () {
   assert.equal(Product.getPlanMetadata(E.FREE).amountMinor, 0);
   assert.equal(Product.getPlanMetadata(E.ONE_EVENT).label, "One Party");
-  assert.equal(Product.getPlanMetadata(E.ONE_EVENT).amountMinor, 1900);
+  assert.equal(Product.getPlanMetadata(E.ONE_EVENT).amountMinor, 900);
   assert.equal(Product.getPlanMetadata(E.PERSONAL_6_MONTH).amountMinor, 3000);
   assert.equal(Product.getPlanMetadata(E.PERSONAL_6_MONTH).saleStatus, "retired");
   assert.equal(Product.getPlanMetadata(E.PERSONAL_6_MONTH).checkoutProductKey, null);

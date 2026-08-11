@@ -23,8 +23,8 @@
     "use strict";
 
     var own = Object.prototype.hasOwnProperty;
-    var EVENT_CONFIG_SCHEMA_VERSION = 2;
-    var SETUP_PASS_VERSION = 2;
+    var EVENT_CONFIG_SCHEMA_VERSION = 3;
+    var SETUP_PASS_VERSION = 3;
     var LIVE_DURATION_MS = 48 * 60 * 60 * 1000;
     var MAX_SETUP_PASS_TOKEN_CHARS = 24000;
 
@@ -70,67 +70,108 @@
       cooldownMs: 30000
     });
 
-    /* A curated palette is one decision with three stable roles. EventConfig
-       persists the selected id and a canonical copy of those flat role
-       values, which keeps the existing primitive-only Setup Pass boundary
-       intact. The id remains the authority: supplied role values are always
-       replaced from this registry, so an edited pass or stale saved event
-       cannot create an accidental low-contrast fifth palette. */
-    var PALETTES = freeze({
-      "lilac-pop": {
-        id: "lilac-pop",
-        name: "Lilac Pop",
-        primary: "#66519c",
-        secondary: "#eee6ff",
-        highlight: "#ffdce8",
-        primaryLabel: "Grape",
-        secondaryLabel: "Lilac",
-        highlightLabel: "Blush"
-      },
-      "pink-party": {
-        id: "pink-party",
-        name: "Pink Party",
+    /* A theme is a complete, curated treatment rather than a colour picker.
+       Renderers continue to own their geometry; these stable roles select
+       the existing treatments and provide the colours and surface language
+       that join Event Home and all three outputs together. EventConfig keeps
+       a flat canonical copy because Setup Passes intentionally carry only
+       primitive configuration. The id remains authoritative for curated
+       themes. A later `custom` theme mode can validate the same flat colour
+       roles without changing renderer contracts or Setup Pass structure. */
+    var THEMES = freeze({
+      pop: {
+        id: "pop",
+        name: "Pop",
+        tagline: "Colourful · playful · bold",
         primary: "#b52167",
-        secondary: "#ffdce8",
-        highlight: "#eee6ff",
-        primaryLabel: "Raspberry",
-        secondaryLabel: "Pink",
-        highlightLabel: "Lilac"
-      },
-      "blue-sky": {
-        id: "blue-sky",
-        name: "Blue Sky",
-        primary: "#245f9f",
-        secondary: "#dcecff",
+        secondary: "#eee6ff",
         highlight: "#fff0aa",
-        primaryLabel: "Blue",
-        secondaryLabel: "Sky",
-        highlightLabel: "Butter"
+        background: "#ffdce8",
+        foreground: "#111111",
+        button: "#b52167",
+        buttonInk: "#ffffff",
+        border: "#111111",
+        decoration: "playful-shapes",
+        typography: "bold-sans",
+        stripFrame: "white",
+        stripFilter: "original",
+        magazineTemplate: "keepsake"
+      },
+      "after-dark": {
+        id: "after-dark",
+        name: "After Dark",
+        tagline: "Dark · cool · confident",
+        primary: "#d86c8f",
+        secondary: "#242126",
+        highlight: "#eee6ff",
+        background: "#0b0b0b",
+        foreground: "#ffffff",
+        button: "#ffffff",
+        buttonInk: "#111111",
+        border: "#ffffff",
+        decoration: "restrained-orbit",
+        typography: "confident-sans",
+        stripFrame: "black",
+        stripFilter: "original",
+        magazineTemplate: "noir"
+      },
+      editorial: {
+        id: "editorial",
+        name: "Editorial",
+        tagline: "Clean · sophisticated · minimal",
+        primary: "#756057",
+        secondary: "#e7ded3",
+        highlight: "#c8b5a6",
+        background: "#f8f5ef",
+        foreground: "#111111",
+        button: "#111111",
+        buttonInk: "#ffffff",
+        border: "#111111",
+        decoration: "fine-rule",
+        typography: "editorial-serif",
+        stripFrame: "editorial",
+        stripFilter: "original",
+        magazineTemplate: "editorial"
       },
       sunshine: {
         id: "sunshine",
         name: "Sunshine",
-        primary: "#9a5c00",
-        secondary: "#fff0aa",
-        highlight: "#ffdce8",
-        primaryLabel: "Honey",
-        secondaryLabel: "Butter",
-        highlightLabel: "Pink"
+        tagline: "Bright · warm · optimistic",
+        primary: "#245f9f",
+        secondary: "#dcecff",
+        highlight: "#ff8b72",
+        background: "#fff0aa",
+        foreground: "#111111",
+        button: "#245f9f",
+        buttonInk: "#ffffff",
+        border: "#111111",
+        decoration: "sunburst",
+        typography: "bright-sans",
+        stripFrame: "white",
+        stripFilter: "warm",
+        magazineTemplate: "press"
       }
     });
 
-    var PALETTE_IDS = freeze([
-      "lilac-pop",
-      "pink-party",
-      "blue-sky",
+    var THEME_IDS = freeze([
+      "pop",
+      "after-dark",
+      "editorial",
       "sunshine"
     ]);
 
-    var LEGACY_LOOK_PALETTES = freeze({
-      lilac: "lilac-pop",
-      "pink-purple": "lilac-pop",
-      pink: "pink-party",
-      sky: "blue-sky",
+    var LEGACY_THEME_IDS = freeze({
+      pop: "pop",
+      "lilac-pop": "pop",
+      "pink-party": "pop",
+      lilac: "pop",
+      pink: "pop",
+      "pink-purple": "pop",
+      "after-dark": "after-dark",
+      editorial: "editorial",
+      sunshine: "sunshine",
+      "blue-sky": "sunshine",
+      sky: "sunshine",
       butter: "sunshine"
     });
 
@@ -146,10 +187,22 @@
       eventLine: "",
       date: "",
       datePrecision: DATE_PRECISIONS.UNKNOWN,
-      paletteId: "lilac-pop",
-      palettePrimary: PALETTES["lilac-pop"].primary,
-      paletteSecondary: PALETTES["lilac-pop"].secondary,
-      paletteHighlight: PALETTES["lilac-pop"].highlight,
+      themeId: "pop",
+      themeName: THEMES.pop.name,
+      themeTagline: THEMES.pop.tagline,
+      themePrimary: THEMES.pop.primary,
+      themeSecondary: THEMES.pop.secondary,
+      themeHighlight: THEMES.pop.highlight,
+      themeBackground: THEMES.pop.background,
+      themeForeground: THEMES.pop.foreground,
+      themeButton: THEMES.pop.button,
+      themeButtonInk: THEMES.pop.buttonInk,
+      themeBorder: THEMES.pop.border,
+      themeDecoration: THEMES.pop.decoration,
+      themeTypography: THEMES.pop.typography,
+      themeStripFrame: THEMES.pop.stripFrame,
+      themeStripFilter: THEMES.pop.stripFilter,
+      themeMagazineTemplate: THEMES.pop.magazineTemplate,
       eventStatus: EVENT_STATUSES.DRAFT,
       activatedAt: "",
       endsAt: "",
@@ -270,29 +323,55 @@
       return wasSupplied ? "other" : "birthday";
     }
 
-    function normalisePaletteId(value) {
+    function legacyThemeId(value) {
       var text = trimmed(value).toLowerCase();
-      return has(PALETTES, text) ? text : EVENT_FIELD_DEFAULTS.paletteId;
+      return LEGACY_THEME_IDS[text] || EVENT_FIELD_DEFAULTS.themeId;
     }
 
-    function legacyPaletteId(value) {
+    function normaliseThemeId(value) {
       var text = trimmed(value).toLowerCase();
-      return LEGACY_LOOK_PALETTES[text] || EVENT_FIELD_DEFAULTS.paletteId;
+      return has(THEMES, text) ? text : legacyThemeId(text);
     }
 
-    function resolvePalette(value) {
-      var id = isPlainObject(value) ? value.paletteId : value;
-      return PALETTES[normalisePaletteId(id)];
+    function resolveTheme(value) {
+      var id = value;
+      if (isPlainObject(value)) {
+        id = trimmed(value.themeId) ? value.themeId :
+          (has(value, "paletteId") ? value.paletteId : value.look);
+      }
+      return THEMES[normaliseThemeId(id)];
     }
 
-    function applyCanonicalPalette(config) {
-      var palette = resolvePalette(config);
-      config.paletteId = palette.id;
-      config.palettePrimary = palette.primary;
-      config.paletteSecondary = palette.secondary;
-      config.paletteHighlight = palette.highlight;
-      /* Version 1 stored two disconnected colour decisions. They are input
-         to migration only and never survive in a version 2 EventConfig. */
+    function applyCanonicalTheme(config) {
+      var theme = resolveTheme(config);
+      var fields = {
+        themeId: "id",
+        themeName: "name",
+        themeTagline: "tagline",
+        themePrimary: "primary",
+        themeSecondary: "secondary",
+        themeHighlight: "highlight",
+        themeBackground: "background",
+        themeForeground: "foreground",
+        themeButton: "button",
+        themeButtonInk: "buttonInk",
+        themeBorder: "border",
+        themeDecoration: "decoration",
+        themeTypography: "typography",
+        themeStripFrame: "stripFrame",
+        themeStripFilter: "stripFilter",
+        themeMagazineTemplate: "magazineTemplate"
+      };
+      Object.keys(fields).forEach(function (key) {
+        config[key] = theme[fields[key]];
+      });
+      /* Version 1 stored look/accent and version 2 stored a palette id plus
+         three copied colours. They are migration inputs only and never
+         survive in a version 3 EventConfig. */
+      delete config.paletteId;
+      delete config.palettePrimary;
+      delete config.paletteSecondary;
+      delete config.paletteHighlight;
       delete config.look;
       delete config.accent;
       return config;
@@ -462,7 +541,7 @@
         config.date,
         has(input, "datePrecision") || has(opts.defaults, "datePrecision")
       );
-      applyCanonicalPalette(config);
+      applyCanonicalTheme(config);
 
       suppliedId = validIdentifier(config.eventId);
       if (!suppliedId) {
@@ -481,22 +560,38 @@
 
     function migrateEventConfig(source, options) {
       var input = source || {};
+      var defaults = options && options.defaults || {};
       var suppliedSchema;
       var migrated;
       if (!isPlainObject(input)) {
         throw new TypeError("EventConfig source must be a plain object.");
       }
       suppliedSchema = has(input, "schemaVersion") ? Number(input.schemaVersion) : null;
-      if (suppliedSchema !== null && suppliedSchema !== 1 &&
+      if (suppliedSchema !== null && suppliedSchema !== 1 && suppliedSchema !== 2 &&
           suppliedSchema !== EVENT_CONFIG_SCHEMA_VERSION) {
         throw new RangeError("Unsupported EventConfig schemaVersion: " + String(input.schemaVersion));
       }
       migrated = cloneObject(input);
-      if (!has(migrated, "paletteId") &&
-          (suppliedSchema === 1 || suppliedSchema === null)) {
-        migrated.paletteId = legacyPaletteId(migrated.look);
+      if (!trimmed(migrated.themeId)) {
+        if (has(migrated, "paletteId")) {
+          migrated.themeId = legacyThemeId(migrated.paletteId);
+        } else if (has(migrated, "look")) {
+          migrated.themeId = legacyThemeId(migrated.look);
+        } else if (has(defaults, "themeId")) {
+          migrated.themeId = normaliseThemeId(defaults.themeId);
+        } else if (has(defaults, "paletteId")) {
+          migrated.themeId = legacyThemeId(defaults.paletteId);
+        } else if (has(defaults, "look")) {
+          migrated.themeId = legacyThemeId(defaults.look);
+        } else {
+          migrated.themeId = EVENT_FIELD_DEFAULTS.themeId;
+        }
       }
       migrated.schemaVersion = EVENT_CONFIG_SCHEMA_VERSION;
+      delete migrated.paletteId;
+      delete migrated.palettePrimary;
+      delete migrated.paletteSecondary;
+      delete migrated.paletteHighlight;
       delete migrated.look;
       delete migrated.accent;
       return createEventConfig(migrated, options);
@@ -909,7 +1004,7 @@
       copyPrimitiveFields(baseline, EVENT_FIELD_DEFAULTS);
       copyPrimitiveFields(baseline, defaults || {});
       baseline.schemaVersion = EVENT_CONFIG_SCHEMA_VERSION;
-      applyCanonicalPalette(baseline);
+      applyCanonicalTheme(baseline);
       baseline.eventId = "";
       baseline.eventStatus = EVENT_STATUSES.DRAFT;
       baseline.activatedAt = "";
@@ -1058,17 +1153,19 @@
       } catch (error) {
         throw new Error("Setup Pass payload is not valid JSON: " + error.message);
       }
-      if (!isPlainObject(payload) || (payload.v !== 1 && payload.v !== SETUP_PASS_VERSION)) {
+      if (!isPlainObject(payload) ||
+          (payload.v !== 1 && payload.v !== 2 && payload.v !== SETUP_PASS_VERSION)) {
         throw new RangeError(
           "Unsupported Setup Pass version: " + String(payload && payload.v)
         );
       }
       safe = safeSetupFields(payload.c);
-      if (payload.v === 1) {
-        /* Version 1 carried the former look/accent fields and omitted the
-           EventConfig schema from its sparse payload. Route it through the
-           same migration used for a saved version 1 event. */
-        safe.schemaVersion = 1;
+      if (payload.v === 1 || payload.v === 2) {
+        /* Versions 1 and 2 omitted the EventConfig schema from their sparse
+           payloads. Version 1 carried look/accent; version 2 carried the
+           curated palette id and copied colours. Route both through the same
+           migration used for their saved EventConfig versions. */
+        safe.schemaVersion = payload.v;
         config = migrateEventConfig(safe, options);
       } else {
         safe.schemaVersion = EVENT_CONFIG_SCHEMA_VERSION;
@@ -1126,7 +1223,7 @@
     }
 
     return freeze({
-      VERSION: "2.0.0",
+      VERSION: "3.0.0",
       EVENT_CONFIG_SCHEMA_VERSION: EVENT_CONFIG_SCHEMA_VERSION,
       SETUP_PASS_VERSION: SETUP_PASS_VERSION,
       LIVE_DURATION_MS: LIVE_DURATION_MS,
@@ -1137,10 +1234,16 @@
       GUEST_PIN_AUTHORITIES: GUEST_PIN_AUTHORITIES,
       GUEST_PIN_ALGORITHM: GUEST_PIN_ALGORITHM,
       GUEST_PIN_THROTTLE_POLICY: GUEST_PIN_THROTTLE_POLICY,
-      PALETTES: PALETTES,
-      PALETTE_IDS: PALETTE_IDS,
+      THEMES: THEMES,
+      THEME_IDS: THEME_IDS,
+      /* Temporary API-name aliases keep older callers functional while the
+         product shell moves from palette language to theme language. Values
+         are the new theme registry; old ids resolve through resolveTheme. */
+      PALETTES: THEMES,
+      PALETTE_IDS: THEME_IDS,
       EVENT_FIELD_DEFAULTS: EVENT_FIELD_DEFAULTS,
-      resolvePalette: resolvePalette,
+      resolveTheme: resolveTheme,
+      resolvePalette: resolveTheme,
       contrastRatio: contrastRatio,
       safeForeground: safeForeground,
       inferLegacyDatePrecision: inferLegacyDatePrecision,

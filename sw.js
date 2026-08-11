@@ -1,5 +1,5 @@
 const CACHE_PREFIX="mybishbash-photobooth-";
-const CACHE="mybishbash-photobooth-v8";
+const CACHE="mybishbash-photobooth-v9";
 const ASSETS=["./","./index.html","./styles.css","./fonts.js","./covers.js","./polaroid.js","./mp4.js","./product.js","./event.js","./strip.js","./motion.js","./app.js","./marketing.js","./landing.js","./assets/demo-photos.jpg","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png"];
 const CACHEABLE_ASSET_URLS=new Set(ASSETS.map(path=>new URL(path,self.registration.scope).href));
 

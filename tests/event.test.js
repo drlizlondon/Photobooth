@@ -9,6 +9,40 @@ var Event = require("../event.js");
 
 var FIXED_ID = "event_sophies_hen";
 var START_MS = Date.parse("2027-05-16T18:00:00.000Z");
+var EXPECTED_THEMES = {
+  pop: {
+    name: "Pop", tagline: "Colourful · playful · bold",
+    primary: "#b52167", secondary: "#eee6ff", highlight: "#fff0aa",
+    background: "#ffdce8", foreground: "#111111",
+    button: "#b52167", buttonInk: "#ffffff", border: "#111111",
+    decoration: "playful-shapes", typography: "bold-sans",
+    stripFrame: "white", stripFilter: "original", magazineTemplate: "keepsake"
+  },
+  "after-dark": {
+    name: "After Dark", tagline: "Dark · cool · confident",
+    primary: "#d86c8f", secondary: "#242126", highlight: "#eee6ff",
+    background: "#0b0b0b", foreground: "#ffffff",
+    button: "#ffffff", buttonInk: "#111111", border: "#ffffff",
+    decoration: "restrained-orbit", typography: "confident-sans",
+    stripFrame: "black", stripFilter: "original", magazineTemplate: "noir"
+  },
+  editorial: {
+    name: "Editorial", tagline: "Clean · sophisticated · minimal",
+    primary: "#756057", secondary: "#e7ded3", highlight: "#c8b5a6",
+    background: "#f8f5ef", foreground: "#111111",
+    button: "#111111", buttonInk: "#ffffff", border: "#111111",
+    decoration: "fine-rule", typography: "editorial-serif",
+    stripFrame: "editorial", stripFilter: "original", magazineTemplate: "editorial"
+  },
+  sunshine: {
+    name: "Sunshine", tagline: "Bright · warm · optimistic",
+    primary: "#245f9f", secondary: "#dcecff", highlight: "#ff8b72",
+    background: "#fff0aa", foreground: "#111111",
+    button: "#245f9f", buttonInk: "#ffffff", border: "#111111",
+    decoration: "sunburst", typography: "bright-sans",
+    stripFrame: "white", stripFilter: "warm", magazineTemplate: "press"
+  }
+};
 
 function fixedOptions(extra) {
   var options = { idFactory: function () { return FIXED_ID; } };
@@ -53,8 +87,8 @@ test("exports the accepted event vocabulary through CommonJS and a browser globa
   };
   vm.runInNewContext(source, context);
 
-  assert.equal(Event.EVENT_CONFIG_SCHEMA_VERSION, 2);
-  assert.equal(Event.SETUP_PASS_VERSION, 2);
+  assert.equal(Event.EVENT_CONFIG_SCHEMA_VERSION, 3);
+  assert.equal(Event.SETUP_PASS_VERSION, 3);
   assert.equal(Event.LIVE_DURATION_MS, 48 * 60 * 60 * 1000);
   assert.deepEqual(Event.EVENT_TYPES, [
     "birthday",
@@ -65,13 +99,14 @@ test("exports the accepted event vocabulary through CommonJS and a browser globa
     "party",
     "other"
   ]);
-  assert.equal(context.self.MyBishBashEvent.VERSION, "2.0.0");
+  assert.equal(context.self.MyBishBashEvent.VERSION, "3.0.0");
   assert.equal(Object.isFrozen(Event.EVENT_FIELD_DEFAULTS), true);
-  assert.deepEqual(Event.PALETTE_IDS, [
-    "lilac-pop", "pink-party", "blue-sky", "sunshine"
-  ]);
-  assert.equal(Object.isFrozen(Event.PALETTES), true);
-  assert.equal(Object.isFrozen(Event.PALETTES["lilac-pop"]), true);
+  assert.deepEqual(Event.THEME_IDS, ["pop", "after-dark", "editorial", "sunshine"]);
+  assert.equal(Object.isFrozen(Event.THEMES), true);
+  assert.equal(Object.isFrozen(Event.THEMES.pop), true);
+  assert.equal(Event.PALETTES, Event.THEMES, "the transitional palette API aliases themes");
+  assert.equal(Event.PALETTE_IDS, Event.THEME_IDS);
+  assert.equal(Event.resolvePalette, Event.resolveTheme);
 });
 
 test("migrates old flat settings additively without losing renderer fields", function () {
@@ -93,16 +128,20 @@ test("migrates old flat settings additively without losing renderer fields", fun
   };
   var migrated = Event.migrateEventConfig(oldSettings, fixedOptions({ defaults: oldDefaults }));
 
-  assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.schemaVersion, 3);
   assert.equal(migrated.eventId, FIXED_ID);
   assert.equal(migrated.eventType, "birthday", "legacy output keeps the existing Birthday voice");
   assert.equal(migrated.eventTitle, "Sophie's Hen");
   assert.equal(migrated.date, "16.05.27");
   assert.equal(migrated.datePrecision, "exact");
-  assert.equal(migrated.paletteId, "blue-sky");
-  assert.equal(migrated.palettePrimary, "#245f9f");
-  assert.equal(migrated.paletteSecondary, "#dcecff");
-  assert.equal(migrated.paletteHighlight, "#fff0aa");
+  assert.equal(migrated.themeId, "sunshine");
+  assert.equal(migrated.themePrimary, "#245f9f");
+  assert.equal(migrated.themeSecondary, "#dcecff");
+  assert.equal(migrated.themeHighlight, "#ff8b72");
+  assert.equal(migrated.themeBackground, "#fff0aa");
+  assert.equal(migrated.themeMagazineTemplate, "press");
+  assert.equal(migrated.paletteId, undefined);
+  assert.equal(migrated.palettePrimary, undefined);
   assert.equal(migrated.look, undefined);
   assert.equal(migrated.accent, undefined);
   assert.equal(migrated.stripSignature, "SOPHIE'S HEN");
@@ -120,86 +159,108 @@ test("migrates old flat settings additively without losing renderer fields", fun
   assert.equal(oldSettings.accent, "#9f78ff");
 });
 
-test("defines four canonical, frozen palettes with contrast-safe foregrounds", function () {
-  var expected = {
-    "lilac-pop": ["Lilac Pop", "#66519c", "#eee6ff", "#ffdce8"],
-    "pink-party": ["Pink Party", "#b52167", "#ffdce8", "#eee6ff"],
-    "blue-sky": ["Blue Sky", "#245f9f", "#dcecff", "#fff0aa"],
-    sunshine: ["Sunshine", "#9a5c00", "#fff0aa", "#ffdce8"]
-  };
-
-  Event.PALETTE_IDS.forEach(function (id) {
-    var palette = Event.resolvePalette(id);
-    var values = expected[id];
-    assert.equal(palette.id, id);
-    assert.equal(palette.name, values[0]);
-    assert.equal(palette.primary, values[1]);
-    assert.equal(palette.secondary, values[2]);
-    assert.equal(palette.highlight, values[3]);
-    assert.equal(Object.isFrozen(palette), true);
-    [palette.primary, palette.secondary, palette.highlight].forEach(function (colour) {
+test("defines four canonical, frozen themes with complete treatments and safe contrast", function () {
+  Event.THEME_IDS.forEach(function (id) {
+    var theme = Event.resolveTheme(id);
+    var expected = EXPECTED_THEMES[id];
+    assert.equal(theme.id, id);
+    Object.keys(expected).forEach(function (key) {
+      assert.equal(theme[key], expected[key], id + "." + key);
+    });
+    assert.equal(Object.isFrozen(theme), true);
+    [theme.primary, theme.secondary, theme.highlight, theme.background,
+      theme.button, theme.border].forEach(function (colour) {
       var foreground = Event.safeForeground(colour);
       assert.ok(Event.contrastRatio(colour, foreground) >= 4.5,
         colour + " must have an AA-safe foreground");
-      assert.ok(foreground === "#111111" || foreground === "#ffffff");
     });
+    assert.ok(Event.contrastRatio(theme.background, theme.foreground) >= 4.5,
+      id + " Event Home foreground must be AA-safe");
+    assert.ok(Event.contrastRatio(theme.button, theme.buttonInk) >= 4.5,
+      id + " button ink must be AA-safe");
   });
 
-  assert.equal(Event.resolvePalette({ paletteId: "pink-party" }).id, "pink-party");
-  assert.equal(Event.resolvePalette("not-a-palette").id, "lilac-pop");
+  assert.equal(Event.resolveTheme({ themeId: "after-dark" }).id, "after-dark");
+  assert.equal(Event.resolveTheme({ paletteId: "pink-party" }).id, "pop");
+  assert.equal(Event.resolveTheme("blue-sky").id, "sunshine");
+  assert.equal(Event.resolveTheme("not-a-theme").id, "pop");
   assert.throws(function () { Event.contrastRatio("tomato", "#ffffff"); }, /six-digit/i);
 });
 
-test("canonicalises palette roles from the id and survives persistence", function () {
-  Event.PALETTE_IDS.forEach(function (id) {
-    var palette = Event.resolvePalette(id);
-    var created = Event.createEventConfig({
-      schemaVersion: 2,
-      paletteId: id,
-      palettePrimary: "#000000",
-      paletteSecondary: "#000000",
-      paletteHighlight: "#000000"
-    }, fixedOptions());
+test("canonicalises every flat theme role from the id and survives persistence", function () {
+  var roleMap = {
+    themeName: "name", themeTagline: "tagline",
+    themePrimary: "primary", themeSecondary: "secondary", themeHighlight: "highlight",
+    themeBackground: "background", themeForeground: "foreground",
+    themeButton: "button", themeButtonInk: "buttonInk", themeBorder: "border",
+    themeDecoration: "decoration", themeTypography: "typography",
+    themeStripFrame: "stripFrame", themeStripFilter: "stripFilter",
+    themeMagazineTemplate: "magazineTemplate"
+  };
+
+  Event.THEME_IDS.forEach(function (id) {
+    var theme = Event.resolveTheme(id);
+    var supplied = { schemaVersion: 3, themeId: id };
+    Object.keys(roleMap).forEach(function (key) { supplied[key] = "tampered"; });
+    supplied.paletteId = "blue-sky";
+    supplied.look = "butter";
+    supplied.accent = "#000000";
+    var created = Event.createEventConfig(supplied, fixedOptions());
     var restored = Event.createEventConfig(JSON.parse(JSON.stringify(created)));
 
-    assert.equal(created.palettePrimary, palette.primary);
-    assert.equal(created.paletteSecondary, palette.secondary);
-    assert.equal(created.paletteHighlight, palette.highlight);
-    assert.equal(restored.paletteId, id);
-    assert.equal(restored.palettePrimary, palette.primary);
-    assert.equal(restored.paletteSecondary, palette.secondary);
-    assert.equal(restored.paletteHighlight, palette.highlight);
+    assert.equal(created.themeId, id);
+    Object.keys(roleMap).forEach(function (key) {
+      assert.equal(created[key], theme[roleMap[key]], key + " is canonical");
+      assert.equal(restored[key], theme[roleMap[key]], key + " survives persistence");
+    });
+    ["paletteId", "palettePrimary", "paletteSecondary", "paletteHighlight",
+      "look", "accent"].forEach(function (key) {
+      assert.equal(created[key], undefined, key + " does not survive schema 3");
+    });
   });
 });
 
-test("maps every legacy look and safely defaults missing or unknown looks", function () {
+test("maps every version 1 look and version 2 palette to the nearest safe theme", function () {
   var cases = [
-    ["lilac", "lilac-pop"],
-    ["pink-purple", "lilac-pop"],
-    ["pink", "pink-party"],
-    ["sky", "blue-sky"],
-    ["butter", "sunshine"],
-    ["unknown-look", "lilac-pop"],
-    [undefined, "lilac-pop"]
+    [1, "look", "lilac", "pop"],
+    [1, "look", "pink-purple", "pop"],
+    [1, "look", "pink", "pop"],
+    [1, "look", "sky", "sunshine"],
+    [1, "look", "butter", "sunshine"],
+    [2, "paletteId", "lilac-pop", "pop"],
+    [2, "paletteId", "pink-party", "pop"],
+    [2, "paletteId", "blue-sky", "sunshine"],
+    [2, "paletteId", "sunshine", "sunshine"],
+    [2, "paletteId", "unknown-palette", "pop"]
   ];
 
   cases.forEach(function (entry) {
-    var legacy = { schemaVersion: 1, accent: "#123456", stripFrame: "film" };
-    if (entry[0] !== undefined) legacy.look = entry[0];
+    var legacy = { schemaVersion: entry[0], accent: "#123456", stripFrame: "film" };
+    legacy[entry[1]] = entry[2];
+    if (entry[0] === 2) {
+      legacy.palettePrimary = "#000000";
+      legacy.paletteSecondary = "#000000";
+      legacy.paletteHighlight = "#000000";
+    }
     var migrated = Event.migrateEventConfig(legacy, fixedOptions());
-    var palette = Event.resolvePalette(entry[1]);
-    assert.equal(migrated.schemaVersion, 2);
-    assert.equal(migrated.paletteId, entry[1]);
-    assert.equal(migrated.palettePrimary, palette.primary);
-    assert.equal(migrated.paletteSecondary, palette.secondary);
-    assert.equal(migrated.paletteHighlight, palette.highlight);
+    var theme = Event.resolveTheme(entry[3]);
+    assert.equal(migrated.schemaVersion, 3);
+    assert.equal(migrated.themeId, entry[3]);
+    assert.equal(migrated.themePrimary, theme.primary);
+    assert.equal(migrated.themeBackground, theme.background);
+    assert.equal(migrated.themeMagazineTemplate, theme.magazineTemplate);
     assert.equal(migrated.look, undefined);
     assert.equal(migrated.accent, undefined);
-    assert.equal(migrated.stripFrame, "film");
+    assert.equal(migrated.paletteId, undefined);
+    assert.equal(migrated.palettePrimary, undefined);
+    assert.equal(migrated.stripFrame, "film", "unrelated renderer settings survive");
   });
 
-  assert.equal(Event.migrateEventConfig({ look: "pink" }, fixedOptions()).paletteId,
-    "pink-party", "a pre-schema saved event also migrates");
+  assert.equal(Event.migrateEventConfig({}, fixedOptions()).themeId, "pop",
+    "a pre-schema event with no look receives the safe default");
+  assert.equal(Event.migrateEventConfig({ schemaVersion: 2 }, fixedOptions({
+    defaults: { paletteId: "blue-sky" }
+  })).themeId, "sunshine", "a sparse legacy config can inherit its legacy defaults");
 });
 
 test("does not migrate or persist a plaintext PIN field", function () {
@@ -246,7 +307,10 @@ test("uses the seven accepted types and degrades an explicit unknown type to Oth
     Event.createEventConfig({ schemaVersion: 1 }, fixedOptions());
   }, /Unsupported EventConfig schemaVersion/);
   assert.throws(function () {
-    Event.migrateEventConfig({ schemaVersion: 3 }, fixedOptions());
+    Event.createEventConfig({ schemaVersion: 2 }, fixedOptions());
+  }, /Unsupported EventConfig schemaVersion/);
+  assert.throws(function () {
+    Event.migrateEventConfig({ schemaVersion: 4 }, fixedOptions());
   }, /Unsupported EventConfig schemaVersion/);
 });
 
@@ -355,7 +419,7 @@ test("encodes a sparse raw Setup Pass in the URL fragment and imports it as DRAF
   var defaults = {
     eventTitle: "Your Celebration",
     date: "",
-    paletteId: "lilac-pop",
+    themeId: "pop",
     mirror: true,
     stripSignature: ""
   };
@@ -366,7 +430,7 @@ test("encodes a sparse raw Setup Pass in the URL fragment and imports it as DRAF
     location: "Ibiza",
     date: "16.05.27",
     datePrecision: "exact",
-    paletteId: "pink-party",
+    themeId: "after-dark",
     mirror: true,
     stripSignature: "SOPHIE'S HEN"
   }, { defaults: defaults });
@@ -378,14 +442,20 @@ test("encodes a sparse raw Setup Pass in the URL fragment and imports it as DRAF
 
   assert.match(fragment, /^#setup=r\.[A-Za-z0-9_-]+$/);
   assert.doesNotMatch(fragment, /^\?/);
-  assert.equal(rawSetupPayload(fragment).v, 2);
+  assert.equal(rawSetupPayload(fragment).v, 3);
   assert.equal(imported.eventId, FIXED_ID);
   assert.equal(imported.eventTitle, "Sophie's Hen");
   assert.equal(imported.location, "Ibiza");
-  assert.equal(imported.paletteId, "pink-party");
-  assert.equal(imported.palettePrimary, "#b52167");
-  assert.equal(imported.paletteSecondary, "#ffdce8");
-  assert.equal(imported.paletteHighlight, "#eee6ff");
+  assert.equal(imported.schemaVersion, 3);
+  assert.equal(imported.themeId, "after-dark");
+  assert.equal(imported.themePrimary, "#d86c8f");
+  assert.equal(imported.themeSecondary, "#242126");
+  assert.equal(imported.themeHighlight, "#eee6ff");
+  assert.equal(imported.themeBackground, "#0b0b0b");
+  assert.equal(imported.themeForeground, "#ffffff");
+  assert.equal(imported.themeStripFrame, "black");
+  assert.equal(imported.themeMagazineTemplate, "noir");
+  assert.equal(imported.paletteId, undefined);
   assert.equal(imported.look, undefined);
   assert.equal(imported.accent, undefined);
   assert.equal(imported.mirror, true);
@@ -398,7 +468,7 @@ test("encodes a sparse raw Setup Pass in the URL fragment and imports it as DRAF
   );
 });
 
-test("imports a version 1 Setup Pass through legacy palette migration", async function () {
+test("imports version 1 and version 2 Setup Passes through theme migration", async function () {
   var fragment = rawSetupFragment({
     v: 1,
     c: {
@@ -413,20 +483,45 @@ test("imports a version 1 Setup Pass through legacy palette migration", async fu
     }
   });
   var imported = await Event.decodeSetupPass(fragment);
+  var versionTwo = await Event.decodeSetupPass(rawSetupFragment({
+    v: 2,
+    c: {
+      eventId: "event_legacy_blue",
+      eventTitle: "Legacy Blue Party",
+      paletteId: "blue-sky",
+      palettePrimary: "#000000",
+      paletteSecondary: "#000000",
+      paletteHighlight: "#000000",
+      eventStatus: "LIVE",
+      activatedAt: "2027-05-16T18:00:00.000Z",
+      endsAt: "2027-05-18T18:00:00.000Z"
+    }
+  }));
 
-  assert.equal(imported.schemaVersion, 2);
+  assert.equal(imported.schemaVersion, 3);
   assert.equal(imported.eventId, FIXED_ID);
   assert.equal(imported.eventTitle, "Summer Party");
-  assert.equal(imported.paletteId, "sunshine");
-  assert.equal(imported.palettePrimary, "#9a5c00");
-  assert.equal(imported.paletteSecondary, "#fff0aa");
-  assert.equal(imported.paletteHighlight, "#ffdce8");
+  assert.equal(imported.themeId, "sunshine");
+  assert.equal(imported.themePrimary, "#245f9f");
+  assert.equal(imported.themeSecondary, "#dcecff");
+  assert.equal(imported.themeHighlight, "#ff8b72");
+  assert.equal(imported.themeBackground, "#fff0aa");
+  assert.equal(imported.paletteId, undefined);
   assert.equal(imported.look, undefined);
   assert.equal(imported.accent, undefined);
   assert.equal(imported.mirror, false);
   assert.equal(imported.eventStatus, "DRAFT");
   assert.equal(imported.activatedAt, "");
   assert.equal(imported.endsAt, "");
+
+  assert.equal(versionTwo.schemaVersion, 3);
+  assert.equal(versionTwo.eventId, "event_legacy_blue");
+  assert.equal(versionTwo.themeId, "sunshine");
+  assert.equal(versionTwo.themePrimary, "#245f9f", "copied legacy colours are ignored");
+  assert.equal(versionTwo.paletteId, undefined);
+  assert.equal(versionTwo.eventStatus, "DRAFT");
+  assert.equal(versionTwo.activatedAt, "");
+  assert.equal(versionTwo.endsAt, "");
 });
 
 test("Setup Pass carries the derived Guest PIN fields but never its plaintext", async function () {
@@ -489,8 +584,8 @@ test("rejects query-string, malformed and unknown-version Setup Passes", async f
   );
   await assert.rejects(Event.decodeSetupPass("#setup=x.abc"), /Unknown Setup Pass encoding/);
   await assert.rejects(
-    Event.decodeSetupPass(rawSetupFragment({ v: 3, c: { eventId: FIXED_ID } })),
-    /Unsupported Setup Pass version: 3/
+    Event.decodeSetupPass(rawSetupFragment({ v: 4, c: { eventId: FIXED_ID } })),
+    /Unsupported Setup Pass version: 4/
   );
   await assert.rejects(Event.decodeSetupPass("#setup=r.not-valid-json"), /not valid JSON/);
 });

@@ -118,7 +118,7 @@
   PLAN_METADATA[ENTITLEMENTS.ONE_EVENT] = {
     entitlement: ENTITLEMENTS.ONE_EVENT,
     label: "One Party",
-    amountMinor: 1900,
+    amountMinor: 900,
     currency: "GBP",
     durationMonths: null,
     lifetime: false,

@@ -139,6 +139,59 @@ function applyBusinessContact(){
   }
   details.hidden=!details.childNodes.length;
 }
+/* One origin, asserted rather than hoped for. The absolute URLs in the head
+   are static because link-preview crawlers do not run JavaScript, so this
+   checks at boot that they still agree with site-origin. If PB-15 repoints
+   the origin and misses one, this says so instead of the product quietly
+   advertising the old domain to every chat app. */
+const SITE_ORIGIN=metaContent("site-origin").replace(/\/$/,"");
+const SURFACE_META={
+  personal:{
+    title:"MyBishBash Photobooth — 3 photos. 3 ways to keep them.",
+    description:"Take three photos and turn them into a photo strip, magazine cover and moving Polaroid. Free to try, no sign-up, photos stay on your device.",
+    path:"/"
+  },
+  business:{
+    title:"MyBishBash for Business — branded photobooth activations",
+    description:"Brand the booth and every keepsake, configure Share, Save and delivery, and keep each attendee consent decision separate and recorded.",
+    path:"/business"
+  }
+};
+function setMeta(selector,value){
+  const el=document.querySelector(selector);
+  if(el)el.setAttribute("content",value);
+}
+function applySurfaceMetadata(route){
+  const meta=SURFACE_META[route==="business"?"business":"personal"];
+  const url=SITE_ORIGIN+meta.path;
+  document.title=meta.title;
+  setMeta('meta[name="description"]',meta.description);
+  setMeta('meta[property="og:title"]',meta.title);
+  setMeta('meta[name="twitter:title"]',meta.title);
+  setMeta('meta[property="og:description"]',meta.description);
+  setMeta('meta[name="twitter:description"]',meta.description);
+  setMeta('meta[property="og:url"]',url);
+  const canonical=document.querySelector('link[rel="canonical"]');
+  if(canonical)canonical.setAttribute("href",url);
+}
+function assertOriginConsistency(){
+  if(!SITE_ORIGIN)return;
+  const absolute=[
+    document.querySelector('link[rel="canonical"]'),
+    document.querySelector('meta[property="og:url"]'),
+    document.querySelector('meta[property="og:image"]'),
+    document.querySelector('meta[name="twitter:image"]')
+  ];
+  const stale=absolute.filter(el=>{
+    const value=el&&(el.getAttribute("href")||el.getAttribute("content"))||"";
+    return value&&value.indexOf(SITE_ORIGIN)!==0;
+  });
+  if(stale.length){
+    console.warn("Site metadata does not match site-origin ("+SITE_ORIGIN+"). Update these before shipping:",
+      stale.map(el=>el.getAttribute("property")||el.getAttribute("name")||el.getAttribute("rel")));
+  }
+  return stale.length===0;
+}
 const API_META=document.querySelector('meta[name="photobooth-api-base"]');
 const API_BASE=String(API_META&&API_META.content||"").trim().replace(/\/$/,"");
 const HISTORY_SURFACE={PRODUCT:"product",EVENT_HOME:"event-home",BOOTH:"booth"};
@@ -672,6 +725,7 @@ function showProductRoute(route,push,replace){
   showScreen(business?"business":"landing");
   const productRoute=business?"business":"personal";
   updateProductNav(productRoute);
+  applySurfaceMetadata(productRoute);
   if(push&&history.pushState){
     const url=productURL(productRoute);
     const current=history.state||{};
@@ -1925,6 +1979,8 @@ setSetupStep(0);
 syncBusinessConfigurator();
 updateBusinessBrandText();
 applyBusinessContact();
+applySurfaceMetadata(routeFromLocation());
+assertOriginConsistency();
 bootstrapNavigation();
 handleCheckoutReturn();
 loadVerifiedAccess();

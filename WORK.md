@@ -10,8 +10,8 @@ Update this file **in the same commit** as each packet. Keep it terse — reason
 ## Status
 
 - **Current phase:** P0 — Stop the site lying. Not started.
-- **Completed packets:** PB-08 (mobile nav) · PB-06 (page weight −85%) · PB-17 (storage) · PB-01 (Business contact, single source of truth) · PB-10 (accessibility)
-- **Next packet:** **PB-05 — origin constant + complete social metadata.** Then PB-07 → PB-09 → PB-03. All unblocked.
+- **Completed packets:** PB-08 (mobile nav) · PB-06 (page weight −85%) · PB-17 (storage) · PB-01 (Business contact + enquiry email) · PB-10 (accessibility) · PB-05 (social metadata + origin constant)
+- **Next packet:** **PB-07 — robots.txt, sitemap.xml, branded 404.** Depends on PB-05 (landed). Then PB-09 → PB-03. All unblocked.
 - **Programme started:** —
 - **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. 002 (2026-08-10) — lifecycle decisions locked, cancellation governance corrected. **003 (2026-08-11) — PROPOSED, NOT ACCEPTED**: reconciles the "we build your photobooth" direction. Proposes PB-22…PB-28 and amends PB-14/18/19/20. Evidence: `docs/product/RECONCILIATION-003.md`. **Three decisions block acceptance — see spec A3.5.**
 - **Reconciliation 003 verdict:** the programme survives. The immediate run `PB-17 → PB-10 → PB-05 → PB-07 → PB-09 → PB-03` is unchanged and remains executable now; PB-06 and PB-08 stay closed with no regression found.
@@ -33,7 +33,7 @@ Three chains are load-bearing:
 | 2 | PB-02 Make the commerce state honest *(amended 001)* | P0 | ☐ | — |
 | 3 | PB-03 Never silently discard a guest's configuration | P0 | ☐ | — |
 | 4 | PB-04 Publish terms, privacy and cancellation | P1 | ☐ | — |
-| 5 | PB-05 Origin constant + complete social metadata | P2 | ☐ | — |
+| 5 | PB-05 Origin constant + complete social metadata | P2 | ☑ | *(pending)* |
 | 6 | PB-06 Cut the demo contact sheet to under 200 KB | P2 | ☑ | `e690d01` |
 | 7 | PB-07 robots.txt, sitemap.xml, branded 404 | P2 | ☐ | — |
 | 8 | PB-08 Fix the mobile navigation containing block | P3 | ☑ | `2c47613` |
@@ -96,6 +96,20 @@ A packet that would "fix" one of these must not run until the behaviour is confi
 - [ ] **PB-15:** approval to cut over, and whether/when to announce the new URL.
 
 **Resolved 2026-08-10 — no longer inputs:** PB-11 price point (£0 / £19 / £49) · PB-18 event types (Birthday · Wedding · Party · Celebration) · PB-20 ENDED behaviour (photos always survive) · PB-20 reactivation (none; new purchase creates a new event) · PB-16 Annual gating (gated, along with One Event).
+
+## Origin locations PB-15 must update at cut-over
+
+Recorded by PB-05 as its criterion requires. All five live in `index.html`; nothing else in the repository hardcodes a hostname.
+
+| # | Location |
+|---|---|
+| 1 | `<meta name="site-origin">` — the constant itself |
+| 2 | `<link rel="canonical">` |
+| 3 | `<meta property="og:url">` |
+| 4 | `<meta property="og:image">` |
+| 5 | `<meta name="twitter:image">` |
+
+These four absolute URLs are static **by necessity**, not oversight: link-preview crawlers (Facebook, WhatsApp, Slack, iMessage, X) do not execute JavaScript, so a JS-written `og:image` is invisible to precisely the surfaces the metadata exists to serve. `assertOriginConsistency()` runs at boot and warns if any of them stops agreeing with `site-origin`, so the duplication cannot drift silently. PB-07's sitemap/robots will add to this list.
 
 ## Decision log
 

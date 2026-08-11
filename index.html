@@ -17,10 +17,38 @@
   <meta name="business-contact-url" content="" />
   <meta name="business-contact-address" content="3A Beryl Court" />
   <meta name="photobooth-api-base" content="" />
+
+  <!-- The site origin, in one place. PB-15 repoints this to
+       https://mybishbash.app/photobooth/ at cut-over.
+
+       The absolute URLs below MUST stay static rather than being written by
+       app.js: Facebook, WhatsApp, Slack, iMessage and X do not execute
+       JavaScript, so a JS-written og:url or og:image is invisible to exactly
+       the surfaces this metadata exists to serve. They are therefore the one
+       deliberate duplication of the origin, and app.js asserts at boot that
+       they still agree with site-origin so the two cannot drift silently.
+       PB-15 must update: canonical, og:url, og:image, twitter:image. -->
+  <meta name="site-origin" content="https://raes-photo-booth.vercel.app" />
+  <link rel="canonical" href="https://raes-photo-booth.vercel.app/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MyBishBash Photobooth" />
+  <meta property="og:title" content="MyBishBash Photobooth — 3 photos. 3 ways to keep them." />
+  <meta property="og:description" content="Take three photos and turn them into a photo strip, magazine cover and moving Polaroid. Free to try, no sign-up, photos stay on your device." />
+  <meta property="og:url" content="https://raes-photo-booth.vercel.app/" />
+  <meta property="og:image" content="https://raes-photo-booth.vercel.app/assets/og-image.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="A MyBishBash photo strip, magazine cover and Living Polaroid made from the same three party photos." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MyBishBash Photobooth — 3 photos. 3 ways to keep them." />
+  <meta name="twitter:description" content="Take three photos and turn them into a photo strip, magazine cover and moving Polaroid. Free to try, no sign-up, photos stay on your device." />
+  <meta name="twitter:image" content="https://raes-photo-booth.vercel.app/assets/og-image.jpg" />
+
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="stylesheet" href="styles.css" />
-  <title>MyBishBash Photobooth</title>
+  <title>MyBishBash Photobooth — 3 photos. 3 ways to keep them.</title>
 </head>
 <body>
 <a class="skip-link" href="#app">Skip to content</a>

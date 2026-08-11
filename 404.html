@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="robots" content="noindex" />
+  <title>Page not found — MyBishBash Photobooth</title>
+  <!-- Self-contained on purpose. This page must render with JavaScript
+       disabled and without waiting on styles.css, because it is what a
+       mistyped URL gets - and after PB-15 it is what a mistyped
+       /photobooth/... path gets too. -->
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100svh;display:flex;align-items:center;justify-content:center;padding:32px;
+         background:#fff;color:#111;text-align:center;
+         font-family:"Avenir Next",Avenir,"Helvetica Neue",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+    .wrap{max-width:520px}
+    .wordmark{display:inline-flex;flex-direction:column;line-height:.86;text-decoration:none;margin-bottom:40px}
+    .wordmark span{font-size:18px;letter-spacing:-.045em;font-weight:900}
+    .wordmark b:nth-child(1){color:#3d91ef}.wordmark b:nth-child(2){color:#d92d7f}.wordmark b:nth-child(3){color:#e8ad00}
+    .wordmark small{margin-top:6px;font-size:8px;letter-spacing:.32em;font-weight:800}
+    .kicker{margin:0 0 14px;font-size:10px;letter-spacing:.24em;font-weight:800;text-transform:uppercase;color:#66519c}
+    h1{margin:0 0 18px;font-size:clamp(34px,7vw,52px);line-height:.98;letter-spacing:-.05em;font-weight:800}
+    h1 em{font-style:normal;color:#d92d7f}
+    p{margin:0 0 32px;font-size:17px;line-height:1.5;color:#4a453f}
+    .cta{display:inline-flex;align-items:center;justify-content:center;min-height:56px;padding:0 28px;
+         background:#d92d7f;color:#fff;border:1px solid #d92d7f;box-shadow:6px 6px 0 #dcecff;
+         font-size:12px;letter-spacing:.16em;font-weight:900;text-decoration:none}
+    .alt{display:block;margin-top:24px;font-size:13px;font-weight:700;color:#111;text-underline-offset:5px}
+    a:focus-visible{outline:3px solid #2357ff;outline-offset:3px}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <a class="wordmark" href="/"><span><b>MY</b><b>BISH</b><b>BASH</b></span><small>PHOTOBOOTH</small></a>
+    <p class="kicker">PAGE NOT FOUND</p>
+    <h1>This page went to <em>another party.</em></h1>
+    <p>The link may be old or mistyped — but the photobooth is still here, and still free to try.</p>
+    <a class="cta" href="/">START PHOTOBOOTH</a>
+    <a class="alt" href="/business">Looking for MyBishBash for Business?</a>
+  </main>
+</body>
+</html>

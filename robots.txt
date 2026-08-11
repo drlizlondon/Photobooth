@@ -1,0 +1,7 @@
+# MyBishBash Photobooth
+# Origin is duplicated here from index.html's site-origin meta because a
+# static file cannot read it. PB-15 must update this line at cut-over.
+User-agent: *
+Allow: /
+
+Sitemap: https://raes-photo-booth.vercel.app/sitemap.xml

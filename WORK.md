@@ -10,8 +10,8 @@ Update this file **in the same commit** as each packet. Keep it terse — reason
 ## Status
 
 - **Current phase:** P2 — Be findable and fast. Six packets landed and pushed; PB-07 next.
-- **Completed packets:** PB-08 (mobile nav) · PB-06 (page weight −85%) · PB-17 (storage) · PB-01 (Business contact + enquiry email) · PB-10 (accessibility) · PB-05 (social metadata + origin constant)
-- **Next packet:** **PB-07 — robots.txt, sitemap.xml, branded 404.** Depends on PB-05 (landed). Then PB-09 → PB-03. All unblocked.
+- **Completed packets:** PB-08 (mobile nav) · PB-06 (page weight −85%) · PB-17 (storage) · PB-01 (Business contact + enquiry email) · PB-10 (accessibility) · PB-05 (social metadata + origin constant) · PB-07 (robots, sitemap, branded 404)
+- **Next packet:** **PB-09 — differentiate camera failures, remove the native alert.** Then PB-03. Note PB-09's sign-off has an owed manual check (in-app browser behaviour on real handsets).
 - **Programme started:** —
 - **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. 002 (2026-08-10) — lifecycle decisions locked, cancellation governance corrected. 003 (2026-08-11) — reconciles the "we build your photobooth" direction; adds PB-22…PB-28, amends PB-14/18/19/20. Evidence: `docs/product/RECONCILIATION-003.md`. **004 (2026-08-11) — ACCEPTS 003 and resolves all three blocking decisions** (seven event types; lifecycle × entitlement orthogonal; Setup Pass adopted and distinct from entitlement restore), and adds the three-valued event-timing model. **Both are ACCEPTED and BINDING — PB-22…PB-28 are executable.**
 - **Reconciliation 003 verdict:** the programme survives. The immediate run `PB-17 → PB-10 → PB-05 → PB-07 → PB-09 → PB-03` is unchanged and remains executable now; PB-06 and PB-08 stay closed with no regression found.
@@ -35,7 +35,7 @@ Three chains are load-bearing:
 | 4 | PB-04 Publish terms, privacy and cancellation | P1 | ☐ | — |
 | 5 | PB-05 Origin constant + complete social metadata | P2 | ☑ | `9197594` |
 | 6 | PB-06 Cut the demo contact sheet to under 200 KB | P2 | ☑ | `e690d01` |
-| 7 | PB-07 robots.txt, sitemap.xml, branded 404 | P2 | ☐ | — |
+| 7 | PB-07 robots.txt, sitemap.xml, branded 404 | P2 | ☑ | *(pending)* |
 | 8 | PB-08 Fix the mobile navigation containing block | P3 | ☑ | `2c47613` |
 | 9 | PB-09 Differentiate camera failures, remove the alert | P3 | ☐ | — |
 | 10 | PB-10 Close the measured accessibility gaps | P3 | ☑ | `ab8ca06` |
@@ -108,8 +108,10 @@ Recorded by PB-05 as its criterion requires. All five live in `index.html`; noth
 | 3 | `<meta property="og:url">` |
 | 4 | `<meta property="og:image">` |
 | 5 | `<meta name="twitter:image">` |
+| 6 | `robots.txt` — the `Sitemap:` line *(added by PB-07)* |
+| 7 | `sitemap.xml` — both `<loc>` values *(added by PB-07)* |
 
-These four absolute URLs are static **by necessity**, not oversight: link-preview crawlers (Facebook, WhatsApp, Slack, iMessage, X) do not execute JavaScript, so a JS-written `og:image` is invisible to precisely the surfaces the metadata exists to serve. `assertOriginConsistency()` runs at boot and warns if any of them stops agreeing with `site-origin`, so the duplication cannot drift silently. PB-07's sitemap/robots will add to this list.
+Locations 2–5 are static **by necessity**, not oversight: link-preview crawlers (Facebook, WhatsApp, Slack, iMessage, X) do not execute JavaScript, so a JS-written `og:image` is invisible to precisely the surfaces the metadata exists to serve. `assertOriginConsistency()` runs at boot and warns if any of them stops agreeing with `site-origin`, so the duplication cannot drift silently. `robots.txt` and `sitemap.xml` are static files that cannot read a meta tag, so they carry the origin too — seven locations in total, all listed here.
 
 ## Decision log
 

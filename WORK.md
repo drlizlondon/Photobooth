@@ -10,8 +10,8 @@ Update this file **in the same commit** as each packet. Keep it terse — reason
 ## Status
 
 - **Current phase:** P0 — Stop the site lying. Not started.
-- **Completed packets:** PB-08 (mobile nav) · PB-06 (page weight −85%) · PB-17 (storage: −25% per session, storage-derived cap, quota failures surfaced)
-- **Next packet:** **PB-10 — close the measured accessibility gaps.** Unblocked, needs nothing from Lizzie. Then PB-05 → PB-07 → PB-09 → PB-03. PB-01 remains blocked on the Business contact address (the 2026-08-11 direction believed it was unblocked, but the message ended mid-sentence and no address arrived).
+- **Completed packets:** PB-08 (mobile nav) · PB-06 (page weight −85%) · PB-17 (storage) · PB-01 (Business contact, single source of truth) · PB-10 (accessibility)
+- **Next packet:** **PB-05 — origin constant + complete social metadata.** Then PB-07 → PB-09 → PB-03. All unblocked.
 - **Programme started:** —
 - **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. 002 (2026-08-10) — lifecycle decisions locked, cancellation governance corrected. **003 (2026-08-11) — PROPOSED, NOT ACCEPTED**: reconciles the "we build your photobooth" direction. Proposes PB-22…PB-28 and amends PB-14/18/19/20. Evidence: `docs/product/RECONCILIATION-003.md`. **Three decisions block acceptance — see spec A3.5.**
 - **Reconciliation 003 verdict:** the programme survives. The immediate run `PB-17 → PB-10 → PB-05 → PB-07 → PB-09 → PB-03` is unchanged and remains executable now; PB-06 and PB-08 stay closed with no regression found.
@@ -38,7 +38,7 @@ Three chains are load-bearing:
 | 7 | PB-07 robots.txt, sitemap.xml, branded 404 | P2 | ☐ | — |
 | 8 | PB-08 Fix the mobile navigation containing block | P3 | ☑ | `2c47613` |
 | 9 | PB-09 Differentiate camera failures, remove the alert | P3 | ☐ | — |
-| 10 | PB-10 Close the measured accessibility gaps | P3 | ☐ | — |
+| 10 | PB-10 Close the measured accessibility gaps | P3 | ☑ | *(pending)* |
 | 11 | **PB-17 Make local photo storage survivable** | P3 | ☑ | `69f7dbe` |
 | 12 | **PB-18 Persistent Free booth with event-type identity** | P3 | ☐ | — |
 | 13 | **PB-19 "Your Photobooth" return access + three entry routes** | P3 | ☐ | — |
@@ -85,6 +85,7 @@ A packet that would "fix" one of these must not run until the behaviour is confi
 - [ ] **Whole capture flow end to end.** Three-shot countdown, four Strip frames, five filters, four Cover styles, Living Polaroid H.264 and PNG fallback, iOS Share sheet. Never exercised in the audit — no camera access. Expected: all working, per the README.
 - [ ] **Hard navigation to the Business surface (blocks PB-13 sign-off).** One `navigate` to `/business` timed out during the audit while `curl` returned 200 and client-side routing worked. Recorded as instrument noise; confirm under the subpath before cutover.
 - [ ] **Booth keyboard and screen-reader path.** Not assessable without the camera.
+- [ ] **Skip-link visual reveal on real Tab (PB-10).** The `.skip-link:focus{top:12px}` rule is present with correct specificity, the link is the first focusable element and `#app` is a focusable target — but the audit browser pane was hidden, which stops `:focus` styling being applied, so `top` never left `-64px` in measurement. Press Tab on a real browser and confirm the black "Skip to content" pill appears top-left.
 - [ ] **Font specimens on the actual booth iPad.** The tuning laptop and the booth are not the same machine.
 
 ## Inputs needed from Lizzie

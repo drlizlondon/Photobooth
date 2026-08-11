@@ -17,6 +17,10 @@
   --party-lilac:#eee6ff;
   --party-mint:#def4e8;
   --party-raspberry:#d92d7f;
+  /* Text-on-pink only. The brand raspberry above is 3.60:1 on --party-pink,
+     below the 4.5:1 AA floor for text this size; this is 4.93:1. Headings and
+     CTA backgrounds keep the brand colour. */
+  --party-raspberry-text:#b52167;
   --party-sky:#3d91ef;
   --party-gold:#e8ad00;
   --page:min(1240px,calc(100vw - 40px));
@@ -76,7 +80,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 .landing-screen .hero-copy h1{font-size:clamp(52px,6.1vw,80px);line-height:.94;margin:18px 0 25px;max-width:670px}
 .landing-screen .hero-copy h1 span{color:var(--party-raspberry);position:relative;white-space:nowrap}
 .landing-screen .hero-copy h1 span::after{content:"";position:absolute;left:2%;right:1%;bottom:-5px;height:5px;background:var(--party-yellow);border-radius:50%;transform:rotate(-1.5deg);z-index:-1}
-.hero-kicker{display:inline-flex;align-items:center;width:auto;background:var(--party-pink);color:var(--party-raspberry)!important;border-radius:999px;padding:8px 13px;letter-spacing:.13em}
+.hero-kicker{display:inline-flex;align-items:center;width:auto;background:var(--party-pink);color:var(--party-raspberry-text)!important;border-radius:999px;padding:8px 13px;letter-spacing:.13em}
 .hero-proposition{font-size:clamp(18px,1.75vw,23px);line-height:1.4;margin:0;max-width:560px}
 .hero-actions{display:flex;align-items:center;margin-top:34px}
 .landing-screen .hero-start{min-height:62px;gap:13px;background:var(--party-raspberry);border-color:var(--party-raspberry);box-shadow:6px 6px 0 var(--party-blue);font-size:12px;padding:0 28px}
@@ -390,3 +394,19 @@ canvas.mag-style-preview{display:block;width:100%;height:auto;background:#e9e2d8
 .business-contact-details{margin:26px 0 0;font-style:normal;font-size:15px;line-height:1.6}
 .business-contact-details a{font-weight:800;text-underline-offset:4px}
 .business-contact-details p{margin:6px 0 0;color:var(--muted)}
+
+/* Skip link: first focusable element on the page, off-screen until focused.
+   Keyboard users otherwise traverse the whole nav on every surface change. */
+.skip-link{position:absolute;left:12px;top:-64px;z-index:200;padding:12px 18px;min-height:44px;display:inline-flex;align-items:center;background:var(--ink);color:#fff;font-size:12px;font-weight:800;letter-spacing:.08em;text-decoration:none;border-radius:10px}
+/* No transition: a skip link should be there the instant it is focused, and
+   an instant reveal needs no reduced-motion exception. */
+.skip-link:focus{top:12px}
+#app:focus{outline:none}
+
+/* Demo chips carry the interactive product demonstration on mobile. At 29px
+   they cleared WCAG 2.5.8 (24px) but sat well under the 44px comfortable-touch
+   guidance, on the exact controls that do the selling. Mobile only, so the
+   desktop demo layout is untouched. */
+@media(max-width:920px){
+  .demo-chip-row button{min-height:44px;min-width:44px;padding-left:14px;padding-right:14px}
+}

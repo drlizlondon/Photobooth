@@ -9,9 +9,9 @@ Update this file **in the same commit** as each packet. Keep it terse — reason
 
 ## Status
 
-- **Current phase:** P2 — Be findable and fast. Six packets landed and pushed; PB-07 next.
-- **Completed packets:** PB-08 (mobile nav) · PB-06 (page weight −85%) · PB-17 (storage) · PB-01 (Business contact + enquiry email) · PB-10 (accessibility) · PB-05 (social metadata + origin constant) · PB-07 (robots, sitemap, branded 404) · PB-09 (camera failure states)
-- **Next packet:** **PB-03 — never silently discard a guest's configuration.** Last packet of the approved run.
+- **Current phase:** approved run COMPLETE. Nine packets landed and pushed. P0 has one packet left (PB-02); P1 (PB-04) is draftable.
+- **Completed packets (9):** PB-01 · PB-03 · PB-05 · PB-06 · PB-07 · PB-08 · PB-09 · PB-10 · PB-17 — the whole approved run, all pushed to `origin/main`.
+- **Next packet:** **PB-02 — make the commerce state honest** (the last P0 packet), then PB-04. Beyond that the direction work: PB-22 → PB-23 → PB-13 → PB-14 → PB-15 → PB-26 → PB-20 → PB-21 → PB-11 → PB-12 → PB-16. **Awaiting Lizzie's go-ahead — the approved run is complete.**
 - **Programme started:** —
 - **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. 002 (2026-08-10) — lifecycle decisions locked, cancellation governance corrected. 003 (2026-08-11) — reconciles the "we build your photobooth" direction; adds PB-22…PB-28, amends PB-14/18/19/20. Evidence: `docs/product/RECONCILIATION-003.md`. **004 (2026-08-11) — ACCEPTS 003 and resolves all three blocking decisions** (seven event types; lifecycle × entitlement orthogonal; Setup Pass adopted and distinct from entitlement restore), and adds the three-valued event-timing model. **Both are ACCEPTED and BINDING — PB-22…PB-28 are executable.**
 - **Reconciliation 003 verdict:** the programme survives. The immediate run `PB-17 → PB-10 → PB-05 → PB-07 → PB-09 → PB-03` is unchanged and remains executable now; PB-06 and PB-08 stay closed with no regression found.
@@ -31,7 +31,7 @@ Three chains are load-bearing:
 |---|--------|-------|--------|--------|
 | 1 | PB-01 Replace the dead Business contact URL | P0 | ☑ | `904bd4f` |
 | 2 | PB-02 Make the commerce state honest *(amended 001)* | P0 | ☐ | — |
-| 3 | PB-03 Never silently discard a guest's configuration | P0 | ☐ | — |
+| 3 | PB-03 Never silently discard a guest's configuration | P0 | ☑ | *(pending)* |
 | 4 | PB-04 Publish terms, privacy and cancellation | P1 | ☐ | — |
 | 5 | PB-05 Origin constant + complete social metadata | P2 | ☑ | `9197594` |
 | 6 | PB-06 Cut the demo contact sheet to under 200 KB | P2 | ☑ | `e690d01` |

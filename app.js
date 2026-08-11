@@ -664,8 +664,13 @@ function applyEntitlementUI(){
   const paid=!!capabilities.canPersonaliseEvent||legacyProfileAvailable;
   const note=$("settingsAccessNote"),save=$("saveSettings"),launch=$("launchCustomBooth"),choose=$("choosePersonalPlan");
   if(note)note.textContent=paid?"Your Personal setup can be saved and used on this device.":"Preview the Personal experience, then choose access when you are ready to use it.";
-  if(save){save.disabled=!paid;save.setAttribute("aria-disabled",paid?"false":"true");}
-  if(launch){launch.disabled=!paid;launch.setAttribute("aria-disabled",paid?"false":"true");}
+  /* Deliberately NOT disabled. A disabled button fires no events, so pressing
+     it produced silence at the exact moment the organiser wanted an answer -
+     and it is unreachable for anyone using assistive tech. The controls stay
+     live and explain themselves instead. */
+  if(save){save.disabled=false;save.removeAttribute("aria-disabled");}
+  if(launch){launch.disabled=false;launch.removeAttribute("aria-disabled");}
+  if(paid)clearSettingsSaveStatus();
   if(choose)choose.hidden=paid;
   const outputNote=$("outputBrandingNote");
   if(outputNote){
@@ -1776,8 +1781,27 @@ function openPersonalSettings(returnScreen){
   fillSettingsUI();setSetupStep(0);showScreen("settings");
   setTimeout(()=>{buildFontRoles();renderAdminPreview();renderEventGallery();},0);
 }
+function showSettingsSaveStatus(message){
+  const el=$("settingsSaveStatus");
+  if(!el)return;
+  el.textContent=message;
+  el.hidden=false;
+  /* No focus() call: role="status" announces it politely, and stealing focus
+     mid-typing would be its own defect. */
+}
+function clearSettingsSaveStatus(){
+  const el=$("settingsSaveStatus");
+  if(el)el.hidden=true;
+}
 function savePersonalSettings(showBooth){
-  if(!capabilities.canPersonaliseEvent&&!legacyProfileAvailable)return false;
+  if(!capabilities.canPersonaliseEvent&&!legacyProfileAvailable){
+    /* Never a bare return: the organiser has just filled this in. Their draft
+       stays exactly as typed - nothing is cleared and nothing is written to
+       the saved settings key - and they are told why and where to go next. */
+    showSettingsSaveStatus("Saving your event needs Personal access. Your setup is still here — nothing has been lost. View Personal pricing to unlock it.");
+    return false;
+  }
+  clearSettingsSaveStatus();
   settings=draftSettings();persistSettings();fillSettingsUI();invalidatePolaroid();buildReviewControls();
   if(boothExampleMode){temporarySettingsSnapshot=null;boothExampleMode=false;}
   if(showBooth)enterEventHome(false);

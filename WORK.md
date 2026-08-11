@@ -32,7 +32,7 @@ Three chains are load-bearing:
 | 1 | PB-01 Replace the dead Business contact URL | P0 | ☑ | `904bd4f` |
 | 2 | PB-02 Make the commerce state honest *(amended 001)* | P0 | ☑ | `db7c64c` |
 | 3 | PB-03 Never silently discard a guest's configuration | P0 | ☑ | `0fd9ca1` |
-| 4 | PB-04 Publish terms, privacy and cancellation | P1 | ☑ | *(pending)* |
+| 4 | PB-04 Publish terms, privacy and cancellation | P1 | ☑ | `1e7f319` |
 | 5 | PB-05 Origin constant + complete social metadata | P2 | ☑ | `9197594` |
 | 6 | PB-06 Cut the demo contact sheet to under 200 KB | P2 | ☑ | `e690d01` |
 | 7 | PB-07 robots.txt, sitemap.xml, branded 404 | P2 | ☑ | `31d15f9` |

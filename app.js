@@ -98,6 +98,47 @@ const GALLERY_DB="mybishbashPhotoboothGallery";
 const LEGACY_GALLERY_DB="raePhotoBoothGallery";
 const GALLERY_MIGRATION_KEY="mybishbashPhotoboothGalleryMigratedV1";
 const EDITION_KEY="mybishbashPhotoboothEditionSequenceV1";
+/* Business contact details come from the meta tags in index.html and nowhere
+   else. Previously the URL was written into four anchors and a meta nobody
+   read, so "change the contact address" meant five edits and a 404 when one
+   was missed. Supplying an email or a url upgrades every control to a real
+   link; with neither, the controls fall back to the on-page contact block
+   they already point at, so no path can 404. */
+function metaContent(name){
+  const el=document.querySelector('meta[name="'+name+'"]');
+  return String(el&&el.content||"").trim();
+}
+const BUSINESS_CONTACT={
+  email:metaContent("business-contact-email"),
+  url:metaContent("business-contact-url"),
+  address:metaContent("business-contact-address")
+};
+function businessContactHref(){
+  if(BUSINESS_CONTACT.email){
+    return "mailto:"+BUSINESS_CONTACT.email+"?subject="+encodeURIComponent("MyBishBash Photobooth — Business enquiry");
+  }
+  return BUSINESS_CONTACT.url||"";
+}
+function applyBusinessContact(){
+  const href=businessContactHref();
+  document.querySelectorAll("[data-business-contact]").forEach(el=>{
+    if(href)el.setAttribute("href",href);
+  });
+  const details=$("businessContactDetails");
+  if(!details)return;
+  details.innerHTML="";
+  if(BUSINESS_CONTACT.email){
+    const a=document.createElement("a");
+    a.href=businessContactHref();a.textContent=BUSINESS_CONTACT.email;
+    details.appendChild(a);
+  }
+  if(BUSINESS_CONTACT.address){
+    const p=document.createElement("p");
+    p.textContent=BUSINESS_CONTACT.address;
+    details.appendChild(p);
+  }
+  details.hidden=!details.childNodes.length;
+}
 const API_META=document.querySelector('meta[name="photobooth-api-base"]');
 const API_BASE=String(API_META&&API_META.content||"").trim().replace(/\/$/,"");
 const HISTORY_SURFACE={PRODUCT:"product",EVENT_HOME:"event-home",BOOTH:"booth"};
@@ -1883,6 +1924,7 @@ fillSettingsUI();
 setSetupStep(0);
 syncBusinessConfigurator();
 updateBusinessBrandText();
+applyBusinessContact();
 bootstrapNavigation();
 handleCheckoutReturn();
 loadVerifiedAccess();

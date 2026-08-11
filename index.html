@@ -8,7 +8,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="MyBishBash Photobooth" />
   <meta name="description" content="Take three photos and turn them into a photo strip, magazine cover and moving Polaroid." />
-  <meta name="business-contact-url" content="https://mybishbash.app/contact" />
+  <!-- Business contact: the single source of truth. Edit here and nowhere else -
+       app.js reads these and upgrades every "Talk to us" control. Supply an
+       email or url and the controls become real links automatically; with
+       neither, they fall back to the on-page contact block, which is why they
+       point at #businessContact in the markup and can never 404. -->
+  <meta name="business-contact-email" content="" />
+  <meta name="business-contact-url" content="" />
+  <meta name="business-contact-address" content="3A Beryl Court, London" />
   <meta name="photobooth-api-base" content="" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -253,7 +260,7 @@
       <p class="product-kicker">FOR BUSINESS</p>
       <h2>Want your brand on the booth?</h2>
       <p>Add your logo and colours, brand the welcome and keepsakes, configure Share and Save, and keep every consent choice separate.</p>
-      <a class="product-cta" href="https://mybishbash.app/contact">TALK TO US</a>
+      <a class="product-cta" data-business-contact href="#businessContact">TALK TO US</a>
     </section>
   </div>
 
@@ -272,7 +279,7 @@
       <span aria-hidden="true">|</span>
       <a href="business" data-product-route="business" aria-current="page">For Business</a>
     </nav>
-    <a class="nav-start business-contact-link" href="https://mybishbash.app/contact">Talk to us</a>
+    <a class="nav-start business-contact-link" data-business-contact href="#businessContact">Talk to us</a>
   </header>
 
   <div class="business-content">
@@ -281,7 +288,7 @@
         <p class="product-kicker">MYBISHBASH FOR BUSINESS</p>
         <h1 id="businessTitle">Want your brand on the booth?</h1>
         <p>Build a branded photobooth activation with real event controls—not a fixed one-size-fits-all flow.</p>
-        <a class="product-cta" href="https://mybishbash.app/contact">TALK TO US</a>
+        <a class="product-cta" data-business-contact href="#businessContact">TALK TO US</a>
       </div>
       <div class="business-audience-list" aria-label="Who Business is for">
         <span>BRANDS</span><span>VENUES</span><span>EVENT AGENCIES</span><span>COMPANIES</span><span>SCHOOLS</span><span>ORGANISERS</span>
@@ -362,11 +369,18 @@
       <p class="legal-note">Consent wording must be configured and reviewed for the organisation and use case. Marketing consent and photo-publicity permission are separate decisions.</p>
     </section>
 
+    <section id="businessContact" class="business-contact page-section" aria-labelledby="businessContactTitle">
+      <p class="product-kicker">GET IN TOUCH</p>
+      <h2 id="businessContactTitle">Talk to us about your event.</h2>
+      <p>Tell us the event, the venue and roughly how many people, and we will come back to you.</p>
+      <address id="businessContactDetails" class="business-contact-details"></address>
+    </section>
+
     <section class="business-final page-section">
       <p class="product-kicker">FOR YOUR NEXT EVENT</p>
       <h2>Build the booth around the activation.</h2>
       <p>Brand the experience, choose how guests receive it, and collect only what the event has genuinely configured and earned permission to use.</p>
-      <a class="product-cta" href="https://mybishbash.app/contact">TALK TO US</a>
+      <a class="product-cta" data-business-contact href="#businessContact">TALK TO US</a>
     </section>
   </div>
 

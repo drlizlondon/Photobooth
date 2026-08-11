@@ -29,7 +29,7 @@ Three chains are load-bearing:
 
 | # | Packet | Phase | Status | Commit |
 |---|--------|-------|--------|--------|
-| 1 | PB-01 Replace the dead Business contact URL | P0 | ☐ | — |
+| 1 | PB-01 Replace the dead Business contact URL | P0 | ☑ | *(pending)* |
 | 2 | PB-02 Make the commerce state honest *(amended 001)* | P0 | ☐ | — |
 | 3 | PB-03 Never silently discard a guest's configuration | P0 | ☐ | — |
 | 4 | PB-04 Publish terms, privacy and cancellation | P1 | ☐ | — |
@@ -89,7 +89,7 @@ A packet that would "fix" one of these must not run until the behaviour is confi
 
 ## Inputs needed from Lizzie
 
-- [ ] **PB-01:** the monitored email address for Business enquiries. **STILL BLOCKED** — the 2026-08-11 direction said this was unblocked "by the Business contact decision below", but the message ended mid-sentence at §26 and no address arrived. Will not be executed on a guessed address.
+- [ ] **PB-01 follow-up — a monitored enquiry EMAIL.** The address supplied 2026-08-11 (`3A Beryl Court, London`) is postal, so the four CTAs now land on an on-page contact block rather than opening a message. PB-01's original criterion (a monitored `mailto:` with a prefilled subject) is therefore **not met**. Supplying an email needs one edit — `<meta name="business-contact-email">` in `index.html` — after which all four controls become `mailto:` automatically. Until then the Business funnel has a destination but not an actionable reply route.
 - [ ] **PB-04:** now draftable per Amendment 004 (must also reconcile cancellation wording against unused paid entitlements; accounting treatment must not be invented in application code). Still needs sign-off on the legal content **and** the cancellation classification — whether the one-event entitlement is treated as digital content, a service, or both, since the consent and acknowledgement checkout must capture differs. The executor drafts and flags; it does not decide this.
 - [ ] **PB-15:** approval to cut over, and whether/when to announce the new URL.
 

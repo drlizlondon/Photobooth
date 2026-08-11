@@ -384,3 +384,9 @@ canvas.mag-style-preview{display:block;width:100%;height:auto;background:#e9e2d8
    out after the party that photographs stopped saving. */
 .storage-notice{position:fixed;left:12px;right:12px;bottom:14px;z-index:90;margin:0 auto;max-width:560px;padding:11px 18px;border:1px solid var(--ink);border-radius:14px;background:var(--paper);color:var(--ink);font-size:12px;font-weight:700;line-height:1.35;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.16)}
 .storage-notice[hidden]{display:none}
+
+/* Business contact block. The four "Talk to us" controls target this section,
+   so the funnel has a real destination even before an enquiry email exists. */
+.business-contact-details{margin:26px 0 0;font-style:normal;font-size:15px;line-height:1.6}
+.business-contact-details a{font-weight:800;text-underline-offset:4px}
+.business-contact-details p{margin:6px 0 0;color:var(--muted)}

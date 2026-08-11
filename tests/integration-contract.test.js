@@ -190,7 +190,7 @@ test("caches the complete local-first product shell", function () {
   [
     "./product.js",
     "./marketing.js",
-    "./assets/demo-photos.png",
+    "./assets/demo-photos.jpg",
     "./covers.js",
     "./polaroid.js",
     "./mp4.js"

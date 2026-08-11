@@ -10,7 +10,7 @@ Update this file **in the same commit** as each packet. Keep it terse — reason
 ## Status
 
 - **Current phase:** P0 — Stop the site lying. Not started.
-- **Completed packets:** PB-08 (mobile nav containing block)
+- **Completed packets:** PB-08 (mobile nav containing block) · PB-06 (page weight 2,331,527 → 341,779 bytes)
 - **Next packet:** **PB-17 — make local photo storage survivable.** Promoted 2026-08-10 ahead of the P0/P1 sequence: the 20-session silent deletion and the swallowed quota failure are live defects in a shipped product, not future commercial architecture, and they depend on none of the gated decisions. PB-01 remains blocked on the contact address; PB-03 and PB-06…PB-10 are unblocked and can run in parallel sessions.
 - **Programme started:** —
 - **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. Added PB-17…PB-21, amended PB-02/11/12/14/16, reordered the tail. See spec Amendment 001.
@@ -33,7 +33,7 @@ Three chains are load-bearing:
 | 3 | PB-03 Never silently discard a guest's configuration | P0 | ☐ | — |
 | 4 | PB-04 Publish terms, privacy and cancellation | P1 | ☐ | — |
 | 5 | PB-05 Origin constant + complete social metadata | P2 | ☐ | — |
-| 6 | PB-06 Cut the demo contact sheet to under 200 KB | P2 | ☐ | — |
+| 6 | PB-06 Cut the demo contact sheet to under 200 KB | P2 | ☑ | *(pending)* |
 | 7 | PB-07 robots.txt, sitemap.xml, branded 404 | P2 | ☐ | — |
 | 8 | PB-08 Fix the mobile navigation containing block | P3 | ☑ | `2c47613` |
 | 9 | PB-09 Differentiate camera failures, remove the alert | P3 | ☐ | — |

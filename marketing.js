@@ -4,7 +4,13 @@
 (function(global){
 "use strict";
 
-var PHOTO_URL="assets/demo-photos.png";
+/* The contact sheet ships pre-cropped to the 640 rows this file actually
+   draws, and as 4:4:4 JPEG rather than PNG — 2,232,546 bytes became 248,290.
+   The crop arithmetic below is unchanged and still centres itself, so it
+   keeps working if the sheet is ever re-cut with spare rows again. JPEG is
+   used rather than WebP because every browser this page targets decodes it,
+   which is worth more here than the last 100 KB. */
+var PHOTO_URL="assets/demo-photos.jpg";
 var SOURCE_WIDTH=1536;
 var SOURCE_COLUMN=512;
 var SOURCE_CROP_HEIGHT=640; /* 4:5, cropped vertically without resampling. */

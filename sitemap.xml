@@ -13,17 +13,17 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://raes-photo-booth.vercel.app/privacy</loc>
+    <loc>https://raes-photo-booth.vercel.app/privacy.html</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://raes-photo-booth.vercel.app/terms</loc>
+    <loc>https://raes-photo-booth.vercel.app/terms.html</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://raes-photo-booth.vercel.app/refunds</loc>
+    <loc>https://raes-photo-booth.vercel.app/refunds.html</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>

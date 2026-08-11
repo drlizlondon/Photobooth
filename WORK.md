@@ -119,6 +119,12 @@ Locations 2–5 are static **by necessity**, not oversight: link-preview crawler
 
 It has nothing to do with the 48-hour live event period: purchase time is not event start time, and only a deliberate START EVENT begins the live window.
 
+## Regression caught by the contract suite (PB-04)
+
+PB-04 initially added `"cleanUrls": true` to `vercel.json` so `/privacy` would serve `privacy.html`. **`tests/integration-contract.test.js` rejected it**, with the reason written into the assertion: *"cleanUrls rewrites index.html away before the static root fallback can resolve it"* — the production root-routing bug fixed in `392c645` / `e72e65f`. That commit was pushed before the failure was noticed and was corrected in the next commit; `cleanUrls` is gone and the legal pages use explicit `.html` URLs, so `vercel.json` is byte-identical to before PB-04.
+
+**Process note:** the failure was pushed because the preflight was run but its result did not gate the commit. Every subsequent packet must gate the commit on the preflight's exit status, not on reading its output.
+
 ## Open legal question (PB-04)
 
 **Narrow and unresolved: how the paid event is correctly classified under UK consumer law** — digital content, a digital service, another service, or a licence/access right. Each carries different conditions for how the 14-day cancellation right is affected and what must be disclosed and agreed before purchase.

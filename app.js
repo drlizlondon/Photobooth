@@ -115,7 +115,7 @@ const BUSINESS_CONTACT={
 };
 function businessContactHref(){
   if(BUSINESS_CONTACT.email){
-    return "mailto:"+BUSINESS_CONTACT.email+"?subject="+encodeURIComponent("MyBishBash Photobooth — Business enquiry");
+    return "mailto:"+BUSINESS_CONTACT.email+"?subject="+encodeURIComponent("MyBishBash Photobooth - Business enquiry");
   }
   return BUSINESS_CONTACT.url||"";
 }

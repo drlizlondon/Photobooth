@@ -86,11 +86,12 @@ A packet that would "fix" one of these must not run until the behaviour is confi
 - [ ] **Hard navigation to the Business surface (blocks PB-13 sign-off).** One `navigate` to `/business` timed out during the audit while `curl` returned 200 and client-side routing worked. Recorded as instrument noise; confirm under the subpath before cutover.
 - [ ] **Booth keyboard and screen-reader path.** Not assessable without the camera.
 - [ ] **Skip-link visual reveal on real Tab (PB-10).** The `.skip-link:focus{top:12px}` rule is present with correct specificity, the link is the first focusable element and `#app` is a focusable target — but the audit browser pane was hidden, which stops `:focus` styling being applied, so `top` never left `-64px` in measurement. Press Tab on a real browser and confirm the black "Skip to content" pill appears top-left.
+- [ ] **Business mailbox delivery (PB-01, external — does NOT block any packet).** Repository code cannot establish whether `photobooth@mybishbash.app` has a mailbox or forwarding configured with the email provider. Send a test message and confirm it arrives.
 - [ ] **Font specimens on the actual booth iPad.** The tuning laptop and the booth are not the same machine.
 
 ## Inputs needed from Lizzie
 
-- [ ] **PB-01 follow-up — a monitored enquiry EMAIL.** The address supplied 2026-08-11 (`3A Beryl Court, London`) is postal, so the four CTAs now land on an on-page contact block rather than opening a message. PB-01's original criterion (a monitored `mailto:` with a prefilled subject) is therefore **not met**. Supplying an email needs one edit — `<meta name="business-contact-email">` in `index.html` — after which all four controls become `mailto:` automatically. Until then the Business funnel has a destination but not an actionable reply route.
+- [x] ~~PB-01 follow-up — a monitored enquiry email.~~ **Done 2026-08-11:** `photobooth@mybishbash.app` wired through the central meta. All four CTAs resolve to `mailto:` with the prefilled subject. **PB-01 is code-complete.**
 - [ ] **PB-04:** now draftable per Amendment 004 (must also reconcile cancellation wording against unused paid entitlements; accounting treatment must not be invented in application code). Still needs sign-off on the legal content **and** the cancellation classification — whether the one-event entitlement is treated as digital content, a service, or both, since the consent and acknowledgement checkout must capture differs. The executor drafts and flags; it does not decide this.
 - [ ] **PB-15:** approval to cut over, and whether/when to announce the new URL.
 

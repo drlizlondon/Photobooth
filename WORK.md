@@ -59,7 +59,8 @@ Record the real commit hash when a packet lands. Placeholders like "this commit"
    ```bash
    node tests/product.test.js && node tests/integration-contract.test.js && (cd worker && npx vitest run)
    ```
-   Baseline verified 2026-08-09: **17 browser tests pass, 14 worker tests pass, 0 fail.**
+   Baseline re-verified 2026-08-11: **34 browser tests pass (17 `product.test.js` + 17 `integration-contract.test.js`), 14 worker tests pass, 48 total, 0 fail.**
+   *Correction: entries before 2026-08-11 recorded "17 browser tests" — that was `product.test.js` alone and under-counted the suite. The preflight command was always correct; only the stated figure was wrong.*
 2. The packet's acceptance criteria checked off in the commit message.
 3. Any packet touching `index.html` or `styles.css` confirms all ten landing-page demo canvases still report `data-demo-ready="true"` — the landing page drives the real renderers.
 4. Product manually loadable and deployable after the commit. This is a static site with no build step: a broken commit is a broken production deploy.

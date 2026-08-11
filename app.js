@@ -287,26 +287,133 @@ async function openGalleryDB(){
   await galleryMigrationPromise;
   return openNamedGalleryDB(GALLERY_DB);
 }
+/* Schema 1 stored each photo as a base64 data URL. A data URL is a third
+   larger than the bytes it carries, so a three-photo session cost about
+   2.19 MB of a device's storage budget. Schema 2 stores the identical JPEG
+   bytes as a Uint8Array — same pixels, no re-encode, a quarter less storage —
+   and schema 1 records are still read, so existing galleries survive
+   untouched. Uint8Array rather than Blob because Blob-in-IndexedDB was
+   unreliable on the older iOS Safari this booth targets. */
+const GALLERY_SCHEMA=2;
+/* Never trim below this many sessions however tight storage is: losing a
+   party's photographs to save space is the worse failure. */
+const GALLERY_MIN_SESSIONS=20;
+const GALLERY_STORAGE_FRACTION=0.5;
+const STORAGE_WARN_RATIO=0.85;
+
+function isQuotaError(error){
+  const name=error&&error.name?String(error.name):"";
+  return name==="QuotaExceededError"||name==="NS_ERROR_DOM_QUOTA_REACHED";
+}
+function dataUrlToBytes(dataUrl){
+  const text=String(dataUrl||""),comma=text.indexOf(",");
+  if(comma===-1||text.slice(0,comma).indexOf("base64")===-1)return null;
+  try{
+    const binary=atob(text.slice(comma+1)),bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i+=1)bytes[i]=binary.charCodeAt(i);
+    return bytes;
+  }catch(e){return null;}
+}
+function sessionBytes(item){
+  if(!item||!item.photos)return 0;
+  return item.photos.reduce((total,photo)=>{
+    if(photo&&typeof photo.byteLength==="number")return total+photo.byteLength;
+    return total+(typeof photo==="string"?photo.length:0);
+  },0);
+}
+function galleryRecord(sessionPhotos,orientation){
+  const bytes=sessionPhotos.map(dataUrlToBytes);
+  const base={id:Date.now(),createdAt:new Date().toISOString(),orientation};
+  if(bytes.every(Boolean))return {...base,schema:GALLERY_SCHEMA,photoType:"image/jpeg",photos:bytes};
+  /* A photo that will not decode to bytes is still worth keeping verbatim. */
+  return {...base,photos:[...sessionPhotos]};
+}
+function putSession(record){
+  return openGalleryDB().then(db=>new Promise((resolve,reject)=>{
+    let settled=false;
+    const finish=(fn,value)=>{if(settled)return;settled=true;try{db.close();}catch(e){}fn(value);};
+    try{
+      const tx=db.transaction("sessions","readwrite");
+      tx.oncomplete=()=>finish(resolve);
+      tx.onerror=()=>finish(reject,tx.error);
+      tx.onabort=()=>finish(reject,tx.error);
+      tx.objectStore("sessions").put(record);
+    }catch(error){finish(reject,error);}
+  }));
+}
+async function dropOldestSessions(count){
+  const all=await getGallerySessions();
+  if(all.length<=count)return false;
+  const doomed=all.slice(-count);
+  const db=await openGalleryDB();
+  const tx=db.transaction("sessions","readwrite"),store=tx.objectStore("sessions");
+  doomed.forEach(item=>store.delete(item.id));
+  await new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});
+  db.close();
+  return true;
+}
 async function saveSessionToGallery(sessionPhotos,orientation){
   if(!sessionPhotos||sessionPhotos.length!==3)return;
+  const record=galleryRecord(sessionPhotos,orientation);
   try{
-    const db=await openGalleryDB();
-    const tx=db.transaction("sessions","readwrite");
-    const store=tx.objectStore("sessions");
-    const item={id:Date.now(),createdAt:new Date().toISOString(),orientation,photos:[...sessionPhotos]};
-    store.put(item);
-    await new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});
-    db.close();
-    await trimGallery(20);
+    try{
+      await putSession(record);
+    }catch(error){
+      /* Out of space mid-event. Make room from the oldest end and try once
+         more before telling anyone the session is lost. */
+      if(!isQuotaError(error))throw error;
+      const freed=await dropOldestSessions(3);
+      if(!freed)throw error;
+      await putSession(record);
+    }
+    clearStorageNotice();
+    await trimGallery();
+    await warnIfStorageLow();
+  }catch(error){
+    /* Swallowing this loses a guest's photographs and nobody finds out until
+       the party is over. */
+    showStorageNotice(isQuotaError(error)
+      ?"This device is out of space, so the last session was not saved. Free up space, or clear older sessions in Settings."
+      :"The last session could not be saved to this device.");
+  }
+}
+async function storageBudget(){
+  try{
+    if(navigator.storage&&typeof navigator.storage.estimate==="function"){
+      const estimate=await navigator.storage.estimate();
+      if(estimate&&estimate.quota)return estimate.quota*GALLERY_STORAGE_FRACTION;
+    }
+  }catch(e){}
+  return 0;
+}
+async function warnIfStorageLow(){
+  try{
+    if(!navigator.storage||typeof navigator.storage.estimate!=="function")return;
+    const estimate=await navigator.storage.estimate();
+    if(!estimate||!estimate.quota)return;
+    if((estimate.usage||0)/estimate.quota>=STORAGE_WARN_RATIO){
+      showStorageNotice("This device is nearly out of space. Older sessions will be removed to keep the booth running.");
+    }
   }catch(e){}
 }
-async function trimGallery(maxItems){
+/* The cap is whatever the device can actually hold, not a number chosen in
+   advance. With no estimate available nothing is trimmed and the quota error
+   above is the backstop. */
+async function trimGallery(){
   try{
+    const budget=await storageBudget();
+    if(budget<=0)return;
+    const all=await getGallerySessions();
+    let used=0,keep=0;
+    for(const item of all){
+      used+=sessionBytes(item);
+      if(keep>=GALLERY_MIN_SESSIONS&&used>budget)break;
+      keep+=1;
+    }
+    if(keep>=all.length)return;
     const db=await openGalleryDB();
     const tx=db.transaction("sessions","readwrite"),store=tx.objectStore("sessions");
-    const all=await new Promise((res,rej)=>{const r=store.getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error);});
-    all.sort((a,b)=>b.id-a.id);
-    all.slice(maxItems).forEach(x=>store.delete(x.id));
+    all.slice(keep).forEach(item=>store.delete(item.id));
     await new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});
     db.close();
   }catch(e){}
@@ -332,9 +439,37 @@ async function clearGallerySessions(){
     db.close();
   }catch(e){}
 }
+function showStorageNotice(message){
+  const el=$("storageNotice");
+  if(!el)return;
+  el.textContent=message;
+  el.hidden=false;
+}
+function clearStorageNotice(){
+  const el=$("storageNotice");
+  if(el)el.hidden=true;
+}
+/* Schema 2 keeps bytes, but every consumer downstream — the thumbnails and
+   the review renderers a reopened session feeds — wants something assignable
+   to img.src. Object URLs are minted once per session and cached, so the
+   count stays bounded by the gallery itself and a reopened session can never
+   have its photographs revoked out from under it. */
+const hydratedSessionPhotos=Object.create(null);
+function hydrateSession(session){
+  if(!session||!session.photos||!session.photos.length)return session;
+  if(typeof session.photos[0]==="string")return session;
+  let urls=hydratedSessionPhotos[session.id];
+  if(!urls){
+    try{
+      urls=session.photos.map(bytes=>URL.createObjectURL(new Blob([bytes],{type:session.photoType||"image/jpeg"})));
+    }catch(e){return session;}
+    hydratedSessionPhotos[session.id]=urls;
+  }
+  return {...session,photos:urls};
+}
 async function renderEventGallery(){
   const host=$("eventGallery");if(!host)return;
-  const sessions=await getGallerySessions();
+  const sessions=(await getGallerySessions()).map(hydrateSession);
   host.innerHTML="";
   if(!sessions.length){host.innerHTML='<div class="gallery-empty">No saved sessions yet.</div>';return;}
   sessions.forEach(session=>{

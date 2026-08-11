@@ -10,12 +10,12 @@ Update this file **in the same commit** as each packet. Keep it terse — reason
 ## Status
 
 - **Current phase:** P0 — Stop the site lying. Not started.
-- **Completed packets:** PB-08 (mobile nav containing block) · PB-06 (page weight 2,331,527 → 341,779 bytes)
-- **Next packet:** **PB-17 — make local photo storage survivable.** Promoted 2026-08-10 ahead of the P0/P1 sequence: the 20-session silent deletion and the swallowed quota failure are live defects in a shipped product, not future commercial architecture, and they depend on none of the gated decisions. PB-01 remains blocked on the contact address; PB-03 and PB-06…PB-10 are unblocked and can run in parallel sessions.
+- **Completed packets:** PB-08 (mobile nav) · PB-06 (page weight −85%) · PB-17 (storage: −25% per session, storage-derived cap, quota failures surfaced)
+- **Next packet:** **PB-10 — close the measured accessibility gaps.** Unblocked, needs nothing from Lizzie. Then PB-05 → PB-07 → PB-09 → PB-03. PB-01 remains blocked on the Business contact address (the 2026-08-11 direction believed it was unblocked, but the message ended mid-sentence and no address arrived).
 - **Programme started:** —
 - **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. 002 (2026-08-10) — lifecycle decisions locked, cancellation governance corrected. **003 (2026-08-11) — PROPOSED, NOT ACCEPTED**: reconciles the "we build your photobooth" direction. Proposes PB-22…PB-28 and amends PB-14/18/19/20. Evidence: `docs/product/RECONCILIATION-003.md`. **Three decisions block acceptance — see spec A3.5.**
 - **Reconciliation 003 verdict:** the programme survives. The immediate run `PB-17 → PB-10 → PB-05 → PB-07 → PB-09 → PB-03` is unchanged and remains executable now; PB-06 and PB-08 stay closed with no regression found.
-- **Live defect found during Amendment 001, not in the audit:** `trimGallery(20)` ([app.js:301](app.js:301)) silently deletes a party's earliest sessions past 20, and `saveSessionToGallery` swallows write failures with `catch(e){}`. Owned by PB-17.
+- **Live defect found during Amendment 001, not in the audit:** `trimGallery(20)` silently deleted a party's earliest sessions past 20, and `saveSessionToGallery` swallowed write failures with `catch(e){}`. **Fixed by PB-17.**
 
 ## Packet checklist (execute strictly in this order)
 
@@ -39,7 +39,7 @@ Three chains are load-bearing:
 | 8 | PB-08 Fix the mobile navigation containing block | P3 | ☑ | `2c47613` |
 | 9 | PB-09 Differentiate camera failures, remove the alert | P3 | ☐ | — |
 | 10 | PB-10 Close the measured accessibility gaps | P3 | ☐ | — |
-| 11 | **PB-17 Make local photo storage survivable** | P3 | ☐ | — |
+| 11 | **PB-17 Make local photo storage survivable** | P3 | ☑ | *(pending)* |
 | 12 | **PB-18 Persistent Free booth with event-type identity** | P3 | ☐ | — |
 | 13 | **PB-19 "Your Photobooth" return access + three entry routes** | P3 | ☐ | — |
 | 14 | PB-13 Make the app subpath-ready | P5 | ☐ | — |

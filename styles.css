@@ -378,3 +378,9 @@ canvas.mag-style-preview{display:block;width:100%;height:auto;background:#e9e2d8
 }
 
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.motion-note span{animation:none}.confetti{animation:none}.round-start,#mainCanvas{transition:none}}
+
+/* Storage trouble is the one message that must reach the person running the
+   booth even while a guest is on screen, because the alternative is finding
+   out after the party that photographs stopped saving. */
+.storage-notice{position:fixed;left:12px;right:12px;bottom:14px;z-index:90;margin:0 auto;max-width:560px;padding:11px 18px;border:1px solid var(--ink);border-radius:14px;background:var(--paper);color:var(--ink);font-size:12px;font-weight:700;line-height:1.35;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.16)}
+.storage-notice[hidden]{display:none}

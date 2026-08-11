@@ -10,8 +10,8 @@ Update this file **in the same commit** as each packet. Keep it terse — reason
 ## Status
 
 - **Current phase:** P2 — Be findable and fast. Six packets landed and pushed; PB-07 next.
-- **Completed packets:** PB-08 (mobile nav) · PB-06 (page weight −85%) · PB-17 (storage) · PB-01 (Business contact + enquiry email) · PB-10 (accessibility) · PB-05 (social metadata + origin constant) · PB-07 (robots, sitemap, branded 404)
-- **Next packet:** **PB-09 — differentiate camera failures, remove the native alert.** Then PB-03. Note PB-09's sign-off has an owed manual check (in-app browser behaviour on real handsets).
+- **Completed packets:** PB-08 (mobile nav) · PB-06 (page weight −85%) · PB-17 (storage) · PB-01 (Business contact + enquiry email) · PB-10 (accessibility) · PB-05 (social metadata + origin constant) · PB-07 (robots, sitemap, branded 404) · PB-09 (camera failure states)
+- **Next packet:** **PB-03 — never silently discard a guest's configuration.** Last packet of the approved run.
 - **Programme started:** —
 - **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. 002 (2026-08-10) — lifecycle decisions locked, cancellation governance corrected. 003 (2026-08-11) — reconciles the "we build your photobooth" direction; adds PB-22…PB-28, amends PB-14/18/19/20. Evidence: `docs/product/RECONCILIATION-003.md`. **004 (2026-08-11) — ACCEPTS 003 and resolves all three blocking decisions** (seven event types; lifecycle × entitlement orthogonal; Setup Pass adopted and distinct from entitlement restore), and adds the three-valued event-timing model. **Both are ACCEPTED and BINDING — PB-22…PB-28 are executable.**
 - **Reconciliation 003 verdict:** the programme survives. The immediate run `PB-17 → PB-10 → PB-05 → PB-07 → PB-09 → PB-03` is unchanged and remains executable now; PB-06 and PB-08 stay closed with no regression found.
@@ -37,7 +37,7 @@ Three chains are load-bearing:
 | 6 | PB-06 Cut the demo contact sheet to under 200 KB | P2 | ☑ | `e690d01` |
 | 7 | PB-07 robots.txt, sitemap.xml, branded 404 | P2 | ☑ | `31d15f9` |
 | 8 | PB-08 Fix the mobile navigation containing block | P3 | ☑ | `2c47613` |
-| 9 | PB-09 Differentiate camera failures, remove the alert | P3 | ☐ | — |
+| 9 | PB-09 Differentiate camera failures, remove the alert | P3 | ☑ | *(pending)* |
 | 10 | PB-10 Close the measured accessibility gaps | P3 | ☑ | `ab8ca06` |
 | 11 | **PB-17 Make local photo storage survivable** | P3 | ☑ | `69f7dbe` |
 | 12 | **PB-18 Persistent Free booth with event-type identity** | P3 | ☐ | — |
@@ -81,7 +81,7 @@ Record the real commit hash when a packet lands. Placeholders like "this commit"
 
 A packet that would "fix" one of these must not run until the behaviour is confirmed to exist — otherwise a working component gets rebuilt to cure a phantom.
 
-- [ ] **In-app browser camera behaviour (blocks PB-09 sign-off).** Open the live link from inside WhatsApp and Instagram on a real iPhone *and* a real Android handset. Record whether `getUserMedia` is permitted and what the guest actually sees. The audit browser could not reproduce in-app browser restrictions.
+- [ ] **In-app browser camera behaviour (PB-09 copy confirmation).** PB-09 has landed: the native alert is gone, failures branch on `err.name`, and in-app browsers get a detection-based hint. What is still owed is confirming the *wording matches reality* — open the live link inside WhatsApp and Instagram on a real iPhone **and** a real Android handset, and check whether `getUserMedia` is permitted and which branch fires. This no longer blocks the packet; it validates copy.
 - [ ] **Whole capture flow end to end.** Three-shot countdown, four Strip frames, five filters, four Cover styles, Living Polaroid H.264 and PNG fallback, iOS Share sheet. Never exercised in the audit — no camera access. Expected: all working, per the README.
 - [ ] **Hard navigation to the Business surface (blocks PB-13 sign-off).** One `navigate` to `/business` timed out during the audit while `curl` returned 200 and client-side routing worked. Recorded as instrument noise; confirm under the subpath before cutover.
 - [ ] **Booth keyboard and screen-reader path.** Not assessable without the camera.

@@ -56,6 +56,18 @@
 
 <p id="storageNotice" class="storage-notice" role="status" aria-live="polite" hidden></p>
 
+<div id="cameraError" class="camera-error" role="alertdialog" aria-labelledby="cameraErrorHeading" aria-describedby="cameraErrorBody" hidden>
+  <div class="camera-error-panel">
+    <h2 id="cameraErrorHeading"></h2>
+    <p id="cameraErrorBody"></p>
+    <p id="cameraErrorHint" class="camera-error-hint" hidden></p>
+    <div class="camera-error-actions">
+      <button id="cameraErrorRetry" class="product-cta" type="button">TRY AGAIN</button>
+      <button id="cameraErrorBack" class="product-link" type="button">Back</button>
+    </div>
+  </div>
+</div>
+
 <section id="landing" class="screen active landing-screen product-surface">
   <header class="site-nav" aria-label="Main navigation">
     <a class="wordmark" href="./" data-product-route="personal" aria-label="MyBishBash Photobooth home">

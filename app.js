@@ -1158,10 +1158,65 @@ async function beginSession(){
     if(sid!==captureSessionId||err.message==="cancelled")return;
     stopCamera();
     if(err.message!=="cancelled"){
-      alert("Please allow camera access in Safari and try again.");
-      showBoothReturnScreen();
+      showCameraError(err);
     }
   }
+}
+
+/* One alert() used to cover six different causes and told everyone to fix
+   Safari - including the in-app browsers a party link is actually opened in,
+   which are not Safari and often cannot grant the camera at all. Each cause
+   now says what happened and offers a way forward. */
+function inAppBrowser(){
+  const ua=String(navigator.userAgent||"");
+  return /FBAN|FBAV|FB_IAB|Instagram|Line\/|Twitter|WhatsApp|Snapchat|LinkedInApp|Pinterest|TikTok/i.test(ua);
+}
+function cameraFailure(err){
+  const name=err&&err.name?String(err.name):"";
+  const hint=inAppBrowser()
+    ?"You are in an app's built-in browser, which often blocks the camera. Open this link in your normal browser and it will work."
+    :"";
+  if(typeof window!=="undefined"&&window.isSecureContext===false){
+    return {heading:"The camera needs a secure connection",
+      body:"This page is not on a secure (https) connection, so the camera cannot start.",hint:""};
+  }
+  if(!navigator.mediaDevices||typeof navigator.mediaDevices.getUserMedia!=="function"){
+    return {heading:"This browser cannot open the camera",
+      body:"The camera is not available here.",
+      hint:hint||"Try opening this link in a different browser."};
+  }
+  if(name==="NotAllowedError"||name==="SecurityError"){
+    return {heading:"Camera access was blocked",
+      body:"Allow camera access for this site, then try again.",hint:hint};
+  }
+  if(name==="NotFoundError"||name==="OverconstrainedError"){
+    return {heading:"No camera found",
+      body:"This device does not seem to have a camera available.",hint:""};
+  }
+  if(name==="NotReadableError"||name==="AbortError"){
+    return {heading:"The camera is busy",
+      body:"Something else may be using it. Close any other app using the camera, then try again.",hint:hint};
+  }
+  return {heading:"The photobooth could not start",
+    body:"Something stopped the camera before the photos could be taken. Try again, and reload the page if it keeps happening.",
+    hint:hint};
+}
+function showCameraError(err){
+  const panel=$("cameraError");
+  const failure=cameraFailure(err);
+  if(!panel){showBoothReturnScreen();return;}
+  $("cameraErrorHeading").textContent=failure.heading;
+  $("cameraErrorBody").textContent=failure.body;
+  const hint=$("cameraErrorHint");
+  hint.textContent=failure.hint||"";
+  hint.hidden=!failure.hint;
+  panel.hidden=false;
+  const retry=$("cameraErrorRetry");
+  if(retry&&typeof retry.focus==="function")retry.focus();
+}
+function hideCameraError(){
+  const panel=$("cameraError");
+  if(panel)panel.hidden=true;
 }
 
 function launchConfetti(){
@@ -1888,6 +1943,10 @@ $("cancelCapture").onclick=cancelCapture;
 $("retakeBtn").onclick=beginSession;
 $("nextGuestBtn").onclick=beginSession;
 $("boothHomeBtn").onclick=showBoothReturnScreen;
+/* Retry re-enters capture in place: no page reload, so a guest who fixes a
+   permission prompt is still in the booth rather than back on the landing page. */
+$("cameraErrorRetry").onclick=()=>{hideCameraError();beginSession();};
+$("cameraErrorBack").onclick=()=>{hideCameraError();showBoothReturnScreen();};
 $("shareBtn").onclick=shareCurrent;
 $("saveBtn").onclick=saveCurrent;
 $("changeCoverPhoto").onclick=()=>{

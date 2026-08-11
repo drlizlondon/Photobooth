@@ -23,8 +23,8 @@
     "use strict";
 
     var own = Object.prototype.hasOwnProperty;
-    var EVENT_CONFIG_SCHEMA_VERSION = 1;
-    var SETUP_PASS_VERSION = 1;
+    var EVENT_CONFIG_SCHEMA_VERSION = 2;
+    var SETUP_PASS_VERSION = 2;
     var LIVE_DURATION_MS = 48 * 60 * 60 * 1000;
     var MAX_SETUP_PASS_TOKEN_CHARS = 24000;
 
@@ -70,6 +70,70 @@
       cooldownMs: 30000
     });
 
+    /* A curated palette is one decision with three stable roles. EventConfig
+       persists the selected id and a canonical copy of those flat role
+       values, which keeps the existing primitive-only Setup Pass boundary
+       intact. The id remains the authority: supplied role values are always
+       replaced from this registry, so an edited pass or stale saved event
+       cannot create an accidental low-contrast fifth palette. */
+    var PALETTES = freeze({
+      "lilac-pop": {
+        id: "lilac-pop",
+        name: "Lilac Pop",
+        primary: "#66519c",
+        secondary: "#eee6ff",
+        highlight: "#ffdce8",
+        primaryLabel: "Grape",
+        secondaryLabel: "Lilac",
+        highlightLabel: "Blush"
+      },
+      "pink-party": {
+        id: "pink-party",
+        name: "Pink Party",
+        primary: "#b52167",
+        secondary: "#ffdce8",
+        highlight: "#eee6ff",
+        primaryLabel: "Raspberry",
+        secondaryLabel: "Pink",
+        highlightLabel: "Lilac"
+      },
+      "blue-sky": {
+        id: "blue-sky",
+        name: "Blue Sky",
+        primary: "#245f9f",
+        secondary: "#dcecff",
+        highlight: "#fff0aa",
+        primaryLabel: "Blue",
+        secondaryLabel: "Sky",
+        highlightLabel: "Butter"
+      },
+      sunshine: {
+        id: "sunshine",
+        name: "Sunshine",
+        primary: "#9a5c00",
+        secondary: "#fff0aa",
+        highlight: "#ffdce8",
+        primaryLabel: "Honey",
+        secondaryLabel: "Butter",
+        highlightLabel: "Pink"
+      }
+    });
+
+    var PALETTE_IDS = freeze([
+      "lilac-pop",
+      "pink-party",
+      "blue-sky",
+      "sunshine"
+    ]);
+
+    var LEGACY_LOOK_PALETTES = freeze({
+      lilac: "lilac-pop",
+      "pink-purple": "lilac-pop",
+      pink: "pink-party",
+      sky: "blue-sky",
+      butter: "sunshine"
+    });
+
     /* These fields are additive to app.js' existing flat settings object.
        Passing the old DEFAULTS object to createEventConfig's `defaults`
        option keeps the complete old renderer/settings contract intact. */
@@ -82,7 +146,10 @@
       eventLine: "",
       date: "",
       datePrecision: DATE_PRECISIONS.UNKNOWN,
-      look: "pink-purple",
+      paletteId: "lilac-pop",
+      palettePrimary: PALETTES["lilac-pop"].primary,
+      paletteSecondary: PALETTES["lilac-pop"].secondary,
+      paletteHighlight: PALETTES["lilac-pop"].highlight,
       eventStatus: EVENT_STATUSES.DRAFT,
       activatedAt: "",
       endsAt: "",
@@ -203,9 +270,58 @@
       return wasSupplied ? "other" : "birthday";
     }
 
-    function normaliseLook(value) {
+    function normalisePaletteId(value) {
       var text = trimmed(value).toLowerCase();
-      return /^[a-z0-9][a-z0-9_-]{0,63}$/.test(text) ? text : "pink-purple";
+      return has(PALETTES, text) ? text : EVENT_FIELD_DEFAULTS.paletteId;
+    }
+
+    function legacyPaletteId(value) {
+      var text = trimmed(value).toLowerCase();
+      return LEGACY_LOOK_PALETTES[text] || EVENT_FIELD_DEFAULTS.paletteId;
+    }
+
+    function resolvePalette(value) {
+      var id = isPlainObject(value) ? value.paletteId : value;
+      return PALETTES[normalisePaletteId(id)];
+    }
+
+    function applyCanonicalPalette(config) {
+      var palette = resolvePalette(config);
+      config.paletteId = palette.id;
+      config.palettePrimary = palette.primary;
+      config.paletteSecondary = palette.secondary;
+      config.paletteHighlight = palette.highlight;
+      /* Version 1 stored two disconnected colour decisions. They are input
+         to migration only and never survive in a version 2 EventConfig. */
+      delete config.look;
+      delete config.accent;
+      return config;
+    }
+
+    function colourLuminance(value) {
+      var match = /^#([0-9a-f]{6})$/i.exec(String(value || ""));
+      var channels;
+      if (!match) {
+        throw new TypeError("A six-digit hexadecimal colour is required.");
+      }
+      channels = [0, 2, 4].map(function (index) {
+        return parseInt(match[1].slice(index, index + 2), 16) / 255;
+      }).map(function (channel) {
+        return channel <= 0.03928 ? channel / 12.92 :
+          Math.pow((channel + 0.055) / 1.055, 2.4);
+      });
+      return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    }
+
+    function contrastRatio(first, second) {
+      var a = colourLuminance(first);
+      var b = colourLuminance(second);
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    }
+
+    function safeForeground(background) {
+      return contrastRatio(background, "#111111") >=
+        contrastRatio(background, "#ffffff") ? "#111111" : "#ffffff";
     }
 
     function inferLegacyDatePrecision(value) {
@@ -346,7 +462,7 @@
         config.date,
         has(input, "datePrecision") || has(opts.defaults, "datePrecision")
       );
-      config.look = normaliseLook(config.look);
+      applyCanonicalPalette(config);
 
       suppliedId = validIdentifier(config.eventId);
       if (!suppliedId) {
@@ -364,7 +480,26 @@
     }
 
     function migrateEventConfig(source, options) {
-      return createEventConfig(source, options);
+      var input = source || {};
+      var suppliedSchema;
+      var migrated;
+      if (!isPlainObject(input)) {
+        throw new TypeError("EventConfig source must be a plain object.");
+      }
+      suppliedSchema = has(input, "schemaVersion") ? Number(input.schemaVersion) : null;
+      if (suppliedSchema !== null && suppliedSchema !== 1 &&
+          suppliedSchema !== EVENT_CONFIG_SCHEMA_VERSION) {
+        throw new RangeError("Unsupported EventConfig schemaVersion: " + String(input.schemaVersion));
+      }
+      migrated = cloneObject(input);
+      if (!has(migrated, "paletteId") &&
+          (suppliedSchema === 1 || suppliedSchema === null)) {
+        migrated.paletteId = legacyPaletteId(migrated.look);
+      }
+      migrated.schemaVersion = EVENT_CONFIG_SCHEMA_VERSION;
+      delete migrated.look;
+      delete migrated.accent;
+      return createEventConfig(migrated, options);
     }
 
     function epochMilliseconds(value) {
@@ -774,6 +909,7 @@
       copyPrimitiveFields(baseline, EVENT_FIELD_DEFAULTS);
       copyPrimitiveFields(baseline, defaults || {});
       baseline.schemaVersion = EVENT_CONFIG_SCHEMA_VERSION;
+      applyCanonicalPalette(baseline);
       baseline.eventId = "";
       baseline.eventStatus = EVENT_STATUSES.DRAFT;
       baseline.activatedAt = "";
@@ -783,7 +919,7 @@
 
     function createSparseSetupConfig(config, options) {
       var opts = options || {};
-      var current = createEventConfig(config, opts);
+      var current = migrateEventConfig(config, opts);
       var baseline = setupBaseline(opts.defaults);
       var safe = safeSetupFields(current);
       var sparse = {};
@@ -922,13 +1058,22 @@
       } catch (error) {
         throw new Error("Setup Pass payload is not valid JSON: " + error.message);
       }
-      if (!isPlainObject(payload) || payload.v !== SETUP_PASS_VERSION) {
+      if (!isPlainObject(payload) || (payload.v !== 1 && payload.v !== SETUP_PASS_VERSION)) {
         throw new RangeError(
           "Unsupported Setup Pass version: " + String(payload && payload.v)
         );
       }
       safe = safeSetupFields(payload.c);
-      config = createEventConfig(safe, options);
+      if (payload.v === 1) {
+        /* Version 1 carried the former look/accent fields and omitted the
+           EventConfig schema from its sparse payload. Route it through the
+           same migration used for a saved version 1 event. */
+        safe.schemaVersion = 1;
+        config = migrateEventConfig(safe, options);
+      } else {
+        safe.schemaVersion = EVENT_CONFIG_SCHEMA_VERSION;
+        config = createEventConfig(safe, options);
+      }
       /* A Setup Pass moves configuration only. Importing one never starts an
          event, restores an entitlement, or carries a previous live clock. */
       config.eventStatus = EVENT_STATUSES.DRAFT;
@@ -981,7 +1126,7 @@
     }
 
     return freeze({
-      VERSION: "1.0.0",
+      VERSION: "2.0.0",
       EVENT_CONFIG_SCHEMA_VERSION: EVENT_CONFIG_SCHEMA_VERSION,
       SETUP_PASS_VERSION: SETUP_PASS_VERSION,
       LIVE_DURATION_MS: LIVE_DURATION_MS,
@@ -992,7 +1137,12 @@
       GUEST_PIN_AUTHORITIES: GUEST_PIN_AUTHORITIES,
       GUEST_PIN_ALGORITHM: GUEST_PIN_ALGORITHM,
       GUEST_PIN_THROTTLE_POLICY: GUEST_PIN_THROTTLE_POLICY,
+      PALETTES: PALETTES,
+      PALETTE_IDS: PALETTE_IDS,
       EVENT_FIELD_DEFAULTS: EVENT_FIELD_DEFAULTS,
+      resolvePalette: resolvePalette,
+      contrastRatio: contrastRatio,
+      safeForeground: safeForeground,
       inferLegacyDatePrecision: inferLegacyDatePrecision,
       generateEventId: generateEventId,
       createEventConfig: createEventConfig,

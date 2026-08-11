@@ -120,12 +120,13 @@ test("separates public Home, Event Home, Next Guest and Retake semantics", funct
   assert.match(app, /const HISTORY_SURFACE=\{PRODUCT:"product",EVENT_HOME:"event-home",BOOTH:"booth"\}/);
   assert.match(app, /function setBoothReturnScreen\(target\)[\s\S]*?"Event Home":"Home"/);
   assert.match(app, /function teardownBoothSession\(\)[\s\S]*?captureSessionId\+\+[\s\S]*?clearTimeout\(idleTimer\)[\s\S]*?stillRenderToken\+\+[\s\S]*?stopCamera\(\)[\s\S]*?invalidatePolaroid\(\)/);
+  assert.match(app, /function teardownBoothSession\(\)[\s\S]*?hideCameraError\(\)[\s\S]*?stopCamera\(\)/);
   assert.match(cancel, /function cancelCapture\(\)\{\s*showBoothReturnScreen\(\);\s*\}/);
   assert.match(app, /function launchFreeBooth\(\)[\s\S]*?setBoothReturnScreen\("landing"\);enterBoothHistory\(\);beginSharedSession\(false\)/);
   assert.match(enterGuest, /setBoothReturnScreen\("welcome"\);\s*enterBoothHistory\(\);\s*beginSharedSession\(false\)/);
   assert.match(app, /\$\("startBtn"\)\.onclick=enterGuestBooth/);
-  assert.match(restart, /function beginSharedSession\(retake\)\{return beginSession\("shared",\{retake:!!retake\}\);\}/);
-  assert.match(restart, /function restartCurrentSession\(\)\{return sharedOutputSession\?beginSharedSession\(true\):beginSession\(currentExperience,\{retake:true\}\);\}/);
+  assert.match(restart, /function beginSharedSession\(retake,options\)\{return beginSession\("shared",\{retake:!!retake,purpose:options&&options\.purpose\}\);\}/);
+  assert.match(restart, /function restartCurrentSession\(\)\{[\s\S]*?const options=\{retake:true,purpose:activeCapturePurpose\};[\s\S]*?sharedOutputSession\?beginSharedSession\(true,options\):beginSession\(currentExperience,options\)/);
   assert.match(app, /\$\("nextGuestBtn"\)\.onclick=\(\)=>beginSharedSession\(false\)/);
   assert.match(app, /\$\("retakeBtn"\)\.onclick=restartCurrentSession/);
   assert.match(app, /window\.addEventListener\("popstate",handleHistoryChange\)/);
@@ -153,8 +154,9 @@ test("cancels stale capture work without stopping a newer camera stream", functi
   assert.match(camera, /if\(video&&video\.srcObject===target\)video\.srcObject=null/);
   assert.match(camera, /if\(stream===target\)stream=null/);
   assert.match(session, /await startCamera\(sid\)/);
+  assert.match(session, /activeCapturePurpose=purpose;[\s\S]*?hideCameraError\(\)/);
   assert.match(session, /await delay\(420\);[\s\S]*?if\(sid!==captureSessionId\)return;\s*stopCamera\(\)/);
-  assert.match(session, /const galleryRecord=await saveSessionToGallery\(photos,sessionOrientation,shared\?"shared":currentExperience,replaceId\);\s*if\(sid!==captureSessionId\)return/);
+  assert.match(session, /if\(!isHostTest\)\{[\s\S]*?const galleryRecord=await saveSessionToGallery\(photos,sessionOrientation,shared\?"shared":currentExperience,replaceId\);\s*if\(sid!==captureSessionId\)return/);
   assert.match(session, /if\(galleryRecord\)activeGalleryRecordId=galleryRecord\.id/);
   assert.match(session, /const galleryCount=await countGallerySessions\(\);\s*if\(sid!==captureSessionId\)return/);
   assert.match(session, /if\(currentExperience==="polaroid"\)await enterPolaroid\(\);else await renderWithFade\(\);\s*if\(sid!==captureSessionId\)return/);
@@ -176,10 +178,10 @@ test("persists one shared source record per guest and reopens all three outputs"
   assert.match(save, /return record/);
 
   assert.match(session, /const retaking=!!\(options&&options\.retake\)/);
-  assert.match(session, /const replaceId=shared&&retaking\?activeGalleryRecordId:null/);
+  assert.match(session, /const replaceId=shared&&retaking&&!isHostTest\?activeGalleryRecordId:null/);
   assert.match(session, /const replacingRecord=replaceId!==null&&replaceId!==undefined&&Number\.isFinite\(Number\(replaceId\)\)/);
   assert.match(session, /if\(!replacingRecord\)activeGalleryRecordId=null/);
-  assert.match(session, /if\(!replacingRecord\)\{[\s\S]*?sessionEdition=nextEditionNumber\(galleryCount\)/);
+  assert.match(session, /if\(!isHostTest\)\{[\s\S]*?if\(!replacingRecord\)\{[\s\S]*?sessionEdition=nextEditionNumber\(galleryCount\)/);
 
   assert.match(gallery, /const hasThreeSources=session\.photos\.length===3/);
   assert.match(gallery, /sharedOutputSession=hasThreeSources&&\["shared","legacy","strip"\]\.includes\(recordedExperience\)/);
@@ -217,9 +219,192 @@ test("matches the Strip framing guide to the contained camera pixels", function 
 
 test("marks host draft previews through the canonical output surfaces", function () {
   var admin = app.slice(app.indexOf("function renderAdminPreview"), app.indexOf("function scheduleAdminPreview"));
-  assert.match(admin, /const adminDraft=String\(s\.eventStatus\|\|"DRAFT"\)==="DRAFT"/);
+  var polaroid = admin.slice(admin.indexOf('if(adminPreviewType==="polaroid")'), admin.indexOf("const size=Covers.coverSize"));
+  var watermark = app.slice(app.indexOf("function drawDraftPreview"), app.indexOf("/* ---------- living polaroid"));
+  assert.match(admin, /adminDraft=String\(s\.eventStatus\|\|"DRAFT"\)==="DRAFT"/);
   assert.match(admin, /draft:adminDraft/);
-  assert.equal((admin.match(/drawDraftPreview\(ctx,c\.width,c\.height,adminDraft\)/g) || []).length, 2);
+  assert.match(polaroid, /draftPreview:adminDraft/);
+  assert.match(polaroid, /if\(prefersReducedMotion\(\)&&!adminPreviewMotionRequested\)\{[\s\S]*?job\.drawStill\(ctx,0\)/);
+  assert.match(polaroid, /function drawPreview\(\)[\s\S]*?job\.drawAt/);
+  assert.doesNotMatch(polaroid, /drawDraftPreview/, "Polaroid owns one canonical frame watermark");
+  assert.match(admin, /Covers\.render\(ctx,\{[\s\S]*?\}\);\s*drawDraftPreview\(ctx,c\.width,c\.height,adminDraft\)/);
+  assert.match(watermark, /rotate\(-Math\.PI\/6\)/);
+  assert.match(watermark, /globalAlpha=\.18/);
+  assert.match(watermark, /fillText\("SAMPLE",0,0\)/);
+  assert.doesNotMatch(watermark, /fillRect|strokeRect|DRAFT PREVIEW/, "Magazine watermark remains text-only");
+});
+
+test("keeps uploaded design photos separate and feeds all real output renderers", function () {
+  var defaults = app.slice(0, app.indexOf("const FRAMES"));
+  var globals = app.slice(app.indexOf("let settings;"), app.indexOf("const $="));
+  var usePhotos = app.slice(app.indexOf("async function useAdminPreviewPhotos"), app.indexOf("function clearAdminPreviewPhotos"));
+  var readPhoto = app.slice(app.indexOf("async function readPreviewPhoto"), app.indexOf("function renderPreviewPhotoThumbs"));
+  var previewImages = app.slice(app.indexOf("async function adminPreviewImages"), app.indexOf("async function renderAdminPreview"));
+  var admin = app.slice(app.indexOf("async function renderAdminPreview"), app.indexOf("function scheduleAdminPreview"));
+  var record = app.slice(app.indexOf("function galleryRecord"), app.indexOf("function putSession"));
+  var persist = app.slice(app.indexOf("function persistSettings"), app.indexOf("function nextEditionNumber"));
+  var draft = app.slice(app.indexOf("function draftSettings"), app.indexOf("function releaseMediaStream"));
+
+  assert.match(globals, /let photos=\[\]/);
+  assert.match(globals, /let adminPreviewPhotos=\[\]/);
+  assert.doesNotMatch(defaults, /adminPreviewPhotos|adminPreviewPhotoIndex/);
+  assert.doesNotMatch(record, /adminPreviewPhotos/);
+  assert.doesNotMatch(persist, /adminPreviewPhotos/);
+  assert.doesNotMatch(draft, /adminPreviewPhotos|adminPreviewPhotoIndex/);
+  assert.match(html, /id="adminPreviewPhotos"[^>]*type="file"[^>]*accept="image\/\*"[^>]*multiple/);
+  assert.match(usePhotos, /Array\.from\(input&&input\.files\|\|\[\]\)\.slice\(0,3\)/);
+  assert.match(readPhoto, /URL\.createObjectURL\(file\)/);
+  assert.match(readPhoto, /maxEdge=2048,maxPixels=3000000/);
+  assert.match(readPhoto, /canvas\.width=Math\.max/);
+  assert.match(readPhoto, /URL\.revokeObjectURL\(objectUrl\)/);
+  assert.doesNotMatch(readPhoto, /FileReader|readAsDataURL/);
+  assert.match(usePhotos, /adminPreviewPhotos=selected/);
+  assert.match(usePhotos, /for\(const file of files\)selected\.push\(await readPreviewPhoto\(file\)\)/);
+  assert.doesNotMatch(usePhotos, /(?:^|[^\w])photos\s*=|saveSessionToGallery|persistSettings/);
+  assert.match(previewImages, /while\(images\.length<3\)images\.push/);
+  assert.match(previewImages, /return images\.slice\(0,3\)/);
+  assert.doesNotMatch(previewImages, /loadImage/);
+
+  assert.match(admin, /renderStrip\(ctx,c,images,s,adminOrientation,\{[\s\S]*?frameStyle:s\.stripFrame[\s\S]*?filterStyle:s\.stripFilter/);
+  assert.match(admin, /const job=Polaroid\.compose\(\{[\s\S]*?images,/);
+  assert.match(admin, /Covers\.render\(ctx,\{[\s\S]*?img:images\[Math\.min\(adminPreviewPhotoIndex,images\.length-1\)\]/);
+  assert.match(admin, /template:s\.magazineTemplate\|\|"keepsake"/);
+});
+
+test("reduced motion holds Polaroids still until the guest explicitly plays", function () {
+  var live = app.slice(app.indexOf("async function enterPolaroid"), app.indexOf("async function encodePolaroid"));
+  var status = app.slice(app.indexOf("function polaroidStatus"), app.indexOf("async function enterPolaroid"));
+  var admin = app.slice(app.indexOf("async function renderAdminPreview"), app.indexOf("function scheduleAdminPreview"));
+  var playStart = app.indexOf('$("polaroidPlayBtn").onclick');
+  var playHandler = app.slice(playStart, app.indexOf("\n};", playStart) + 3);
+
+  assert.match(live, /const reduced=prefersReducedMotion\(\)&&!motionPlaybackRequested/);
+  assert.match(live, /if\(reduced\)\{\s*polaroidJob\.drawStill\(ctx,0\);[\s\S]*?encodePolaroid\(token\);\s*return/);
+  assert.match(admin, /if\(prefersReducedMotion\(\)&&!adminPreviewMotionRequested\)\{\s*job\.drawStill\(ctx,0\);[\s\S]*?playMotion\.hidden=false[\s\S]*?return/);
+  assert.match(status, /const reducedReady=reduced&&\(polaroidState==="ready"\|\|polaroidState==="unsupported"\)/);
+  assert.match(status, /play\.hidden=!\(reducedReady&&sharedOutputSession\)/);
+  assert.match(html, /id="polaroidPlayBtn"[^>]*hidden>PLAY MOTION<\/button>/);
+  assert.match(html, /id="adminPreviewPlayMotion"[^>]*hidden>PLAY MOTION<\/button>/);
+  assert.match(playHandler, /motionPlaybackRequested=true/);
+  assert.match(playHandler, /enterPolaroid\(\)/);
+});
+
+test("selected states, screen focus and host colours have explicit semantics", function () {
+  var sync = app.slice(app.indexOf("function syncReviewModeUI"), app.indexOf("function resetCreativeState"));
+  var controls = app.slice(app.indexOf("function buildReviewControls"), app.indexOf("let thumbToken"));
+  var focus = app.slice(app.indexOf("function focusScreenHeading"), app.indexOf("function delay"));
+  var setup = app.slice(app.indexOf("function setSetupStep"), app.indexOf("function openPersonalSettings"));
+  var contrast = app.slice(app.indexOf("function colourLuminance"), app.indexOf("function eventMeta"));
+  var paletteSync = app.slice(app.indexOf("function syncPaletteUI"), app.indexOf("function eventMeta"));
+
+  assert.match(html, /id="reviewModeNav"[^>]*role="tablist"/);
+  assert.match(sync, /setAttribute\("aria-selected",String\(selected\)\)/);
+  assert.match(sync, /setAttribute\("aria-pressed",String\(selected\)\)/);
+  assert.match(sync, /panel\.setAttribute\("aria-hidden",String\(!active\)\)/);
+  assert.match(controls, /aria-label","Choose photo "\+\(i\+1\)\+" of "\+photos\.length\+" for the Magazine cover"/);
+  assert.match(controls, /setAttribute\("aria-pressed",String\(coverIndex===i\)\)/);
+
+  assert.match(focus, /const selectors=\{welcome:"#welcomeTitle",camera:"#cameraExperienceLabel",review:"#resultsKicker",settings:"#settingsTitle"\}/);
+  assert.match(focus, /target\.focus\(\{preventScroll:id==="camera"\|\|id==="review"\}\)/);
+  assert.match(focus, /if\(!options\|\|options\.focus!==false\)focusScreenHeading\(id\)/);
+  assert.match(setup, /button\.setAttribute\("aria-selected",String\(active\)\)/);
+  assert.match(setup, /button\.setAttribute\("aria-current","step"\)/);
+  assert.match(setup, /heading\.focus\(\{preventScroll:false\}\)/);
+
+  assert.match(contrast, /function contrastRatio\(first,second\)/);
+  assert.match(contrast, /contrastRatio\(background,"#111111"\)>=contrastRatio\(background,"#ffffff"\)/);
+  assert.match(contrast, /EVENT\.safeForeground\(background\)/);
+  assert.match(contrast, /style\.setProperty\("--accent-ink",safeForeground\(palette\.primary\)\)/);
+  assert.match(contrast, /style\.setProperty\("--event-accent-ink",safeForeground\(palette\.primary\)\)/);
+  assert.match(paletteSync, /document\.querySelectorAll\('input\[name="eventPalette"\]'\)/);
+  assert.match(paletteSync, /input\.checked=input\.value===palette\.id/);
+  assert.match(paletteSync, /--palette-primary-ink",safeForeground\(option\.primary\)/);
+  assert.match(paletteSync, /--palette-secondary-ink",safeForeground\(option\.secondary\)/);
+  assert.match(paletteSync, /--palette-highlight-ink",safeForeground\(option\.highlight\)/);
+});
+
+test("propagates one curated palette through host state and every personalised surface", function () {
+  var defaults = app.slice(0, app.indexOf("const FRAMES"));
+  var eventPalette = app.slice(app.indexOf("function applyEventPalette"), app.indexOf("function syncPaletteUI"));
+  var draft = app.slice(app.indexOf("function draftSettings"), app.indexOf("function releaseMediaStream"));
+  var branding = app.slice(app.indexOf("function normaliseBranding"), app.indexOf("function setEntitlement"));
+  var polaroidOptions = app.slice(app.indexOf("function polaroidOptions"), app.indexOf("function invalidatePolaroid"));
+  var paletteHandler = app.slice(app.indexOf("document.querySelectorAll('input[name=\"eventPalette\"]')"), app.indexOf('$("resetSettings")'));
+  var panel = html.slice(html.indexOf('id="setupPanel1"'), html.indexOf('id="setupPanel2"'));
+  var paletteIds = Array.from(panel.matchAll(/name="eventPalette"[^>]*value="([^"]+)"/g), function (match) { return match[1]; });
+
+  assert.match(defaults, /schemaVersion:2/);
+  assert.match(defaults, /paletteId:"lilac-pop"/);
+  assert.match(defaults, /palettePrimary:"#66519c"/);
+  assert.match(defaults, /paletteSecondary:"#eee6ff"/);
+  assert.match(defaults, /paletteHighlight:"#ffdce8"/);
+  assert.doesNotMatch(defaults, /(?:^|\s)(?:look|accent):/m);
+
+  assert.deepEqual(paletteIds, ["lilac-pop", "pink-party", "blue-sky", "sunshine"]);
+  assert.match(panel, /fieldset[^>]+aria-labelledby="chooseLookTitle"[^>]+aria-describedby="eventPaletteHelp"/);
+  assert.equal((panel.match(/class="palette-card"/g) || []).length, 4);
+  assert.doesNotMatch(panel, /id="setLook"|id="setAccent"|data-accent/);
+
+  assert.match(eventPalette, /--event-surface",palette\.secondary/);
+  assert.match(eventPalette, /--event-accent",palette\.primary/);
+  assert.match(eventPalette, /--event-accent-ink",safeForeground\(palette\.primary\)/);
+  assert.match(eventPalette, /--event-shape",palette\.highlight/);
+  assert.match(eventPalette, /--event-ink",safeForeground\(palette\.secondary\)/);
+  assert.match(draft, /input\[name="eventPalette"\]:checked/);
+  assert.match(draft, /paletteId:palette\.id/);
+  assert.match(draft, /palettePrimary:palette\.primary/);
+  assert.match(draft, /paletteSecondary:palette\.secondary/);
+  assert.match(draft, /paletteHighlight:palette\.highlight/);
+  assert.match(branding, /primaryColor:x\.primaryColor\|\|palette\.primary/);
+  assert.match(branding, /secondaryColor:x\.secondaryColor\|\|palette\.highlight/);
+  assert.match(polaroidOptions, /backdrop:palette\.secondary/);
+  assert.ok((app.match(/accent:palette\.primary/g) || []).length >= 4);
+  assert.ok((app.match(/accentInk:safeForeground\(palette\.primary\)/g) || []).length >= 3);
+  assert.ok((app.match(/backdrop:palette\.secondary/g) || []).length >= 3);
+  assert.match(paletteHandler, /syncPaletteUI\(input\.value\)/);
+  assert.match(paletteHandler, /applyRootPalette\(input\.value\)/);
+  assert.match(paletteHandler, /renderAdminPreview\(\)/);
+  assert.doesNotMatch(app, /setLook|setAccent|data-accent|EVENT_LOOKS|settings\.accent|s\.accent/);
+});
+
+test("keeps Business output colours isolated while Personal previews stay curated", function () {
+  var resolver = app.slice(app.indexOf("function outputPalette"), app.indexOf("function applyRootPalette"));
+  var movingCapture = app.slice(app.indexOf("async function captureMovingPolaroid"), app.indexOf("async function beginSession"));
+  var thumbnails = app.slice(app.indexOf("async function renderStyleThumbs"), app.indexOf("function setMode"));
+  var magazine = app.slice(app.indexOf("function renderMagazine"), app.indexOf("function drawDraftPreview"));
+  var polaroidOptions = app.slice(app.indexOf("function polaroidOptions"), app.indexOf("function invalidatePolaroid"));
+  var stripRenderer = app.slice(app.indexOf("function renderStrip"), app.indexOf("window.MyBishBashRenderers"));
+  var admin = app.slice(app.indexOf("async function renderAdminPreview"), app.indexOf("function scheduleAdminPreview"));
+
+  assert.match(resolver, /if\(options&&options\.personal\)return palette/);
+  assert.match(resolver, /entitlement===ENTITLEMENTS\.BUSINESS/);
+  assert.match(resolver, /primary=businessBrand\.primaryColor\|\|palette\.primary/);
+  assert.match(resolver, /secondary=businessBrand\.secondaryColor\|\|palette\.secondary/);
+  assert.match(resolver, /return \{\.\.\.palette,primary,secondary,highlight:secondary\}/);
+  assert.match(movingCapture, /const palette=outputPalette\(settings\)/);
+  assert.match(thumbnails, /const palette=outputPalette\(settings\)/);
+  assert.match(magazine, /palette=outputPalette\(settings\)/);
+  assert.match(polaroidOptions, /const palette=outputPalette\(settings\)/);
+  assert.match(stripRenderer, /outputPalette\(s,\{personal:creative&&creative\.paletteMode==="personal"\}\)/);
+  assert.match(admin, /paletteMode:"personal"/);
+  assert.match(marketing, /paletteMode:"personal"/);
+  assert.match(styles, /\.confetti:nth-child\(3n\)\{background:var\(--palette-secondary,#eee6ff\)\}/);
+  assert.match(styles, /\.confetti:nth-child\(4n\)\{background:var\(--palette-highlight,#ffdce8\)\}/);
+});
+
+test("derives safe Magazine foregrounds without changing renderer geometry", function () {
+  var press = covers.slice(covers.indexOf("function tplPress"), covers.indexOf("const RENDERERS"));
+  var branding = covers.slice(covers.indexOf("function colourLuminance"), covers.indexOf("function render(ctx,opts)"));
+  var render = covers.slice(covers.indexOf("function render(ctx,opts)"), covers.indexOf("/* Stand-in"));
+
+  assert.match(press, /const \{ctx,W,H,u,M,land,copy,accent,accentInk\}=L/);
+  assert.match(press, /ctx\.fillStyle=accent;ctx\.fillRect\(chip\.x,chip\.y,chip\.w,chip\.h\);\s*ctx\.fillStyle=accentInk/);
+  assert.match(branding, /function contrastRatio\(first,second\)/);
+  assert.match(branding, /function safeForeground\(background\)/);
+  assert.match(branding, /const fg=safeForeground\(bg\)/);
+  assert.doesNotMatch(branding, /hexLuma|>\.62/);
+  assert.match(render, /accentInk:opts\.accentInk\|\|safeForeground\(accent\)/);
+  assert.match(render, /\(RENDERERS\[opts\.template\]\|\|tplKeepsake\)\(L\)/);
 });
 
 test("collapses transient booth history and replaces example Event Home state", function () {
@@ -257,12 +442,21 @@ test("migrates legacy local data without deleting its source identifiers", funct
 });
 
 test("persists migrated EventConfig identity and keeps Setup Passes sparse", function () {
-  var load = app.slice(app.indexOf("function loadSettings"), app.indexOf("const EVENT_LOOKS"));
+  var load = app.slice(app.indexOf("function loadSettings"), app.indexOf("function colourLuminance"));
   var setupPass = app.slice(app.indexOf("async function setupPassLink"), app.indexOf("async function copySetupPass"));
   assert.match(load, /const serialised=JSON\.stringify\(migrated\)/);
   assert.match(load, /localStorage\.setItem\(SETTINGS_KEY,serialised\)/);
   assert.match(load, /delete eventDefaults\.eventType/);
   assert.match(load, /delete eventDefaults\.datePrecision/);
+  assert.match(load, /delete eventDefaults\.schemaVersion/);
+  assert.ok(
+    app.indexOf("settings=loadSettings()") > app.indexOf("function migrateSettings"),
+    "legacy migration constants must exist before settings are loaded"
+  );
+  assert.match(load, /delete eventDefaults\.paletteId/);
+  assert.match(load, /delete eventDefaults\.palettePrimary/);
+  assert.match(load, /delete eventDefaults\.paletteSecondary/);
+  assert.match(load, /delete eventDefaults\.paletteHighlight/);
   assert.match(setupPass, /EVENT\.encodeSetupPass\(draft,\{defaults:DEFAULTS\}\)/);
 });
 
@@ -315,11 +509,11 @@ test("does not force-reload safe-worker booths or cache product API responses", 
   assert.doesNotMatch(legacySet, /rae-photo-booth-live-v(?:8|9|10|11)/);
   var assetList = serviceWorker.slice(serviceWorker.indexOf("const ASSETS"), serviceWorker.indexOf("const CACHEABLE_ASSET_URLS"));
   assert.doesNotMatch(assetList, /\/v1\//);
-  assert.match(serviceWorker, /const CACHE="mybishbash-photobooth-v4"/);
+  assert.match(serviceWorker, /const CACHE="mybishbash-photobooth-v8"/);
 });
 
 test("keeps internal plans, tests and credentials out of the static deployment", function () {
-  [".claude/", ".env*", "README.md", "WORK.md", "docs/", "tests/", "worker/"].forEach(function (entry) {
+  [".claude/", ".env*", "README.md", "WORK.md", "docs/", "tests/", "worker/", "package.json", "package-lock.json", "playwright.config.js"].forEach(function (entry) {
     assert.ok(vercelIgnore.split(/\r?\n/).includes(entry), entry + " must be excluded from the static artefact");
   });
 });

@@ -90,7 +90,7 @@ test("a shared session captures exactly three stills for every output", function
   var shared = functionSource("beginSharedSession");
   var session = functionSource("beginSession");
 
-  assert.match(shared, /return beginSession\("shared",\{retake:!!retake\}\)/);
+  assert.match(shared, /return beginSession\("shared",\{retake:!!retake,purpose:options&&options\.purpose\}\)/);
   assert.match(session, /const shared=experience==="shared"/);
   assert.match(session, /resetCreativeState\(shared\?"strip":\(experience\|\|currentExperience\)\)/);
   assert.match(session, /\$\("stripFramingGuide"\)\.hidden=!\(shared\|\|currentExperience==="strip"\)/);
@@ -132,21 +132,48 @@ test("Magazine asks for a favourite from all three captured photos", function ()
   assert.match(controls, /b\.onclick=\(\)=>\{[\s\S]*?coverIndex=i/);
   assert.match(controls, /\$\("coverPhotoChoices"\)\.appendChild\(b\)/);
   assert.match(thumbnails, /loadImage\(photos\[coverIndex\]\)/);
+  assert.match(thumbnails, /const palette=outputPalette\(settings\)/);
+  assert.match(thumbnails, /accent:palette\.primary,accentInk:safeForeground\(palette\.primary\)/);
   assert.match(ready, /if\(currentMode==="magazine"&&coverIndex===null\)return false/);
 });
 
 test("Moving Polaroid composes all three shared photos for preview, motion and still", function () {
   var enter = functionSource("enterPolaroid");
+  var preview = functionSource("startPolaroidPreviewLoop");
+  var handoff = functionSource("queuePolaroidVideoHandoff");
+  var encode = functionSource("encodePolaroid");
   var still = functionSource("polaroidPrintBlob");
+  var options = functionSource("polaroidOptions");
+  var admin = app.slice(app.indexOf("async function renderAdminPreview"), app.indexOf("function scheduleAdminPreview"));
 
   assert.match(enter, /const imgs=await Promise\.all\(photos\.map\(loadImage\)\)/);
-  assert.match(enter, /if\(sharedOutputSession&&polaroidVideoBlob&&polaroidVideoUrl\)/);
+  assert.match(enter, /encodedReady=!!\(sharedOutputSession&&polaroidVideoBlob&&polaroidVideoUrl\)/);
   assert.match(enter, /Polaroid\.compose\(Object\.assign\(\{base:POLAROID_VIDEO_BASE\},polaroidOptions\(imgs\)\)\)/);
-  assert.match(enter, /polaroidJob\.drawAt\(ctx,\(performance\.now\(\)-started\)\/1000\)/);
+  assert.match(enter, /startPolaroidPreviewLoop\(token,ctx\)/);
+  assert.match(enter, /if\(encodedReady\)queuePolaroidVideoHandoff\(token,polaroidJob\)/);
   assert.match(enter, /encodePolaroid\(token\)/);
+  assert.match(preview, /polaroidJob\.drawAt\(ctx,polaroidPreviewSeconds\(polaroidPreviewEpoch\)\)/);
+  assert.match(preview, /polaroidJob\.drawAt\(ctx,polaroidPreviewSeconds\(\)\)/);
+  assert.match(handoff, /Polaroid\.timeToSeam\(polaroidPreviewSeconds\(\),duration\)/);
+  assert.match(handoff, /const tolerance=2\/POLAROID_FPS/);
+  assert.match(handoff, /v\.autoplay=false/);
+  assert.match(handoff, /v\.currentTime=0/);
+  assert.match(handoff, /v\.onseeked=beginPlayback/);
+  assert.match(handoff, /v\.onplaying=complete/);
+  assert.match(handoff, /if\(state\.a!==0\|\|state\.b!==0\)/);
+  assert.match(handoff, /playback\.then\(complete\)\.catch/);
+  assert.match(handoff, /document\.visibilityState!=="visible"/);
+  assert.match(handoff, /document\.addEventListener\("visibilitychange",polaroidVisibilityHandler\)/);
+  assert.match(handoff, /stopPolaroidLoop\(\);\s*c\.hidden=true;v\.hidden=false/);
+  assert.match(encode, /queuePolaroidVideoHandoff\(token,job\)/);
+  assert.doesNotMatch(encode, /onloadeddata=swap|onplaying=swap/, "encoded output cannot replace the canvas at an arbitrary phase");
+  assert.match(admin, /if\(!adminPolaroidPreviewEpoch\)adminPolaroidPreviewEpoch=performance\.now\(\)/);
+  assert.match(admin, /job\.timeline\.previewStart\|\|0\)\+\(performance\.now\(\)-epoch\)\/1000/);
   assert.match(still, /const imgs=await Promise\.all\(photos\.map\(loadImage\)\)/);
   assert.match(still, /Polaroid\.compose\(Object\.assign\(\{base:POLAROID_PRINT_BASE\},polaroidOptions\(imgs\)\)\)/);
   assert.match(still, /job\.drawStill\(ctx,0\)/);
+  assert.match(options, /const palette=outputPalette\(settings\)/);
+  assert.match(options, /backdrop:palette\.secondary/);
 });
 
 test("Next Guest starts fresh while Retake replaces the current shared session", function () {
@@ -155,13 +182,81 @@ test("Next Guest starts fresh while Retake replaces the current shared session",
 
   assert.equal(handlerLine("nextGuestBtn").trim(), '$("nextGuestBtn").onclick=()=>beginSharedSession(false);');
   assert.equal(handlerLine("retakeBtn").trim(), '$("retakeBtn").onclick=restartCurrentSession;');
-  assert.match(restart, /sharedOutputSession\?beginSharedSession\(true\):beginSession\(currentExperience,\{retake:true\}\)/);
+  assert.match(restart, /const options=\{retake:true,purpose:activeCapturePurpose\}/);
+  assert.match(restart, /sharedOutputSession\?beginSharedSession\(true,options\):beginSession\(currentExperience,options\)/);
   assert.match(session, /const retaking=!!\(options&&options\.retake\)/);
-  assert.match(session, /const replaceId=shared&&retaking\?activeGalleryRecordId:null/);
+  assert.match(session, /const replaceId=shared&&retaking&&!isHostTest\?activeGalleryRecordId:null/);
   assert.match(session, /if\(!replacingRecord\)activeGalleryRecordId=null/);
   assert.match(session, /photos=\[\]/);
-  assert.match(session, /saveSessionToGallery\(photos,sessionOrientation,shared\?"shared":currentExperience,replaceId\)/);
-  assert.match(session, /if\(!replacingRecord\)\{[\s\S]*?sessionEdition=nextEditionNumber\(galleryCount\)/);
+  assert.match(session, /if\(!isHostTest\)\{[\s\S]*?saveSessionToGallery\(photos,sessionOrientation,shared\?"shared":currentExperience,replaceId\)/);
+  assert.match(session, /if\(!isHostTest\)\{[\s\S]*?if\(!replacingRecord\)\{[\s\S]*?sessionEdition=nextEditionNumber\(galleryCount\)/);
+});
+
+test("capture purpose is memory-only and Retake preserves host-test isolation", function () {
+  var defaults = app.slice(0, app.indexOf("const FRAMES"));
+  var globals = app.slice(app.indexOf("let settings;"), app.indexOf("const $="));
+  var persist = functionSource("persistSettings");
+  var restart = functionSource("restartCurrentSession");
+  var teardown = functionSource("teardownBoothSession");
+
+  assert.match(globals, /let activeCapturePurpose="guest"/);
+  assert.doesNotMatch(defaults, /activeCapturePurpose|hostTestContext|adminPreviewPhotos/);
+  assert.match(persist, /JSON\.stringify\(settings\)/);
+  assert.doesNotMatch(persist, /activeCapturePurpose|hostTestContext/);
+  assert.doesNotMatch(app, /localStorage\.(?:setItem|getItem)\([^\n;]*activeCapturePurpose/);
+  assert.match(restart, /purpose:activeCapturePurpose/);
+  assert.match(teardown, /activeCapturePurpose="guest"/);
+});
+
+test("only real guest captures mutate gallery and edition state", function () {
+  var session = functionSource("beginSession");
+  var guestStart = session.indexOf("if(!isHostTest){");
+  var hostStart = session.indexOf("}else{", guestStart);
+  var persistenceEnd = session.indexOf('if(currentExperience==="magazine")', hostStart);
+  var guestPersistence = session.slice(guestStart, hostStart);
+  var hostPersistence = session.slice(hostStart, persistenceEnd);
+
+  assert.ok(guestStart >= 0 && hostStart > guestStart && persistenceEnd > hostStart);
+  assert.match(session, /const purpose=options&&options\.purpose==="host-test"\?"host-test":"guest"/);
+  assert.match(session, /const replaceId=shared&&retaking&&!isHostTest\?activeGalleryRecordId:null/);
+  assert.match(guestPersistence, /saveSessionToGallery\(photos,sessionOrientation,shared\?"shared":currentExperience,replaceId\)/);
+  assert.match(guestPersistence, /if\(galleryRecord\)activeGalleryRecordId=galleryRecord\.id/);
+  assert.match(guestPersistence, /if\(!replacingRecord\)\{[\s\S]*?countGallerySessions\(\)[\s\S]*?nextEditionNumber\(galleryCount\)/);
+  assert.doesNotMatch(hostPersistence, /saveSessionToGallery|countGallerySessions|nextEditionNumber/);
+  assert.match(hostPersistence, /activeGalleryRecordId=null/);
+});
+
+test("host camera test reuses shared capture and exits to the same host surface", function () {
+  var start = functionSource("startHostCameraTest");
+  var exit = functionSource("exitHostTestPreview");
+  var preview = functionSource("previewEventAsGuest");
+  var session = functionSource("beginSession");
+
+  assert.match(start, /draft=await configuredDraftFromForm\(\)/);
+  assert.match(start, /const guestPinDraft=target==="settings"&&\$\("setGuestPin"\)\?\$\("setGuestPin"\)\.value:""/);
+  assert.match(start, /draftSettings:draft,\s*guestPinDraft/);
+  assert.match(start, /enterHostTestHistory\(hostTestContext\)/);
+  assert.match(start, /activeCapturePurpose="host-test"/);
+  assert.match(start, /beginSharedSession\(false,\{purpose:"host-test"\}\)/);
+  assert.doesNotMatch(start, /EVENT\.startEvent|persistSettings|saveSessionToGallery/);
+  assert.match(session, /if\(EVENT&&eventIsPersonalised\(\)&&!isHostTest\)/);
+  assert.match(session, /const total=shared\|\|currentExperience==="strip"\?3:1/);
+  assert.match(session, /buildReviewControls\(\)[\s\S]*?showScreen\("review"\)/);
+
+  assert.match(exit, /context\.returnScreen==="settings"/);
+  assert.match(exit, /showScreen\("settings"\)/);
+  assert.match(exit, /\$\("setGuestPin"\)\.value=context\.guestPinDraft\|\|""/);
+  assert.match(exit, /setSetupStep\(context\.setupStep,\{focus:false\}\)/);
+  assert.match(exit, /showEventHome\(boothExampleMode,true\)/);
+  assert.match(exit, /hostView:true/);
+  assert.doesNotMatch(exit, /persistSettings|EVENT\.startEvent/);
+  assert.match(preview, /startHostCameraTest\("welcome"\)/);
+  assert.doesNotMatch(preview, /hostView:false|updateWelcomeMode\(false\)/);
+  assert.match(html, /id="exitTestPreview"[^>]*>BACK TO EVENT SETUP<\/button>/);
+  assert.match(app, /function enterHostTestHistory\(context\)[\s\S]*?hostTest:true/);
+  assert.match(app, /function requestHostTestExit\(\)[\s\S]*?history\.back\(\)/);
+  assert.match(app, /\$\("exitTestPreview"\)\.onclick=requestHostTestExit/);
+  assert.match(app, /\$\("closeSettings"\)\.onclick=\(\)=>\{fillSettingsUI\(\);showScreen\(settingsReturnScreen\|\|"landing"\);\}/);
 });
 
 test("Next Guest clears Business delivery details while Retake preserves them", function () {
@@ -201,9 +296,9 @@ test("Review mode UI stays in sync and exposes the exact Polaroid still action",
   var handler = app.slice(handlerStart, handlerEnd + 3);
 
   assert.match(sync, /document\.querySelectorAll\("\.mode-tab"\)/);
-  ["strip", "magazine", "polaroid"].forEach(function (mode) {
-    assert.match(sync, new RegExp('\\$\\("' + mode + 'Controls"\\)\\.classList\\.toggle\\("active",currentMode==="' + mode + '"\\)'));
-  });
+  assert.match(sync, /\[\["stripControls","strip"\],\["magazineControls","magazine"\],\["polaroidControls","polaroid"\]\]/);
+  assert.match(sync, /panel\.classList\.toggle\("active",active\)/);
+  assert.match(sync, /panel\.setAttribute\("aria-hidden",String\(!active\)\)/);
   assert.match(sync, /const awaitingMagazine=currentMode==="magazine"&&coverIndex===null/);
   assert.match(sync, /\$\("stillPhotoBtn"\)\.hidden=currentMode!=="polaroid"/);
   assert.match(html, /id="stillPhotoBtn"[^>]*hidden>Still photo<\/button>/);

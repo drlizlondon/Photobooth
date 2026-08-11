@@ -1356,7 +1356,7 @@ function tplKeepsake(L){
 }
 
 function tplPress(L){
-  const {ctx,W,H,u,M,land,copy,accent}=L;
+  const {ctx,W,H,u,M,land,copy,accent,accentInk}=L;
   const ink="#ffffff",card="#141210";
   ctx.fillStyle=card;ctx.fillRect(0,0,W,H);
 
@@ -1381,7 +1381,7 @@ function tplPress(L){
   /* Accent chip carries the issue line; masthead runs the length of the bar. */
   const chip=land?{x:W-W*0.22,y:0,w:W*0.22,h:barH}:{x:0,y:H*0.055,w:barW,h:H*0.17};
   ctx.fillStyle=accent;ctx.fillRect(chip.x,chip.y,chip.w,chip.h);
-  ctx.fillStyle="#171412";
+  ctx.fillStyle=accentInk;
   const chipText=[copy.skyline1,copy.skyline2].filter(Boolean).join(" · ").toUpperCase();
   setFont(ctx,800,14*u,FONT.sans);
   if(land)drawTracked(ctx,chipText,chip.x+chip.w/2,chip.y+chip.h/2+5*u,14*u*0.2,"center");
@@ -1439,11 +1439,20 @@ function brandingLabel(branding){
   if(!branding)return "";
   return String(branding.text||branding.myBishBashText||branding.brandName||"").trim();
 }
-function hexLuma(value){
+function colourLuminance(value){
   const m=String(value||"").match(/^#([0-9a-f]{6})$/i);
-  if(!m)return 0;
-  const n=parseInt(m[1],16),r=n>>16&255,g=n>>8&255,b=n&255;
-  return (r*299+g*587+b*114)/255000;
+  if(!m)return 1;
+  const n=parseInt(m[1],16);
+  const channels=[n>>16&255,n>>8&255,n&255].map(channel=>channel/255)
+    .map(channel=>channel<=0.03928?channel/12.92:Math.pow((channel+0.055)/1.055,2.4));
+  return 0.2126*channels[0]+0.7152*channels[1]+0.0722*channels[2];
+}
+function contrastRatio(first,second){
+  const a=colourLuminance(first),b=colourLuminance(second);
+  return (Math.max(a,b)+0.05)/(Math.min(a,b)+0.05);
+}
+function safeForeground(background){
+  return contrastRatio(background,"#111111")>=contrastRatio(background,"#ffffff")?"#111111":"#ffffff";
 }
 function drawOutputBranding(ctx,L,branding,template){
   if(!branding)return;
@@ -1454,7 +1463,7 @@ function drawOutputBranding(ctx,L,branding,template){
   const mode=String(branding.mode||"");
   const business=/business|white/i.test(mode);
   const bg=business?(branding.primaryColor||"#171412"):"#fffdf8";
-  const fg=business&&hexLuma(bg)>.62?"#111":"#fff";
+  const fg=safeForeground(bg);
   const textColour=business?fg:"#111";
   const accent=branding.secondaryColor||L.accent||"#d86c8f";
   const fontSize=Math.max(8,11*u),padX=Math.max(7,10*u);
@@ -1497,6 +1506,7 @@ function drawOutputBranding(ctx,L,branding,template){
 function render(ctx,opts){
   if(opts.fonts)Object.assign(FONT,opts.fonts);
   const W=opts.width,H=opts.height;
+  const accent=opts.accent||"#d86c8f";
   const L={
     ctx,W,H,
     u:Math.min(W,H)/1200,
@@ -1504,7 +1514,8 @@ function render(ctx,opts){
     land:W>H,
     img:opts.img||null,
     copy:opts.copy,
-    accent:opts.accent||"#d86c8f",
+    accent,
+    accentInk:opts.accentInk||safeForeground(accent),
     edition:opts.edition||{no:1}
   };
   ctx.save();

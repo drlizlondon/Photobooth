@@ -58,6 +58,15 @@ prefix registry. A session seeing a foreign prefix here should stop and ask.
 - Host setup creates a small personalised event entrance and configures event
   identity, Look, optional Guest PIN and output defaults. Advanced controls stay
   in host mode and do not appear in the normal live guest flow.
+- Customisation is preview-first: Photo Strip, Magazine and Moving Polaroid use
+  the production renderers in a large live workspace. A host can keep the built-in
+  sample or choose up to three device-local design photos; those photos remain
+  in memory only and never become Event Gallery sessions.
+- **Test real camera** runs the normal shared three-photo capture and Review loop
+  in an explicit host-test context. Test captures never write to IndexedDB, advance
+  the Magazine edition sequence, change entitlement or activate the event. Retake
+  stays in that context, and Back to Event Setup restores the same host screen and
+  in-progress form. Only **Start Event** begins the 48-hour period.
 - The homepage product examples are produced by the real Strip, Magazine and
   Polaroid renderers. `assets/demo-photos.jpg` supplies only three ordinary
   input photographs; it is not a set of pre-baked product outputs.
@@ -96,6 +105,13 @@ Only an explicit **Start Event** action begins its 48-hour LIVE period; purchase
 the planned date and Setup Pass import do not. Reaching ENDED stops new
 personalised capture but never removes already-created gallery records. One Party
 is scoped to that event lifecycle, not to a photo or guest-session count.
+
+EventConfig schema 2 stores one curated `paletteId` plus the canonical flat
+`palettePrimary`, `paletteSecondary` and `paletteHighlight` roles defined in
+`event.js`. Version 1 `look`/`accent` settings migrate to the closest curated
+scheme and are then removed, so Event Home and every output resolve colour from
+one source. The role fields also leave a clean extension point for a later
+validated custom-palette product without exposing that option today.
 
 ## Local-first data and migration
 
@@ -468,6 +484,15 @@ The repository stays build-free. Run the static product contract suite with:
 
 ```sh
 node --test tests/*.test.js
+```
+
+The committed browser flow covers host customisation, own-photo preview, the
+fake-camera three-photo test loop, output switching, Retake, safe exit and separate
+event activation at phone portrait, iPad portrait and iPad landscape sizes:
+
+```sh
+npm install
+npm run test:e2e
 ```
 
 The Cloudflare boundary has its own TypeScript and policy tests:

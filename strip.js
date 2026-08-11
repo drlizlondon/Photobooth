@@ -2,8 +2,9 @@
 
    A fixed 2:6 print-style output. The same geometry is intended for the live
    preview, saved/shared PNG and a future 300dpi physical print: three equal
-   photographs, narrow separators and one controlled footer. Nothing is
-   placed over the photographs and frame treatments never change their size. */
+   photographs, narrow separators and one controlled footer. Finished guest
+   outputs keep the photographs clear, and frame treatments never change
+   their size; only an optional draft SAMPLE watermark sits above them. */
 (function(root,factory){
 "use strict";
 const api=factory();
@@ -19,9 +20,9 @@ const PHOTO_GAP=12;
 const PHOTO_HEIGHT=504;
 const FOOTER_GAP=12;
 const FOOTER_HEIGHT=216;
-const DRAFT_LABEL="DRAFT PREVIEW";
-const DRAFT_COLOUR="#7255c5";
-const DRAFT_INK="#ffffff";
+const DRAFT_LABEL="SAMPLE";
+const DRAFT_ANGLE=-Math.PI/6;
+const DRAFT_OPACITY=.18;
 
 const DEFAULT_FONTS=Object.freeze({
   serif:'Didot,"Bodoni 72","Playfair Display",Georgia,"Times New Roman",serif',
@@ -264,38 +265,39 @@ function drawFooter(ctx,options,style,geo){
   return {copy:copy,branding:brand};
 }
 
-/* Draft treatment is deliberately rendered after photographs, grading,
+/* The sample treatment is deliberately rendered after photographs, grading,
    event copy and branding. A custom drawPhoto/grade hook therefore cannot
-   accidentally cover it, and preview/export stay identical. The three
-   restrained stamps keep every photograph recognisably a preview while the
-   trim outline makes the state obvious at normal on-screen scale. */
+   accidentally cover it, and preview/export stay identical. One quiet,
+   diagonal watermark per photograph keeps the preview unmistakable without
+   adding a banner, border or block of colour to the finished design. */
 function drawDraftTreatment(ctx,geo){
-  const stampWidth=230,stampHeight=44,stampInset=14;
+  const stampWidth=300,stampHeight=84;
   const stamps=geo.slots.map(function(slot){
     return rect(
-      slot.x+slot.w-stampWidth-stampInset,
-      slot.y+slot.h-stampHeight-stampInset,
+      slot.x+(slot.w-stampWidth)/2,
+      slot.y+(slot.h-stampHeight)/2,
       stampWidth,
       stampHeight
     );
   });
   ctx.save();
-  ctx.fillStyle=DRAFT_COLOUR;
-  ctx.globalAlpha=.9;
-  stamps.forEach(function(stamp){ctx.fillRect(stamp.x,stamp.y,stamp.w,stamp.h);});
-  ctx.globalAlpha=1;
-  ctx.fillStyle=DRAFT_INK;
   ctx.textAlign="center";
-  ctx.textBaseline="alphabetic";
-  setFont(ctx,800,18,DEFAULT_FONTS.sans);
-  stamps.forEach(function(stamp){ctx.fillText(DRAFT_LABEL,stamp.x+stamp.w/2,stamp.y+29);});
-  if(typeof ctx.strokeRect==="function"){
-    ctx.strokeStyle=DRAFT_COLOUR;
-    ctx.lineWidth=6;
-    ctx.strokeRect(4,4,geo.width-8,geo.height-8);
-  }
+  ctx.textBaseline="middle";
+  setFont(ctx,900,72,DEFAULT_FONTS.sans);
+  stamps.forEach(function(stamp){
+    ctx.save();
+    ctx.translate(stamp.x+stamp.w/2,stamp.y+stamp.h/2);
+    ctx.rotate(DRAFT_ANGLE);
+    ctx.globalAlpha=DRAFT_OPACITY;
+    ctx.lineWidth=5;
+    ctx.strokeStyle="#ffffff";
+    if(typeof ctx.strokeText==="function")ctx.strokeText(DRAFT_LABEL,0,0);
+    ctx.fillStyle="#111111";
+    ctx.fillText(DRAFT_LABEL,0,0);
+    ctx.restore();
+  });
   ctx.restore();
-  return {enabled:true,label:DRAFT_LABEL,stamps:stamps,outline:rect(4,4,geo.width-8,geo.height-8)};
+  return {enabled:true,label:DRAFT_LABEL,stamps:stamps,outline:null,opacity:DRAFT_OPACITY,angle:DRAFT_ANGLE};
 }
 
 function drawPhoto(ctx,image,index,slot,options){

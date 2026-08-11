@@ -15,6 +15,7 @@ function rendererHarness() {
     this.canvas = canvas;
     this.draws = [];
     this.text = [];
+    this.rotations = [];
     this.stateDepth = 0;
     this.globalAlpha = 1;
   }
@@ -31,7 +32,7 @@ function rendererHarness() {
   Context.prototype.clip = function () {};
   Context.prototype.fill = function () {};
   Context.prototype.translate = function () {};
-  Context.prototype.rotate = function () {};
+  Context.prototype.rotate = function (value) { this.rotations.push(value); };
   Context.prototype.scale = function () {};
   Context.prototype.stroke = function () {};
   Context.prototype.strokeText = function () {};
@@ -91,6 +92,43 @@ function rendererHarness() {
   };
 }
 
+function close(actual, expected, message) {
+  assert.ok(Math.abs(actual - expected) < 1e-7, (message || "values differ") + ": " + actual + " vs " + expected);
+}
+
+test("gives every photo a one-second look with a clearly visible crossfade", function () {
+  var h = rendererHarness();
+  var timing = h.Polaroid.timing("crossfade");
+  var line = h.Polaroid.timeline({ count: 3, fade: timing.fade, hold: timing.hold });
+
+  assert.equal(timing.hold, 1);
+  assert.equal(timing.fade, .4);
+  assert.deepEqual(Array.from(line.segs, function (segment) { return segment.dur; }), [1, .4, 1, .4, 1, .4]);
+  close(line.duration, 4.2, "loop duration");
+  close(line.previewStart, 0, "fresh preview starts at the full Photo-1 hold");
+
+  assert.deepEqual({ ...line.at(.99) }, { a: 0, b: 0, mix: 0 });
+  var firstBlend = line.at(1.2);
+  assert.deepEqual({ a: firstBlend.a, b: firstBlend.b }, { a: 0, b: 1 });
+  close(firstBlend.mix, .5, "first crossfade midpoint");
+  assert.deepEqual({ ...line.at(1.41) }, { a: 1, b: 1, mix: 0 });
+  assert.deepEqual({ ...line.at(2.81) }, { a: 2, b: 2, mix: 0 });
+  var finalBlend = line.at(4);
+  assert.deepEqual({ a: finalBlend.a, b: finalBlend.b }, { a: 2, b: 0 });
+  close(finalBlend.mix, .5, "final crossfade midpoint");
+  assert.deepEqual({ ...line.at(4.2) }, { a: 0, b: 0, mix: 0 });
+
+  close(h.Polaroid.timeToSeam(1.7, line.duration), 2.5, "mid-loop handoff wait");
+  close(h.Polaroid.timeToSeam(4.19, line.duration), .01, "near-seam handoff wait");
+  close(h.Polaroid.timeToSeam(4.2, line.duration), 0, "at-seam handoff wait");
+
+  var job = h.Polaroid.compose({
+    base: 600,
+    images: [{ width: 900, height: 900 }, { width: 900, height: 900 }, { width: 900, height: 900 }]
+  });
+  assert.equal(job.frameCount(25), 105, "smoother motion keeps the existing encode cost");
+});
+
 test("live compositor preserves canonical Polaroid geometry and chrome", function () {
   var h = rendererHarness();
   var live = h.Polaroid.composeLive({
@@ -117,13 +155,38 @@ test("three-photo compositor builds and displays every captured plate", function
   var plates = h.coverCalls.map(function (call) { return call.ctx.canvas; });
 
   job.drawAt(output.context, 0.2);
-  job.drawAt(output.context, 0.8);
-  job.drawAt(output.context, 2.2);
+  job.drawAt(output.context, 1.6);
+  job.drawAt(output.context, 3.0);
 
   var usedPlateIndexes = output.context.draws
     .filter(function (source) { return plates.indexOf(source) !== -1; })
     .map(function (source) { return plates.indexOf(source); });
   assert.deepEqual(usedPlateIndexes, [0, 1, 2], "the timeline reaches every captured photograph");
+});
+
+test("three-photo compositor carries one subtle diagonal SAMPLE watermark through every frame", function () {
+  var h = rendererHarness();
+  var job = h.Polaroid.compose({
+    base: 600,
+    images: [{ width: 900, height: 900 }, { width: 900, height: 900 }, { width: 900, height: 900 }],
+    draftPreview: true
+  });
+  var output = new h.Canvas();
+
+  job.drawAt(output.context, 0.2);
+  job.drawStill(output.context, 1);
+
+  var watermark = h.canvases.find(function (canvas) {
+    return canvas.context.text.indexOf("SAMPLE") !== -1;
+  });
+  assert.equal(job.draftPreview, true);
+  assert.ok(watermark, "the compositor authors the SAMPLE watermark once");
+  assert.equal(watermark.context.globalAlpha, .18);
+  assert.ok(watermark.context.rotations.some(function (angle) {
+    return Math.abs(angle + Math.PI / 6) < 1e-7;
+  }), "the watermark is diagonal");
+  assert.equal(output.context.draws.filter(function (source) { return source === watermark; }).length, 2,
+    "the same low-cost watermark layer is composited over motion and still frames");
 });
 
 test("live and final frames share crop and finish while the final still freezes exactly once", function () {
@@ -150,7 +213,7 @@ test("live and final frames share crop and finish while the final still freezes 
   assert.deepEqual(h.coverCalls.map(function (call) { return call.source.id; }), ["moving", "moving", "later"]);
 });
 
-test("optional DRAFT PREVIEW mark is composited over every live and held frame", function () {
+test("optional SAMPLE watermark is composited over every live and held frame", function () {
   var h = rendererHarness();
   var live = h.Polaroid.composeLive({ base: 600, draftPreview: true });
   var output = new h.Canvas();
@@ -162,8 +225,8 @@ test("optional DRAFT PREVIEW mark is composited over every live and held frame",
   assert.equal(live.draftPreview, true);
   assert.equal(output.context.draws.length, 6, "plate, chrome and watermark are drawn on both frames");
   assert.ok(h.canvases.some(function (canvas) {
-    return canvas.context.text.indexOf("DRAFT PREVIEW") !== -1;
-  }), "the stationary overlay contains the conspicuous draft label");
+    return canvas.context.text.indexOf("SAMPLE") !== -1;
+  }), "the stationary overlay contains the subtle sample label");
 });
 
 test("unready camera sources cannot silently become a final photograph", function () {

@@ -161,18 +161,49 @@
             <label>Date<input id="landingEventDate" type="text" maxlength="32" value="16.05.27"></label>
             <label class="event-line-field">Event line <small>optional</small><input id="landingEventLine" type="text" maxlength="72" placeholder="One last fling before the ring"></label>
           </div>
-          <fieldset class="look-picker">
+          <fieldset class="palette-picker landing-palette-picker">
             <legend>Choose your Look</legend>
-            <button class="active" data-landing-look="lilac" type="button"><span style="--look:#eee6ff"></span>Lilac</button>
-            <button data-landing-look="pink" type="button"><span style="--look:#ffdce8"></span>Pink</button>
-            <button data-landing-look="sky" type="button"><span style="--look:#dcecff"></span>Sky</button>
-            <button data-landing-look="butter" type="button"><span style="--look:#fff0aa"></span>Butter</button>
+            <p id="landingPaletteHelp" class="palette-picker-help">Pick the vibe that feels most like your event. We have already made the colours work together.</p>
+            <div class="palette-grid" aria-describedby="landingPaletteHelp">
+              <div class="palette-choice">
+                <input id="landingPaletteLilacPop" class="palette-radio" name="landingPalette" type="radio" value="lilac-pop" data-landing-palette checked>
+                <label class="palette-card" for="landingPaletteLilacPop" data-palette="lilac-pop">
+                  <span class="palette-card-head"><strong>Lilac Pop</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
+                  <span class="palette-description">Grape accent · Lilac base · Blush highlight</span>
+                </label>
+              </div>
+              <div class="palette-choice">
+                <input id="landingPalettePinkParty" class="palette-radio" name="landingPalette" type="radio" value="pink-party" data-landing-palette>
+                <label class="palette-card" for="landingPalettePinkParty" data-palette="pink-party">
+                  <span class="palette-card-head"><strong>Pink Party</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
+                  <span class="palette-description">Raspberry accent · Pink base · Lilac highlight</span>
+                </label>
+              </div>
+              <div class="palette-choice">
+                <input id="landingPaletteBlueSky" class="palette-radio" name="landingPalette" type="radio" value="blue-sky" data-landing-palette>
+                <label class="palette-card" for="landingPaletteBlueSky" data-palette="blue-sky">
+                  <span class="palette-card-head"><strong>Blue Sky</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
+                  <span class="palette-description">Blue accent · Sky base · Butter highlight</span>
+                </label>
+              </div>
+              <div class="palette-choice">
+                <input id="landingPaletteSunshine" class="palette-radio" name="landingPalette" type="radio" value="sunshine" data-landing-palette>
+                <label class="palette-card" for="landingPaletteSunshine" data-palette="sunshine">
+                  <span class="palette-card-head"><strong>Sunshine</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
+                  <span class="palette-description">Honey accent · Butter base · Pink highlight</span>
+                </label>
+              </div>
+            </div>
           </fieldset>
         </form>
         <span class="story-arrow" aria-hidden="true">→</span>
         <div class="booth-browser event-demo-browser">
           <div class="booth-browser-bar" aria-hidden="true"><span></span><span></span><span></span><small>your event photobooth</small></div>
-          <div id="landingEventPreview" class="booth-example event-entrance-card" data-look="lilac">
+          <div id="landingEventPreview" class="booth-example event-entrance-card" data-palette="lilac-pop">
             <p class="eyebrow">WELCOME TO</p>
             <h3 id="landingPreviewTitle">SOPHIE'S HEN</h3>
             <p id="landingPreviewMeta" class="booth-example-date">IBIZA · 16.05.27</p>
@@ -519,7 +550,7 @@
       <p id="hostEventStatusLabel">HOST PREVIEW</p>
       <p id="hostEventStatusText">Preview the guest experience. Your event clock has not started.</p>
       <div>
-        <button id="previewEventBtn" class="secondary-btn" type="button">PREVIEW PHOTOBOOTH</button>
+        <button id="previewEventBtn" class="secondary-btn" type="button">TEST CAMERA &amp; OUTPUTS</button>
         <button id="activateEventBtn" class="primary-btn" type="button">START EVENT</button>
       </div>
     </section>
@@ -535,11 +566,11 @@
     <div class="camera-shade"></div>
     <div id="stripFramingGuide" class="strip-framing-guide" hidden aria-hidden="true"><span>STRIP CROP</span></div>
     <div class="camera-top">
-      <span><b id="cameraExperienceLabel">YOUR PHOTOBOOTH</b><small id="shotLabel">PHOTO 1 / 3</small></span>
+      <span><b id="cameraExperienceLabel">YOUR PHOTOBOOTH</b><small id="shotLabel" role="status" aria-live="polite" aria-atomic="true">PHOTO 1 / 3</small></span>
       <button id="cancelCapture" class="plain-btn" type="button">CANCEL</button>
     </div>
     <div id="promptText" class="prompt-text"></div>
-    <div id="countdown" class="countdown"></div>
+    <div id="countdown" class="countdown" role="status" aria-live="assertive" aria-atomic="true"></div>
     <div id="flash" class="flash"></div>
     <p class="camera-brand">MYBISHBASH PHOTOBOOTH</p>
   </div>
@@ -547,30 +578,34 @@
 
 <section id="review" class="screen review-screen booth-surface">
   <div id="confettiLayer" class="confetti-layer" aria-hidden="true"></div>
+  <div id="hostTestBar" class="host-test-bar" hidden>
+    <p><strong>TEST MODE</strong><span>Nothing is saved to your Event Gallery and your event has not started.</span></p>
+    <button id="exitTestPreview" type="button">BACK TO EVENT SETUP</button>
+  </div>
   <div class="review-grid">
     <div class="preview-column">
       <p id="resultsKicker" class="results-kicker">YOUR PHOTO STRIP</p>
-      <div class="preview-stage">
-        <canvas id="mainCanvas"></canvas>
-        <video id="polaroidVideo" class="polaroid-video" autoplay muted playsinline loop hidden></video>
+      <div class="preview-stage" role="region" aria-labelledby="resultsKicker">
+        <canvas id="mainCanvas" role="img" aria-label="Your rendered photobooth output"></canvas>
+        <video id="polaroidVideo" class="polaroid-video" autoplay muted playsinline loop hidden aria-label="Your moving Polaroid output"></video>
       </div>
     </div>
 
     <aside class="review-panel">
-      <div id="reviewModeNav" class="review-nav" aria-label="Choose output" hidden>
-        <button class="mode-tab active" id="stripTab" data-mode="strip" type="button">STRIP</button>
-        <button class="mode-tab" id="magazineTab" data-mode="magazine" type="button">MAGAZINE</button>
-        <button class="mode-tab" id="polaroidTab" data-mode="polaroid" type="button">POLAROID</button>
+      <div id="reviewModeNav" class="review-nav" role="tablist" aria-label="Choose output" hidden>
+        <button class="mode-tab active" id="stripTab" data-mode="strip" type="button" role="tab" aria-selected="true" aria-controls="stripControls">STRIP</button>
+        <button class="mode-tab" id="magazineTab" data-mode="magazine" type="button" role="tab" aria-selected="false" aria-controls="magazineControls">MAGAZINE</button>
+        <button class="mode-tab" id="polaroidTab" data-mode="polaroid" type="button" role="tab" aria-selected="false" aria-controls="polaroidControls">POLAROID</button>
       </div>
 
-      <div id="stripControls" class="mode-controls active">
+      <div id="stripControls" class="mode-controls active" role="tabpanel" aria-labelledby="stripTab">
         <p class="control-label" id="frameLabelText">FRAME</p>
         <div id="frameChoices" class="choice-row"></div>
         <p class="control-label" id="filterLabelText">FILTER</p>
         <div id="filterChoices" class="choice-row"></div>
       </div>
 
-      <div id="magazineControls" class="mode-controls">
+      <div id="magazineControls" class="mode-controls" role="tabpanel" aria-labelledby="magazineTab">
         <div id="magazinePickStep">
           <p class="control-label" id="pickLabelText">PICK YOUR COVER PHOTO</p>
           <div id="coverPhotoChoices" class="photo-choice-grid"></div>
@@ -582,9 +617,10 @@
         </div>
       </div>
 
-      <div id="polaroidControls" class="mode-controls">
+      <div id="polaroidControls" class="mode-controls" role="tabpanel" aria-labelledby="polaroidTab">
         <p class="control-label" id="polaroidLabelText">MOVING POLAROID</p>
         <p id="polaroidStatus" class="polaroid-status"></p>
+        <button id="polaroidPlayBtn" class="secondary-btn polaroid-play-btn" type="button" hidden>PLAY MOTION</button>
       </div>
 
       <section id="businessCompletion" class="business-completion" hidden aria-labelledby="businessCompletionTitle">
@@ -616,28 +652,28 @@
   </div>
 </section>
 
-<section id="settings" class="screen settings-screen product-surface">
+<section id="settings" class="screen settings-screen product-surface" aria-labelledby="settingsTitle">
   <div class="settings-shell">
     <div class="settings-head">
       <div>
         <p class="eyebrow">PERSONAL SETUP</p>
-        <h2>Build My Event Photobooth</h2>
+        <h2 id="settingsTitle">Build My Event Photobooth</h2>
         <p id="settingsAccessNote" class="settings-access-note">Preview the Personal experience, then choose access when you are ready to use it.</p>
       </div>
       <button id="closeSettings" class="close-btn" type="button" aria-label="Close customisation">×</button>
     </div>
 
-    <div class="setup-progress" aria-label="Setup progress">
-      <button class="active" data-setup-step="0" type="button"><span>1</span>Name</button>
-      <button data-setup-step="1" type="button"><span>2</span>Colour</button>
-      <button data-setup-step="2" type="button"><span>3</span>Wording</button>
-      <button data-setup-step="3" type="button"><span>4</span>Preview</button>
-      <button data-setup-step="4" type="button"><span>5</span>Start</button>
+    <div class="setup-progress" role="tablist" aria-label="Customise your photobooth">
+      <button id="setupStep0" class="active" data-setup-step="0" type="button" role="tab" aria-selected="true" aria-controls="setupPanel0"><span>1</span>Event</button>
+      <button id="setupStep1" data-setup-step="1" type="button" role="tab" aria-selected="false" aria-controls="setupPanel1"><span>2</span>Look</button>
+      <button id="setupStep2" data-setup-step="2" type="button" role="tab" aria-selected="false" aria-controls="setupPanel2"><span>3</span>Words</button>
+      <button id="setupStep3" data-setup-step="3" type="button" role="tab" aria-selected="false" aria-controls="setupPanel3"><span>4</span>Test</button>
+      <button id="setupStep4" data-setup-step="4" type="button" role="tab" aria-selected="false" aria-controls="setupPanel4"><span>5</span>Ready</button>
     </div>
 
     <div class="admin-grid guided-grid">
       <div class="settings-fields">
-        <section class="setup-step active" data-setup-panel="0">
+        <section id="setupPanel0" class="setup-step active" data-setup-panel="0" role="tabpanel" aria-labelledby="setupStep0">
           <p class="step-kicker">STEP 1 OF 5</p>
           <h3>Name your event</h3>
           <p class="field-help large">Tell us the event. MyBishBash carries its identity through the entrance and every finished output.</p>
@@ -652,19 +688,46 @@
           <div class="default-proof"><span>AUTOMATIC</span><p>Magazine masthead, issue lines, Strip signature and Polaroid handwriting update from the event title.</p></div>
         </section>
 
-        <section class="setup-step" data-setup-panel="1" hidden>
+        <section id="setupPanel1" class="setup-step" data-setup-panel="1" role="tabpanel" aria-labelledby="setupStep1" hidden>
           <p class="step-kicker">STEP 2 OF 5</p>
-          <h3>Choose your Look</h3>
-          <p class="field-help large">One choice coordinates the event entrance and keepsake accents. Detailed type and wording stay in Advanced settings.</p>
-          <label class="look-select">Event Look<select id="setLook"><option value="lilac">Lilac Party</option><option value="pink">Pink Pop</option><option value="sky">Sky Blue</option><option value="butter">Butter Yellow</option></select></label>
-          <label class="accent-picker">Accent colour<input id="setAccent" type="color" value="#ff5b52"></label>
-          <div class="colour-presets" aria-label="Colour suggestions">
-            <button data-accent="#ff5b52" style="--swatch:#ff5b52" type="button">Tomato</button>
-            <button data-accent="#ffd43b" style="--swatch:#ffd43b" type="button">Sunshine</button>
-            <button data-accent="#2357ff" style="--swatch:#2357ff" type="button">Cobalt</button>
-            <button data-accent="#d86c8f" style="--swatch:#d86c8f" type="button">Rose</button>
-            <button data-accent="#39b87f" style="--swatch:#39b87f" type="button">Mint</button>
-          </div>
+          <h3 id="chooseLookTitle">Choose your Look</h3>
+          <p id="eventPaletteHelp" class="field-help large">Pick the vibe that feels most like your event. Each scheme coordinates the entrance, decorations and keepsake accents for you.</p>
+          <fieldset class="palette-picker host-palette-picker" aria-labelledby="chooseLookTitle" aria-describedby="eventPaletteHelp">
+            <div class="palette-grid host-palette-grid">
+              <div class="palette-choice">
+                <input id="paletteLilacPop" class="palette-radio" name="eventPalette" type="radio" value="lilac-pop" data-event-palette checked>
+                <label class="palette-card" for="paletteLilacPop" data-palette="lilac-pop">
+                  <span class="palette-card-head"><strong>Lilac Pop</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
+                  <span class="palette-description">Grape accent · Lilac base · Blush highlight</span>
+                </label>
+              </div>
+              <div class="palette-choice">
+                <input id="palettePinkParty" class="palette-radio" name="eventPalette" type="radio" value="pink-party" data-event-palette>
+                <label class="palette-card" for="palettePinkParty" data-palette="pink-party">
+                  <span class="palette-card-head"><strong>Pink Party</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
+                  <span class="palette-description">Raspberry accent · Pink base · Lilac highlight</span>
+                </label>
+              </div>
+              <div class="palette-choice">
+                <input id="paletteBlueSky" class="palette-radio" name="eventPalette" type="radio" value="blue-sky" data-event-palette>
+                <label class="palette-card" for="paletteBlueSky" data-palette="blue-sky">
+                  <span class="palette-card-head"><strong>Blue Sky</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
+                  <span class="palette-description">Blue accent · Sky base · Butter highlight</span>
+                </label>
+              </div>
+              <div class="palette-choice">
+                <input id="paletteSunshine" class="palette-radio" name="eventPalette" type="radio" value="sunshine" data-event-palette>
+                <label class="palette-card" for="paletteSunshine" data-palette="sunshine">
+                  <span class="palette-card-head"><strong>Sunshine</strong><span class="palette-selected" aria-hidden="true">&#10003; Selected</span></span>
+                  <span class="palette-swatches" aria-hidden="true"><span class="palette-swatch primary"></span><span class="palette-swatch secondary"></span><span class="palette-swatch highlight"></span></span>
+                  <span class="palette-description">Honey accent · Butter base · Pink highlight</span>
+                </label>
+              </div>
+            </div>
+          </fieldset>
           <div class="field-grid host-defaults">
             <label>Strip frame<select id="setStripFrame"><option value="white">White</option><option value="black">Black</option><option value="editorial">Editorial</option><option value="film">Film</option></select></label>
             <label>Strip finish<select id="setStripFilter"><option value="original">Original</option><option value="bw">B&amp;W</option><option value="vintage">Vintage</option><option value="warm">Warm</option><option value="glow">Glow</option></select></label>
@@ -676,7 +739,7 @@
           </div>
         </section>
 
-        <section class="setup-step" data-setup-panel="2" hidden>
+        <section id="setupPanel2" class="setup-step" data-setup-panel="2" role="tabpanel" aria-labelledby="setupStep2" hidden>
           <p class="step-kicker">STEP 3 OF 5</p>
           <h3>Personalise your wording</h3>
           <p class="field-help large">A handful of high-impact lines is enough. Leave anything blank and MyBishBash writes a sensible default.</p>
@@ -694,21 +757,19 @@
           </div>
         </section>
 
-        <section class="setup-step" data-setup-panel="3" hidden>
+        <section id="setupPanel3" class="setup-step" data-setup-panel="3" role="tabpanel" aria-labelledby="setupStep3" hidden>
           <p class="step-kicker">STEP 4 OF 5</p>
-          <h3>Preview your booth</h3>
-          <p class="field-help large">These tabs use the real output renderers. Try both camera orientations before the event.</p>
-          <div class="mobile-preview-tabs admin-preview-tabs">
-            <button class="admin-preview-tab active" data-preview="strip" type="button">Strip</button>
-            <button class="admin-preview-tab" data-preview="keepsake" type="button">Keepsake</button>
-            <button class="admin-preview-tab" data-preview="editorial" type="button">Editorial</button>
-            <button class="admin-preview-tab" data-preview="noir" type="button">Noir</button>
-            <button class="admin-preview-tab" data-preview="press" type="button">Press</button>
-            <button class="admin-preview-tab" data-preview="polaroid" type="button">Polaroid</button>
+          <h3>Test and fine-tune</h3>
+          <p class="field-help large">Use the always-visible preview to compare every real output. Then test the real camera before the event starts.</p>
+          <div class="test-setup-card">
+            <p class="control-label">A QUICK REAL-WORLD CHECK</p>
+            <h4>Put the device where your guests will stand.</h4>
+            <p>Choose <strong>Test real camera</strong> in the preview. Take the usual three photos, check the framing, light and background, then come straight back here to adjust anything.</p>
+            <ul><li>Is everyone comfortably in frame?</li><li>Is the light flattering enough?</li><li>Does the finished Strip, Magazine and Moving Polaroid feel right?</li></ul>
           </div>
         </section>
 
-        <section class="setup-step" data-setup-panel="4" hidden>
+        <section id="setupPanel4" class="setup-step" data-setup-panel="4" role="tabpanel" aria-labelledby="setupStep4" hidden>
           <p class="step-kicker">STEP 5 OF 5</p>
           <h3>Your photobooth is ready</h3>
           <p class="field-help large">Save and preview now. The 48-hour event begins only after the host deliberately presses Start Event on the event device.</p>
@@ -830,21 +891,44 @@
         </details>
       </div>
 
-      <aside class="admin-preview">
-        <div class="admin-preview-tabs desktop-preview-tabs">
-          <button class="admin-preview-tab active" data-preview="strip" type="button">Strip</button>
-          <button class="admin-preview-tab" data-preview="keepsake" type="button">Keepsake</button>
-          <button class="admin-preview-tab" data-preview="editorial" type="button">Editorial</button>
-          <button class="admin-preview-tab" data-preview="noir" type="button">Noir</button>
-          <button class="admin-preview-tab" data-preview="press" type="button">Press</button>
-          <button class="admin-preview-tab" data-preview="polaroid" type="button">Polaroid</button>
+      <aside class="admin-preview" aria-labelledby="adminPreviewHeading">
+        <div class="admin-preview-head">
+          <div>
+            <p class="step-kicker">LIVE OUTPUT</p>
+            <h3 id="adminPreviewHeading">See your booth as you build it</h3>
+          </div>
+          <p>Your wording, colours and choices update here using the real production renderers.</p>
         </div>
-        <div class="admin-preview-tabs orientation-tabs">
-          <button class="admin-orientation-tab active" data-orientation="landscape" type="button">Landscape</button>
-          <button class="admin-orientation-tab" data-orientation="portrait" type="button">Portrait</button>
+        <div class="admin-preview-tabs" role="tablist" aria-label="Choose an output to preview">
+          <button class="admin-preview-tab active" data-preview="strip" type="button" role="tab" aria-selected="true" aria-controls="adminPreviewCanvas">PHOTO STRIP</button>
+          <button class="admin-preview-tab" data-preview="magazine" type="button" role="tab" aria-selected="false" aria-controls="adminPreviewCanvas">MAGAZINE</button>
+          <button class="admin-preview-tab" data-preview="polaroid" type="button" role="tab" aria-selected="false" aria-controls="adminPreviewCanvas">MOVING POLAROID</button>
         </div>
-        <canvas id="adminPreviewCanvas"></canvas>
-        <p class="preview-note">Live preview using the real renderers.</p>
+        <div class="admin-preview-stage">
+          <canvas id="adminPreviewCanvas" role="img" aria-label="Live preview of your customised Photo Strip"></canvas>
+        </div>
+        <button id="adminPreviewPlayMotion" class="admin-preview-play-motion" type="button" hidden>PLAY MOTION</button>
+        <div class="admin-preview-controls">
+          <div class="orientation-control">
+            <span>PHOTO ORIENTATION</span>
+            <div class="orientation-tabs" role="group" aria-label="Photo orientation">
+              <button class="admin-orientation-tab active" data-orientation="landscape" type="button" aria-pressed="true">Landscape</button>
+              <button class="admin-orientation-tab" data-orientation="portrait" type="button" aria-pressed="false">Portrait</button>
+            </div>
+          </div>
+          <div class="preview-photo-picker">
+            <div class="preview-photo-copy">
+              <strong>USE MY PHOTOS</strong>
+              <span>Choose up to three photos from this device. They stay in this preview and never enter the Event Gallery.</span>
+            </div>
+            <label class="preview-upload-action" for="adminPreviewPhotos">USE MY PHOTOS<input id="adminPreviewPhotos" type="file" accept="image/*" multiple></label>
+            <p id="previewPhotoStatus" role="status" aria-live="polite"></p>
+            <div id="previewPhotoThumbs" class="preview-photo-thumbs" aria-label="Selected preview photos"></div>
+            <button id="clearPreviewPhotos" class="text-action" type="button" hidden>Clear my preview photos</button>
+          </div>
+        </div>
+        <button id="testCameraFromSettings" class="test-camera-btn" type="button">TEST REAL CAMERA</button>
+        <p class="preview-note">Test photos are temporary. Your event starts only when you deliberately choose Start Event.</p>
       </aside>
     </div>
   </div>

@@ -18,6 +18,9 @@ var COVER_BASE=620;
 var COMPARISON_BASE=470;
 var BUSINESS_BASE=560;
 var POLAROID_BASE=520;
+var EVENT=global.MyBishBashEvent||null;
+var DEMO_PALETTE=EVENT&&typeof EVENT.resolvePalette==="function"?
+  EVENT.resolvePalette("pink-party"):null;
 
 var SETTINGS={
   eventTitle:"Rae's 26th Birthday",
@@ -26,7 +29,10 @@ var SETTINGS={
   stripSecond:"Rae's 26th Birthday",
   stripSignature:"Rae's 26th Birthday",
   stripDate:"2026",
-  accent:"#d86c8f",
+  paletteId:DEMO_PALETTE&&DEMO_PALETTE.id||"pink-party",
+  palettePrimary:DEMO_PALETTE&&DEMO_PALETTE.primary||"",
+  paletteSecondary:DEMO_PALETTE&&DEMO_PALETTE.secondary||"",
+  paletteHighlight:DEMO_PALETTE&&DEMO_PALETTE.highlight||"",
   polaroidTransition:"crossfade"
 };
 
@@ -142,7 +148,8 @@ function renderStripCanvas(canvas){
     api.renderStrip(ctx,target,demoImages,SETTINGS,"portrait",{
       frameStyle:state.frameStyle,
       filterStyle:state.filterStyle,
-      branding:personalBranding()
+      branding:personalBranding(),
+      paletteMode:"personal"
     });
   });
 }
@@ -172,7 +179,7 @@ function renderMagazineCanvas(canvas,base,template,branding,accent){
       width:size.width,
       height:size.height,
       copy:coverCopy(),
-      accent:accent||SETTINGS.accent,
+      accent:accent||SETTINGS.palettePrimary,
       template:template,
       edition:{no:26},
       branding:branding
@@ -185,7 +192,7 @@ function renderMagazine(){
   var rendered=false;
   ids.forEach(function(id){
     rendered=renderMagazineCanvas(
-      byId(id),COVER_BASE,state.template,personalBranding(),SETTINGS.accent
+      byId(id),COVER_BASE,state.template,personalBranding(),SETTINGS.palettePrimary
     )||rendered;
   });
   return rendered;
@@ -264,6 +271,7 @@ function renderPolaroid(){
       hand:global.Fonts&&typeof global.Fonts.stack==="function"?
         global.Fonts.stack("hand",SETTINGS):undefined,
       transition:SETTINGS.polaroidTransition,
+      backdrop:SETTINGS.paletteSecondary,
       attribution:personalBranding()
     });
     canvases.forEach(function(canvas){
@@ -288,10 +296,10 @@ function renderComparison(){
   var freeCanvas=byId("compareFreeCanvas");
   var personalCanvas=byId("comparePersonalCanvas");
   var a=renderMagazineCanvas(
-    freeCanvas,COMPARISON_BASE,"keepsake",freeBranding(),SETTINGS.accent
+    freeCanvas,COMPARISON_BASE,"keepsake",freeBranding(),SETTINGS.palettePrimary
   );
   var b=renderMagazineCanvas(
-    personalCanvas,COMPARISON_BASE,"keepsake",personalBranding(),SETTINGS.accent
+    personalCanvas,COMPARISON_BASE,"keepsake",personalBranding(),SETTINGS.palettePrimary
   );
   return a||b;
 }

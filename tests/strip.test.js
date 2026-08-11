@@ -22,7 +22,10 @@ function mockContext(){
     beginPath:function(){calls.push(["beginPath"]);},
     rect:function(){calls.push(["rect"].concat(Array.from(arguments)));},
     clip:function(){calls.push(["clip"]);},
+    translate:function(){calls.push(["translate"].concat(Array.from(arguments)));},
+    rotate:function(){calls.push(["rotate"].concat(Array.from(arguments)));},
     drawImage:function(){calls.push(["drawImage"].concat(Array.from(arguments)));},
+    strokeText:function(){calls.push(["strokeText"].concat(Array.from(arguments)));},
     fillText:function(){calls.push(["fillText"].concat(Array.from(arguments)));},
     measureText:function(text){
       var match=String(this.font||"").match(/([\d.]+)px/);
@@ -198,17 +201,19 @@ test("derives compact event footer copy without requiring browser globals",funct
   });
 });
 
-test("adds a conspicuous but controlled canonical mark to every draft photograph",function(){
+test("adds a subtle diagonal SAMPLE watermark to every draft photograph",function(){
   var ctx=mockContext();
   var images=[{width:1200,height:900},{width:1200,height:900},{width:1200,height:900}];
   var normal=Strip.render(mockContext(),{images:images,frameStyle:"white"});
   var draft=Strip.render(ctx,{images:images,frameStyle:"white",draft:true});
 
-  assert.equal(Strip.DRAFT_LABEL,"DRAFT PREVIEW");
+  assert.equal(Strip.DRAFT_LABEL,"SAMPLE");
   assert.equal(normal.draft.enabled,false);
   assert.equal(draft.draft.enabled,true);
-  assert.equal(draft.draft.label,"DRAFT PREVIEW");
+  assert.equal(draft.draft.label,"SAMPLE");
   assert.equal(draft.draft.stamps.length,3);
+  assert.equal(draft.draft.opacity,.18);
+  close(draft.draft.angle,-Math.PI/6,"watermark angle");
   assert.deepEqual(draft.geometry.slots,normal.geometry.slots);
 
   draft.draft.stamps.forEach(function(stamp,index){
@@ -216,11 +221,12 @@ test("adds a conspicuous but controlled canonical mark to every draft photograph
     assert.ok(stamp.x>=slot.x&&stamp.y>=slot.y);
     assert.ok(stamp.x+stamp.w<=slot.x+slot.w);
     assert.ok(stamp.y+stamp.h<=slot.y+slot.h);
-    assert.ok(stamp.w<slot.w/2,"draft stamp must not dominate the photograph");
-    assert.ok(stamp.h<slot.h/10,"draft stamp must remain a controlled treatment");
+    assert.ok(stamp.w<slot.w*.6,"sample watermark must remain controlled");
+    assert.ok(stamp.h<slot.h*.2,"sample watermark must remain controlled");
   });
-  assert.deepEqual(draft.draft.outline,{x:4,y:4,w:592,h:1792});
-  assert.equal(ctx.calls.filter(function(call){return call[0]==="fillText"&&call[1]==="DRAFT PREVIEW";}).length,3);
+  assert.equal(draft.draft.outline,null,"the professional watermark has no frame or banner");
+  assert.equal(ctx.calls.filter(function(call){return call[0]==="fillText"&&call[1]==="SAMPLE";}).length,3);
+  assert.equal(ctx.calls.filter(function(call){return call[0]==="rotate"&&call[1]===-Math.PI/6;}).length,3);
 });
 
 test("paints the draft treatment last so photo and grade hooks cannot omit it",function(){
@@ -236,9 +242,9 @@ test("paints the draft treatment last so photo and grade hooks cannot omit it",f
     var lastHook=-1,firstMark=-1;
     ctx.calls.forEach(function(call,index){
       if(call[0]==="custom-photo"||call[0]==="custom-grade")lastHook=index;
-      if(firstMark<0&&call[0]==="fillText"&&call[1]==="DRAFT PREVIEW")firstMark=index;
+      if(firstMark<0&&call[0]==="fillText"&&call[1]==="SAMPLE")firstMark=index;
     });
     assert.ok(firstMark>lastHook,frameStyle+" draft mark must be painted after every hook");
-    assert.equal(ctx.calls.filter(function(call){return call[0]==="fillText"&&call[1]==="DRAFT PREVIEW";}).length,3);
+    assert.equal(ctx.calls.filter(function(call){return call[0]==="fillText"&&call[1]==="SAMPLE";}).length,3);
   });
 });

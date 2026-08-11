@@ -84,28 +84,24 @@ function copyFor(s){
 
 /* ---------- timeline ---------- */
 
-/* The loop point is the entire difficulty. iOS does not loop <video> gaplessly
-   — there is a hitch at the seam whatever the pixels do — so the sequence is
-   authored to start and end halfway through Photo 1's hold. The seam then
-   falls between two identical still frames, where a dropped millisecond is
-   invisible. Seaming mid-transition, which is the obvious way to write this,
-   puts the hitch exactly where the eye is already tracking movement. */
+/* Every photograph receives one continuous hold. The final dissolve returns
+   fully to Photo 1 before the file loops, so the last and first frames agree
+   without splitting the first photograph between opposite ends of the MP4. */
 function timeline(o){
   const count=Math.max(1,(o&&o.count)||3);
-  const fade=Math.max(0,(o&&o.fade!==undefined)?o.fade:0.2);
-  const hold=Math.max(0.2,(o&&o.hold)||1.2);
-  const segs=[{a:0,b:0,dur:hold/2}];
+  const fade=Math.max(0,(o&&o.fade!==undefined)?o.fade:0.4);
+  const hold=Math.max(0.2,(o&&o.hold)||1);
+  const segs=[{a:0,b:0,dur:hold}];
   for(let i=1;i<count;i++){
     if(fade>0)segs.push({a:i-1,b:i,dur:fade});
     segs.push({a:i,b:i,dur:hold});
   }
   if(count>1&&fade>0)segs.push({a:count-1,b:0,dur:fade});
-  segs.push({a:0,b:0,dur:hold/2});
 
   let duration=0;
   segs.forEach(s=>{s.start=duration;duration+=s.dur;});
   return {
-    duration,segs,
+    duration,segs,previewStart:0,
     at(t){
       const time=((t%duration)+duration)%duration;
       for(const s of segs){
@@ -120,10 +116,19 @@ function timeline(o){
     }
   };
 }
+/* The preview and encoded video share the same cyclic timeline. This tiny
+   helper lets the UI wait for their identical Photo-1 seam before replacing
+   one with the other, avoiding a visible jump to a different photograph. */
+function timeToSeam(seconds,duration){
+  const cycle=Math.max(0,Number(duration)||0);
+  if(!cycle)return 0;
+  const phase=((Number(seconds)||0)%cycle+cycle)%cycle;
+  return phase<1e-9?0:cycle-phase;
+}
 /* Cuts need longer holds to fill the same four seconds. Kept here so the
    admin only ever chooses "crossfade or cut" and the clip length stays put. */
 function timing(transition){
-  return transition==="cut"?{fade:0,hold:1.4}:{fade:0.2,hold:1.2};
+  return transition==="cut"?{fade:0,hold:1.4}:{fade:0.4,hold:1};
 }
 
 /* ---------- paper ---------- */
@@ -415,19 +420,21 @@ function buildDraftLayer(geo){
   const c=document.createElement("canvas");
   c.width=geo.W;c.height=geo.H;
   const ctx=c.getContext("2d");
-  const bandH=Math.max(42,geo.printW*.105);
   ctx.save();
   roundRect(ctx,geo.margin,geo.margin,geo.printW,geo.printH,geo.corner);
   ctx.clip();
   ctx.translate(geo.W/2,geo.margin+geo.printH*.47);
-  ctx.rotate(-.18);
-  ctx.fillStyle="rgba(25,18,38,.78)";
-  ctx.fillRect(-geo.W,-bandH/2,geo.W*2,bandH);
-  ctx.fillStyle="#f4edff";
+  ctx.rotate(-Math.PI/6);
   ctx.textAlign="center";
   ctx.textBaseline="middle";
-  ctx.font=`900 ${Math.max(20,geo.printW*.047)}px "Avenir Next",Avenir,"Helvetica Neue",Arial,sans-serif`;
-  ctx.fillText("DRAFT PREVIEW",0,1);
+  const fontSize=Math.max(34,geo.printW*.15);
+  ctx.font=`900 ${fontSize}px "Avenir Next",Avenir,"Helvetica Neue",Arial,sans-serif`;
+  ctx.globalAlpha=.18;
+  ctx.lineWidth=Math.max(2,fontSize*.055);
+  ctx.strokeStyle="#ffffff";
+  if(typeof ctx.strokeText==="function")ctx.strokeText("SAMPLE",0,0);
+  ctx.fillStyle="#111111";
+  ctx.fillText("SAMPLE",0,0);
   ctx.restore();
   return c;
 }
@@ -452,6 +459,7 @@ function compose(o){
   const geo=size(o.base||1296);
   const images=(o.images||[]).filter(Boolean);
   const chrome=buildChrome(geo,o.copy||{},o.hand||HAND_FALLBACK,o.backdrop,o.attribution);
+  const draft=o.draftPreview===true?buildDraftLayer(geo):null;
   const plates=images.map(img=>buildPlate(img,geo));
   const t=timing(o.transition);
   const line=timeline({count:plates.length||1,fade:t.fade,hold:t.hold});
@@ -469,11 +477,12 @@ function compose(o){
       ctx.globalAlpha=1;
     }
     ctx.drawImage(chrome,0,0);
+    if(draft)ctx.drawImage(draft,0,0);
     ctx.restore();
   }
 
   return {
-    geo,timeline:line,
+    geo,timeline:line,draftPreview:!!draft,
     frameCount(fps){return Math.max(1,Math.round(line.duration*fps));},
     drawAt(ctx,seconds){const s=line.at(seconds);paint(ctx,s.a,s.b,s.mix);},
     drawFrame(ctx,i,fps){this.drawAt(ctx,i/fps);},
@@ -555,6 +564,6 @@ function render(ctx,opts){
   return job.geo;
 }
 
-global.Polaroid={size,derive,copyFor,copyKeys:COPY_KEYS,timeline,timing,compose,composeLive,render};
+global.Polaroid={size,derive,copyFor,copyKeys:COPY_KEYS,timeline,timeToSeam,timing,compose,composeLive,render};
 
 })(window);

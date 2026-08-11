@@ -1,5 +1,5 @@
 const DEFAULTS = {
-  schemaVersion:1,
+  schemaVersion:2,
   eventId:"",
   eventType:"party",
   eventTitle:"Your Celebration",
@@ -7,7 +7,10 @@ const DEFAULTS = {
   eventLine:"",
   date:String(new Date().getFullYear()),
   datePrecision:"unknown",
-  look:"lilac",
+  paletteId:"lilac-pop",
+  palettePrimary:"#66519c",
+  paletteSecondary:"#eee6ff",
+  paletteHighlight:"#ffdce8",
   eventStatus:"DRAFT",
   activatedAt:"",
   endsAt:"",
@@ -96,7 +99,6 @@ const DEFAULTS = {
   shotLabelFormat:"",
   promptLines:"",
 
-  accent:"#ff5b52",
   countdown:3,
   mirror:true,
   prompts:true,
@@ -242,9 +244,9 @@ const SCREEN_TEXT = [
   ["startLabel","ENTER","startLabelText"],
   ["startHint","photobooth","startHintText"],
   ["cancelLabel","CANCEL","cancelCapture"],
-  ["stripTabLabel","STRIP","stripTab"],
+  ["stripTabLabel","PHOTO STRIP","stripTab"],
   ["magazineTabLabel","MAGAZINE","magazineTab"],
-  ["polaroidTabLabel","POLAROID","polaroidTab"],
+  ["polaroidTabLabel","MOVING POLAROID","polaroidTab"],
   ["polaroidLabel","MOVING POLAROID","polaroidLabelText"],
   ["frameLabel","FRAME","frameLabelText"],
   ["filterLabel","FILTER","filterLabelText"],
@@ -288,9 +290,8 @@ function shotLabel(n,total){
 }
 
 let legacySettingsImported=false;
-let settings=loadSettings();
-let legacyProfileAvailable=legacySettingsImported;
-try{legacyProfileAvailable=legacyProfileAvailable||!!localStorage.getItem(LEGACY_SETTINGS_KEY);}catch(e){}
+let settings;
+let legacyProfileAvailable=false;
 let entitlement=ENTITLEMENTS.FREE;
 let capabilities=PRODUCT?PRODUCT.getCapabilities(entitlement):{canPersonaliseEvent:false,canRemoveFreeBranding:false,canUploadBusinessLogo:false,canWhiteLabel:false,canCollectEmail:false,canConfigureSharing:false,canCollectConsent:false,canCollectConsentedPhotos:false};
 let businessEventConfig=PRODUCT?PRODUCT.createBusinessEventConfig():{collectEmail:false,requireEmail:false,allowShare:true,allowSave:true,collectMarketingConsent:false,collectPublicityConsent:false,collectConsentedPhotos:false};
@@ -313,6 +314,13 @@ let audioCtx=null;
 let adminPreviewType="strip";
 let adminOrientation="landscape";
 let adminPreviewTimer=0;
+let adminPreviewPhotos=[];
+let adminPreviewPhotoIndex=0;
+let adminPreviewRenderToken=0;
+let adminPreviewMotionFrame=0;
+let adminPreviewMotionRequested=false;
+let adminPolaroidPreviewEpoch=0;
+let adminPreviewSamplePromise=null;
 let serviceWorkerRefreshPending=false;
 let serviceWorkerRefreshStarted=false;
 let boothReturnScreen="landing";
@@ -332,6 +340,9 @@ let motionFinalStill="";
 let guestPinUnlocked=false;
 let guestPinThrottle=EVENT?EVENT.createGuestPinThrottleState():{failures:0,blockedUntil:0};
 let activationConfirmationPending=false;
+let activeCapturePurpose="guest";
+let hostTestContext=null;
+let motionPlaybackRequested=false;
 
 const $=id=>document.getElementById(id);
 const screens=["landing","business","welcome","camera","review","timeout","settings"];
@@ -378,6 +389,13 @@ function loadSettings(){
        installs still receive today's Party/Unknown defaults. */
     if(stored&&!Object.prototype.hasOwnProperty.call(raw,"eventType"))delete eventDefaults.eventType;
     if(stored&&!Object.prototype.hasOwnProperty.call(raw,"datePrecision"))delete eventDefaults.datePrecision;
+    if(stored&&!Object.prototype.hasOwnProperty.call(raw,"schemaVersion"))delete eventDefaults.schemaVersion;
+    if(stored&&!Object.prototype.hasOwnProperty.call(raw,"paletteId")){
+      delete eventDefaults.paletteId;
+      delete eventDefaults.palettePrimary;
+      delete eventDefaults.paletteSecondary;
+      delete eventDefaults.paletteHighlight;
+    }
     const legacy={...eventDefaults,...Fonts.migrate(migrateSettings(raw))};
     const migrated=EVENT?EVENT.migrateEventConfig(legacy,{defaults:eventDefaults}):legacy;
     /* Persist every real migration, including the generated eventId. Without
@@ -397,21 +415,98 @@ function loadSettings(){
   }
 }
 
-const EVENT_LOOKS={
-  lilac:{surface:"#ded2f2",accent:"#66519c",shape:"#ffd8ea",ink:"#111111"},
-  pink:{surface:"#ffd8ea",accent:"#e83e8c",shape:"#ded2f2",ink:"#111111"},
-  sky:{surface:"#d9e9ff",accent:"#337fd8",shape:"#fff0ae",ink:"#111111"},
-  butter:{surface:"#fff0ae",accent:"#d88600",shape:"#d9e9ff",ink:"#111111"}
-};
-function eventLook(value){return EVENT_LOOKS[value]||EVENT_LOOKS.lilac;}
-function applyEventLook(target,value){
+/* Initialise only after LEGACY_COPY and migrateSettings exist. Calling
+   loadSettings above those const declarations would enter their temporal
+   dead zone, silently fall back to defaults and leave old storage unmigrated. */
+settings=loadSettings();
+legacyProfileAvailable=legacySettingsImported;
+try{legacyProfileAvailable=legacyProfileAvailable||!!localStorage.getItem(LEGACY_SETTINGS_KEY);}catch(e){}
+
+function colourLuminance(value){
+  const match=/^#([0-9a-f]{6})$/i.exec(String(value||""));
+  if(!match)return 1;
+  const channels=[0,2,4].map(index=>parseInt(match[1].slice(index,index+2),16)/255)
+    .map(channel=>channel<=.03928?channel/12.92:Math.pow((channel+.055)/1.055,2.4));
+  return .2126*channels[0]+.7152*channels[1]+.0722*channels[2];
+}
+function contrastRatio(first,second){
+  const a=colourLuminance(first),b=colourLuminance(second);
+  return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+}
+function safeForeground(background){
+  if(EVENT&&typeof EVENT.safeForeground==="function")return EVENT.safeForeground(background);
+  return contrastRatio(background,"#111111")>=contrastRatio(background,"#ffffff")?"#111111":"#ffffff";
+}
+function prefersReducedMotion(){
+  return !!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
+function paletteFor(value){
+  if(EVENT&&typeof EVENT.resolvePalette==="function"){
+    const resolved=EVENT.resolvePalette(value||DEFAULTS);
+    return {
+      ...resolved,
+      id:resolved.id||resolved.paletteId||DEFAULTS.paletteId,
+      primary:resolved.primary||resolved.palettePrimary||DEFAULTS.palettePrimary,
+      secondary:resolved.secondary||resolved.paletteSecondary||DEFAULTS.paletteSecondary,
+      highlight:resolved.highlight||resolved.paletteHighlight||DEFAULTS.paletteHighlight
+    };
+  }
+  const source=value&&typeof value==="object"?value:DEFAULTS;
+  return {
+    id:typeof value==="string"?value:(source.paletteId||DEFAULTS.paletteId),
+    name:"Lilac Pop",
+    primary:source.palettePrimary||DEFAULTS.palettePrimary,
+    secondary:source.paletteSecondary||DEFAULTS.paletteSecondary,
+    highlight:source.paletteHighlight||DEFAULTS.paletteHighlight
+  };
+}
+/* Personal events use their curated three-role scheme. Business guest
+   outputs remain governed by the brand colours entered in the Business
+   configurator, so a cached Personal palette can never leak into them. The
+   explicit personal flag is used by the public and host design previews,
+   which must keep showing the curated event scheme even on a Business
+   account. */
+function outputPalette(value,options){
+  const palette=paletteFor(value);
+  if(options&&options.personal)return palette;
+  if(entitlement===ENTITLEMENTS.BUSINESS){
+    const primary=businessBrand.primaryColor||palette.primary;
+    const secondary=businessBrand.secondaryColor||palette.secondary;
+    return {...palette,primary,secondary,highlight:secondary};
+  }
+  return palette;
+}
+function applyRootPalette(value){
+  const palette=paletteFor(value),root=document.documentElement;
+  root.style.setProperty("--accent",palette.primary);
+  root.style.setProperty("--accent-ink",safeForeground(palette.primary));
+  root.style.setProperty("--palette-secondary",palette.secondary);
+  root.style.setProperty("--palette-highlight",palette.highlight);
+}
+function applyEventPalette(target,value){
   if(!target)return;
-  const look=eventLook(value);
-  target.style.setProperty("--event-surface",look.surface);
-  target.style.setProperty("--event-accent",look.accent);
-  target.style.setProperty("--event-shape",look.shape);
-  target.style.setProperty("--event-ink",look.ink);
-  target.dataset.look=EVENT_LOOKS[value]?value:"lilac";
+  const palette=paletteFor(value);
+  target.style.setProperty("--event-surface",palette.secondary);
+  target.style.setProperty("--event-accent",palette.primary);
+  target.style.setProperty("--event-accent-ink",safeForeground(palette.primary));
+  target.style.setProperty("--event-shape",palette.highlight);
+  target.style.setProperty("--event-ink",safeForeground(palette.secondary));
+  target.dataset.palette=palette.id;
+}
+function syncPaletteUI(value){
+  const palette=paletteFor(value);
+  document.querySelectorAll(".host-palette-picker .palette-card[data-palette]").forEach(card=>{
+    const option=paletteFor(card.dataset.palette);
+    card.style.setProperty("--palette-primary",option.primary);
+    card.style.setProperty("--palette-secondary",option.secondary);
+    card.style.setProperty("--palette-highlight",option.highlight);
+    card.style.setProperty("--palette-primary-ink",safeForeground(option.primary));
+    card.style.setProperty("--palette-secondary-ink",safeForeground(option.secondary));
+    card.style.setProperty("--palette-highlight-ink",safeForeground(option.highlight));
+  });
+  document.querySelectorAll('input[name="eventPalette"]').forEach(input=>{
+    input.checked=input.value===palette.id;
+  });
 }
 function eventMeta(s){
   const bits=[];
@@ -716,26 +811,46 @@ function requestServiceWorkerRefresh(){
   serviceWorkerRefreshPending=true;
   applyServiceWorkerRefreshIfSafe();
 }
-function showScreen(id){
+function focusScreenHeading(id){
+  const selectors={welcome:"#welcomeTitle",camera:"#cameraExperienceLabel",review:"#resultsKicker",settings:"#settingsTitle"};
+  const selector=selectors[id];
+  if(!selector)return;
+  const target=document.querySelector(selector);
+  if(!target)return;
+  if(!target.hasAttribute("tabindex"))target.setAttribute("tabindex","-1");
+  requestAnimationFrame(()=>{
+    const screen=$(id);
+    if(!screen||!screen.classList.contains("active"))return;
+    try{target.focus({preventScroll:id==="camera"||id==="review"});}catch(error){target.focus();}
+  });
+}
+function showScreen(id,options){
   screens.forEach(s=>{const el=$(s);if(el)el.classList.toggle("active",s===id);});
   document.body.dataset.surface=id;
+  if(id!=="settings"){
+    stopAdminPreviewMotion();
+    adminPreviewMotionRequested=false;
+    adminPolaroidPreviewEpoch=0;
+  }
   if(id==="landing"||id==="business"||id==="welcome")applyServiceWorkerRefreshIfSafe();
+  if(!options||options.focus!==false)focusScreenHeading(id);
 }
 function delay(ms){return new Promise(r=>setTimeout(r,ms));}
 
 function normaliseBranding(policy,extra){
-  const p=policy||{},x=extra||{};
+  const p=policy||{},x=extra||{},palette=paletteFor(settings);
   return {
     mode:p.mode||x.mode||"free",
     text:x.text!==undefined?x.text:(p.myBishBashText||""),
     brandName:x.brandName||"",
-    primaryColor:x.primaryColor||settings.accent,
-    secondaryColor:x.secondaryColor||settings.accent,
+    primaryColor:x.primaryColor||palette.primary,
+    secondaryColor:x.secondaryColor||palette.highlight,
     logoImage:x.logoImage||null
   };
 }
 function currentBranding(){
-  if(!PRODUCT)return {mode:"free",text:"MYBISHBASH PHOTOBOOTH",primaryColor:settings.accent,secondaryColor:settings.accent};
+  const palette=paletteFor(settings);
+  if(!PRODUCT)return {mode:"free",text:"MYBISHBASH PHOTOBOOTH",primaryColor:palette.primary,secondaryColor:palette.highlight};
   const policy=PRODUCT.getOutputBrandingPolicy(entitlement,{whiteLabel:businessBrand.whiteLabel});
   if(entitlement===ENTITLEMENTS.BUSINESS){
     return normaliseBranding(policy,{
@@ -748,9 +863,13 @@ function currentBranding(){
   }
   return normaliseBranding(policy);
 }
-function personalPreviewBranding(){
-  if(!PRODUCT)return {mode:"personal",text:"POWERED BY MYBISHBASH PHOTOBOOTH",primaryColor:settings.accent,secondaryColor:settings.accent};
-  return normaliseBranding(PRODUCT.getOutputBrandingPolicy(ENTITLEMENTS.ONE_EVENT||ENTITLEMENTS.PERSONAL_6_MONTH));
+function personalPreviewBranding(sourceSettings){
+  const s=sourceSettings||settings,palette=paletteFor(s);
+  if(!PRODUCT)return {mode:"personal",text:"POWERED BY MYBISHBASH PHOTOBOOTH",primaryColor:palette.primary,secondaryColor:palette.highlight};
+  return normaliseBranding(PRODUCT.getOutputBrandingPolicy(ENTITLEMENTS.ONE_EVENT||ENTITLEMENTS.PERSONAL_6_MONTH),{
+    primaryColor:palette.primary,
+    secondaryColor:palette.highlight
+  });
 }
 function setEntitlement(next,record){
   if(!PRODUCT||PRODUCT.ENTITLEMENT_VALUES.indexOf(next)===-1)next=ENTITLEMENTS.FREE;
@@ -787,6 +906,35 @@ function restoreTemporarySettings(){
   temporarySettingsSnapshot=null;
   fillSettingsUI();
 }
+function hostTestActive(){return activeCapturePurpose==="host-test";}
+function applyHostTestUI(){
+  const active=hostTestActive();
+  document.body.classList.toggle("host-test-mode",active);
+  const bar=$("hostTestBar");
+  if(bar){
+    bar.hidden=!active;
+    const message=bar.querySelector("span");
+    if(message)message.textContent=String(settings.eventStatus||"DRAFT")==="DRAFT"?"Nothing is saved to your Event Gallery and your event has not started.":"Nothing is saved to your Event Gallery and your event timing is unchanged.";
+  }
+  const next=$("nextGuestBtn");if(next)next.hidden=active;
+  const cancel=$("cancelCapture");
+  if(cancel){
+    const configured=String(settings.cancelLabel||"").trim()||"CANCEL";
+    cancel.textContent=active?"EXIT PREVIEW":configured;
+    cancel.setAttribute("aria-label",active?"Exit camera test and return to event setup":configured);
+  }
+  const home=$("boothHomeBtn");
+  if(home){
+    if(active){
+      home.textContent="Back to Event Setup";
+      home.setAttribute("aria-label","Exit camera test and return to event setup");
+    }else{
+      const label=boothReturnScreen==="welcome"?"Event Home":"Home";
+      home.textContent=label;
+      home.setAttribute("aria-label",label+(boothReturnScreen==="welcome"?" — return to this event's welcome screen":" — return to the MyBishBash Photobooth website"));
+    }
+  }
+}
 function abortMotionCapture(){
   if(motionCaptureAbort){motionCaptureAbort.abort();motionCaptureAbort=null;}
 }
@@ -799,6 +947,7 @@ function teardownBoothSession(){
   if(countdown)countdown.textContent="";
   if(prompt)prompt.classList.remove("show");
   if(flash)flash.classList.remove("on");
+  hideCameraError();
   stopCamera();
   invalidatePolaroid();
   photos=[];
@@ -807,7 +956,11 @@ function teardownBoothSession(){
   motionCaptureBlob=null;
   motionFinalStill="";
   exportBusy=false;
+  motionPlaybackRequested=false;
   resetGuestCompletionState(true);
+  activeCapturePurpose="guest";
+  hostTestContext=null;
+  applyHostTestUI();
 }
 function setBoothReturnScreen(target){
   boothReturnScreen=target==="welcome"?"welcome":"landing";
@@ -857,7 +1010,8 @@ function showProductRoute(route,push,replace){
 function routeFromLocation(){return /(?:^|\/)business\/?$/.test(location.pathname)?"business":"personal";}
 function applyExampleBoothSettings(){
   if(!temporarySettingsSnapshot)temporarySettingsSnapshot=settings;
-  const example={...DEFAULTS,eventType:"birthday",eventTitle:"Rae's 26th Birthday",location:"London",date:"08.08.26",datePrecision:"exact",eventLine:"Good people. Great pictures.",look:"pink",accent:"#d86c8f",stripTop:"",stripSecond:"",stripSignature:"Rae's 26th Birthday",stripDate:"08.08.26"};
+  const pink=paletteFor("pink-party");
+  const example={...DEFAULTS,eventType:"birthday",eventTitle:"Rae's 26th Birthday",location:"London",date:"08.08.26",datePrecision:"exact",eventLine:"Good people. Great pictures.",paletteId:pink.id,palettePrimary:pink.primary,paletteSecondary:pink.secondary,paletteHighlight:pink.highlight,stripTop:"",stripSecond:"",stripSignature:"Rae's 26th Birthday",stripDate:"08.08.26"};
   settings=EVENT?EVENT.createEventConfig(example,{defaults:DEFAULTS}):example;
 }
 function updateWelcomeMode(hostView){
@@ -887,8 +1041,8 @@ function refreshHostEventStatus(){
     text.textContent="The 48-hour live event period has ended. Saved guest keepsakes remain on this device.";
     activate.hidden=true;
   }else{
-    label.textContent="HOST PREVIEW";
-    text.textContent="Preview the guest experience. Your 48-hour event clock has not started.";
+    label.textContent="READY TO TEST";
+    text.textContent="Take three test photos with the real camera and inspect every output. Nothing is added to the Event Gallery and your 48-hour clock stays stopped.";
     activate.hidden=false;
     activate.textContent=activationConfirmationPending?"CONFIRM — START 48 HOURS":"START EVENT";
   }
@@ -902,7 +1056,7 @@ function showEventHome(example,hostView){
   guestPinThrottle=EVENT?EVENT.createGuestPinThrottleState():guestPinThrottle;
   activationConfirmationPending=false;
   fillSettingsUI();
-  applyEventLook($("welcome"),settings.look);
+  applyEventPalette($("welcome"),settings);
   refreshHostEventStatus();
   updateWelcomeMode(!!hostView);
   showScreen("welcome");
@@ -929,7 +1083,29 @@ function enterBoothHistory(){
     example:boothExampleMode
   },"",location.href);
 }
+function enterHostTestHistory(context){
+  if(!history.pushState)return;
+  const current=history.state||{};
+  if(current.surface===HISTORY_SURFACE.BOOTH&&current.hostTest)return;
+  history.pushState({
+    surface:HISTORY_SURFACE.BOOTH,
+    returnScreen:"host-test",
+    hostTest:true,
+    hostReturnScreen:context&&context.returnScreen||"settings",
+    example:!!(context&&context.example),
+    hostView:true
+  },"",location.href);
+}
+function requestHostTestExit(){
+  const state=history.state||{};
+  if(state.surface===HISTORY_SURFACE.BOOTH&&state.hostTest&&history.back&&history.length>1){
+    if(!historyTransitionPending){historyTransitionPending=true;history.back();}
+    return;
+  }
+  exitHostTestPreview();
+}
 function showBoothReturnScreen(){
+  if(hostTestActive()){requestHostTestExit();return;}
   teardownBoothSession();
   const state=history.state||{};
   if(state.surface===HISTORY_SURFACE.BOOTH&&history.back&&history.length>1){
@@ -975,6 +1151,7 @@ function restoreHistorySurface(state){
 }
 function handleHistoryChange(event){
   historyTransitionPending=false;
+  if(hostTestActive()){exitHostTestPreview();return;}
   teardownBoothSession();
   const state=event&&event.state||history.state||{};
   if(restoreHistorySurface(state))return;
@@ -995,11 +1172,11 @@ function fillSettingsUI(){
   $("welcomeDate").hidden=!meta;
   $("welcomeEventLine").textContent=settings.eventLine||"";
   $("welcomeEventLine").hidden=!settings.eventLine;
-  document.documentElement.style.setProperty("--accent",settings.accent);
+  applyRootPalette(settings);
   applyScreenText();
 
   const map={
-    setEventType:"eventType",setEventTitle:"eventTitle",setLocation:"location",setDate:"date",setDatePrecision:"datePrecision",setEventLine:"eventLine",setLook:"look",
+    setEventType:"eventType",setEventTitle:"eventTitle",setLocation:"location",setDate:"date",setDatePrecision:"datePrecision",setEventLine:"eventLine",
     setStripFrame:"stripFrame",setStripFilter:"stripFilter",setMagazineTemplate:"magazineTemplate",
     setStripTop:"stripTop",setStripSecond:"stripSecond",setStripSignature:"stripSignature",setStripDate:"stripDate"
   };
@@ -1007,7 +1184,7 @@ function fillSettingsUI(){
   Object.entries(map).forEach(([id,key])=>{if($(id))$(id).value=settings[key];});
   if($("setEventType"))$("setEventType").value=String(settings.eventType||"party").replace(/_/g,"-");
   refreshCoverPlaceholders();
-  $("setAccent").value=settings.accent;
+  syncPaletteUI(settings);
   $("setPolaroidTransition").value=settings.polaroidTransition;
   $("setCountdown").value=String(settings.countdown);
   $("setMirror").checked=settings.mirror;
@@ -1161,6 +1338,8 @@ function refreshFontSpecimens(){
 }
 
 function draftSettings(){
+  const selectedPalette=document.querySelector('input[name="eventPalette"]:checked');
+  const palette=paletteFor(selectedPalette?selectedPalette.value:settings);
   const draft={
     ...settings,
     eventType:String($("setEventType").value||"party").replace(/-/g,"_"),
@@ -1169,7 +1348,10 @@ function draftSettings(){
     date:$("setDate").value.trim(),
     datePrecision:$("setDatePrecision").value,
     eventLine:$("setEventLine").value.trim(),
-    look:$("setLook").value,
+    paletteId:palette.id,
+    palettePrimary:palette.primary,
+    paletteSecondary:palette.secondary,
+    paletteHighlight:palette.highlight,
     stripFrame:$("setStripFrame").value,
     stripFilter:$("setStripFilter").value,
     magazineTemplate:$("setMagazineTemplate").value,
@@ -1177,7 +1359,6 @@ function draftSettings(){
     stripSecond:$("setStripSecond").value.trim(),
     stripSignature:$("setStripSignature").value.trim(),
     stripDate:$("setStripDate").value.trim(),
-    accent:$("setAccent").value,
     polaroidTransition:$("setPolaroidTransition").value,
     countdown:Number($("setCountdown").value),
     mirror:$("setMirror").checked,
@@ -1307,10 +1488,18 @@ function cancelCapture(){
   showBoothReturnScreen();
 }
 function syncReviewModeUI(){
-  document.querySelectorAll(".mode-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode===currentMode));
-  $("stripControls").classList.toggle("active",currentMode==="strip");
-  $("magazineControls").classList.toggle("active",currentMode==="magazine");
-  $("polaroidControls").classList.toggle("active",currentMode==="polaroid");
+  document.querySelectorAll(".mode-tab").forEach(b=>{
+    const selected=b.dataset.mode===currentMode;
+    b.classList.toggle("active",selected);
+    b.setAttribute("aria-selected",String(selected));
+    b.setAttribute("aria-pressed",String(selected));
+    b.tabIndex=0;
+  });
+  [["stripControls","strip"],["magazineControls","magazine"],["polaroidControls","polaroid"]].forEach(([id,mode])=>{
+    const panel=$(id),active=currentMode===mode;
+    panel.classList.toggle("active",active);
+    panel.setAttribute("aria-hidden",String(!active));
+  });
   if(currentMode==="magazine"){
     $("magazinePickStep").hidden=coverIndex!==null;
     $("magazineStyleStep").hidden=coverIndex===null;
@@ -1318,8 +1507,11 @@ function syncReviewModeUI(){
   const awaitingMagazine=currentMode==="magazine"&&coverIndex===null;
   const resultNames={strip:"YOUR PHOTO STRIP",polaroid:"YOUR MOVING POLAROID",magazine:awaitingMagazine?"PICK YOUR COVER PHOTO":"YOUR MAGAZINE COVER"};
   $("resultsKicker").textContent=resultNames[currentMode];
+  const canvas=$("mainCanvas");
+  if(canvas)canvas.setAttribute("aria-label",awaitingMagazine?"Choose one of the three photographs for the Magazine cover":resultNames[currentMode].toLowerCase()+" preview");
   $("stillPhotoBtn").hidden=currentMode!=="polaroid";
   $("retakeBtn").textContent=sharedOutputSession?"Retake three photos":currentMode==="strip"?"Retake three photos":currentMode==="polaroid"?"Retake moving moment":"Retake photo";
+  applyHostTestUI();
 }
 function resetCreativeState(experience){
   currentExperience=["strip","polaroid","magazine"].includes(experience)?experience:"strip";
@@ -1328,6 +1520,7 @@ function resetCreativeState(experience){
   filterStyle=settings.stripFilter||"original";
   coverIndex=null;
   magazineStyle=settings.magazineTemplate||"keepsake";
+  motionPlaybackRequested=false;
   invalidatePolaroid();
   $("reviewModeNav").hidden=!sharedOutputSession;
   $("review").querySelector(".review-panel").classList.toggle("output-locked",eventIsPersonalised());
@@ -1338,10 +1531,12 @@ function resetCreativeState(experience){
 
 async function captureMovingPolaroid(sid){
   const canvas=$("motionCanvas"),video=$("video");
+  const palette=outputPalette(settings);
   const compositor=Polaroid.composeLive({
     base:POLAROID_VIDEO_BASE,
     copy:Polaroid.copyFor(settings),
     hand:Fonts.stack("hand",settings),
+    backdrop:palette.secondary,
     attribution:currentBranding(),
     mirror:settings.mirror,
     draftPreview:eventIsDraft()
@@ -1405,10 +1600,15 @@ async function captureMovingPolaroid(sid){
 }
 
 async function beginSession(experience,options){
+  const purpose=options&&options.purpose==="host-test"?"host-test":"guest";
+  const isHostTest=purpose==="host-test";
+  activeCapturePurpose=purpose;
+  applyHostTestUI();
+  hideCameraError();
   /* A newly activated worker waits until the previous guest is finished. The
      next Start/Retake/Next guest tap is a safe boundary to load the new app. */
   if(serviceWorkerRefreshPending){showBoothReturnScreen();return;}
-  if(EVENT&&eventIsPersonalised()){
+  if(EVENT&&eventIsPersonalised()&&!isHostTest){
     settings=EVENT.refreshEventLifecycle(settings);
     if(settings.eventStatus==="ENDED"){
       persistSettings();showEventHome(boothExampleMode,false);return;
@@ -1423,7 +1623,7 @@ async function beginSession(experience,options){
   const sid=captureSessionId;
   const shared=experience==="shared";
   const retaking=!!(options&&options.retake);
-  const replaceId=shared&&retaking?activeGalleryRecordId:null;
+  const replaceId=shared&&retaking&&!isHostTest?activeGalleryRecordId:null;
   const replacingRecord=replaceId!==null&&replaceId!==undefined&&Number.isFinite(Number(replaceId));
   if(!replacingRecord)activeGalleryRecordId=null;
   if(!retaking)resetGuestCompletionState(true);
@@ -1434,8 +1634,9 @@ async function beginSession(experience,options){
   resetCreativeState(shared?"strip":(experience||currentExperience));
   initAudio();
   const labels={strip:"PHOTO STRIP",polaroid:"MOVING POLAROID",magazine:"MAGAZINE COVER"};
-  $("cameraExperienceLabel").textContent=shared?"YOUR PHOTOBOOTH":labels[currentExperience];
+  $("cameraExperienceLabel").textContent=isHostTest?"CAMERA TEST":shared?"YOUR PHOTOBOOTH":labels[currentExperience];
   $("stripFramingGuide").hidden=!(shared||currentExperience==="strip");
+  applyHostTestUI();
   showScreen("camera");
 
   const promptList=capturePrompts();
@@ -1466,13 +1667,18 @@ async function beginSession(experience,options){
     }
     if(sid!==captureSessionId)return;
     stopCamera();
-    const galleryRecord=await saveSessionToGallery(photos,sessionOrientation,shared?"shared":currentExperience,replaceId);
-    if(sid!==captureSessionId)return;
-    if(galleryRecord)activeGalleryRecordId=galleryRecord.id;
-    if(!replacingRecord){
-      const galleryCount=await countGallerySessions();
+    if(!isHostTest){
+      const galleryRecord=await saveSessionToGallery(photos,sessionOrientation,shared?"shared":currentExperience,replaceId);
       if(sid!==captureSessionId)return;
-      sessionEdition=nextEditionNumber(galleryCount);
+      if(galleryRecord)activeGalleryRecordId=galleryRecord.id;
+      if(!replacingRecord){
+        const galleryCount=await countGallerySessions();
+        if(sid!==captureSessionId)return;
+        sessionEdition=nextEditionNumber(galleryCount);
+      }
+    }else{
+      activeGalleryRecordId=null;
+      sessionEdition=14;
     }
     if(currentExperience==="magazine")coverIndex=0;
     buildReviewControls();
@@ -1490,8 +1696,11 @@ async function beginSession(experience,options){
   }
 }
 
-function beginSharedSession(retake){return beginSession("shared",{retake:!!retake});}
-function restartCurrentSession(){return sharedOutputSession?beginSharedSession(true):beginSession(currentExperience,{retake:true});}
+function beginSharedSession(retake,options){return beginSession("shared",{retake:!!retake,purpose:options&&options.purpose});}
+function restartCurrentSession(){
+  const options={retake:true,purpose:activeCapturePurpose};
+  return sharedOutputSession?beginSharedSession(true,options):beginSession(currentExperience,options);
+}
 
 /* One alert() used to cover six different causes and told everyone to fix
    Safari - including the in-app browsers a party link is actually opened in,
@@ -1550,6 +1759,7 @@ function hideCameraError(){
 }
 
 function launchConfetti(){
+  if(prefersReducedMotion())return;
   const layer=$("confettiLayer");layer.innerHTML="";
   for(let i=0;i<24;i++){
     const p=document.createElement("span");
@@ -1567,11 +1777,13 @@ function buildReviewControls(){
   FRAMES.forEach(([key,label])=>{
     const b=document.createElement("button");
     b.className="choice"+(frameStyle===key?" active":"");
+    b.type="button";
     b.dataset.choice=key;
     b.textContent=label;
+    b.setAttribute("aria-pressed",String(frameStyle===key));
     b.onclick=()=>{
       frameStyle=key;
-      document.querySelectorAll("#frameChoices .choice").forEach(x=>x.classList.toggle("active",x===b));
+      document.querySelectorAll("#frameChoices .choice").forEach(x=>{const selected=x===b;x.classList.toggle("active",selected);x.setAttribute("aria-pressed",String(selected));});
       renderWithFade();resetIdle();
     };
     $("frameChoices").appendChild(b);
@@ -1581,11 +1793,13 @@ function buildReviewControls(){
   FILTERS.forEach(([key,label])=>{
     const b=document.createElement("button");
     b.className="choice"+(filterStyle===key?" active":"");
+    b.type="button";
     b.dataset.choice=key;
     b.textContent=label;
+    b.setAttribute("aria-pressed",String(filterStyle===key));
     b.onclick=()=>{
       filterStyle=key;
-      document.querySelectorAll("#filterChoices .choice").forEach(x=>x.classList.toggle("active",x===b));
+      document.querySelectorAll("#filterChoices .choice").forEach(x=>{const selected=x===b;x.classList.toggle("active",selected);x.setAttribute("aria-pressed",String(selected));});
       renderWithFade();resetIdle();
     };
     $("filterChoices").appendChild(b);
@@ -1595,13 +1809,16 @@ function buildReviewControls(){
   photos.forEach((src,i)=>{
     const b=document.createElement("button");
     b.className="photo-choice"+(coverIndex===i?" active":"");
+    b.type="button";
     b.dataset.photoIndex=String(i);
-    const img=document.createElement("img");img.src=src;b.appendChild(img);
+    b.setAttribute("aria-label","Choose photo "+(i+1)+" of "+photos.length+" for the Magazine cover");
+    b.setAttribute("aria-pressed",String(coverIndex===i));
+    const img=document.createElement("img");img.src=src;img.alt="";b.appendChild(img);
     b.onclick=()=>{
       coverIndex=i;
       $("magazinePickStep").hidden=true;
       $("magazineStyleStep").hidden=false;
-      document.querySelectorAll(".photo-choice").forEach(x=>x.classList.toggle("active",x===b));
+      document.querySelectorAll(".photo-choice").forEach(x=>{const selected=x===b;x.classList.toggle("active",selected);x.setAttribute("aria-pressed",String(selected));});
       syncReviewModeUI();
       renderStyleThumbs();
       renderWithFade();
@@ -1617,6 +1834,8 @@ function buildReviewControls(){
     b.className="mag-style-choice"+(magazineStyle===tpl.key?" active":"");
     b.type="button";
     b.dataset.template=tpl.key;
+    b.setAttribute("aria-pressed",String(magazineStyle===tpl.key));
+    b.setAttribute("aria-label",tpl.label+" Magazine style — "+tpl.hint);
     const cv=document.createElement("canvas");
     cv.className="mag-style-preview";
     cv.dataset.template=tpl.key;
@@ -1625,7 +1844,7 @@ function buildReviewControls(){
     b.append(cv,tx,hint);
     b.onclick=()=>{
       magazineStyle=tpl.key;
-      document.querySelectorAll(".mag-style-choice").forEach(x=>x.classList.toggle("active",x===b));
+      document.querySelectorAll(".mag-style-choice").forEach(x=>{const selected=x===b;x.classList.toggle("active",selected);x.setAttribute("aria-pressed",String(selected));});
       renderWithFade();resetIdle();
     };
     $("magazineStyleChoices").appendChild(b);
@@ -1649,13 +1868,14 @@ async function renderStyleThumbs(){
   if(token!==thumbToken)return;
   const copy=Covers.copyFor(settings);
   const size=Covers.coverSize(sessionOrientation,440);
+  const palette=outputPalette(settings);
   nodes.forEach(cv=>{
     cv.width=size.width;cv.height=size.height;
     Covers.render(cv.getContext("2d"),{
       img:img||Covers.placeholder(),
       fonts:Fonts.faces(settings),
       width:size.width,height:size.height,
-      copy,accent:settings.accent,
+      copy,accent:palette.primary,accentInk:safeForeground(palette.primary),
       template:cv.dataset.template,
       edition:{no:sessionEdition},
       branding:currentBranding()
@@ -1753,14 +1973,15 @@ async function render(token){
 /* No `photoFilter`: the guest's filter choice is a strip-only system. Covers
    carry the editorial finish instead, so every cover from a booth matches. */
 function renderMagazine(ctx,c,img){
-  const size=Covers.coverSize(sessionOrientation,1200);
+  const size=Covers.coverSize(sessionOrientation,1200),palette=outputPalette(settings);
   c.width=size.width;c.height=size.height;
   Covers.render(ctx,{
     img,
     width:size.width,height:size.height,
     copy:Covers.copyFor(settings),
     fonts:Fonts.faces(settings),
-    accent:settings.accent,
+    accent:palette.primary,
+    accentInk:safeForeground(palette.primary),
     template:magazineStyle,
     edition:{no:sessionEdition},
     branding:currentBranding()
@@ -1773,14 +1994,16 @@ function drawDraftPreview(ctx,width,height,draftOverride){
   if(!shouldMark)return;
   ctx.save();
   ctx.translate(width/2,height/2);
-  ctx.rotate(-Math.PI/10);
-  const boxW=Math.min(width*.72,760),boxH=Math.max(54,height*.055);
-  ctx.fillStyle="rgba(222,210,242,.94)";
-  ctx.strokeStyle="#111";ctx.lineWidth=Math.max(2,width/480);
-  ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH);ctx.strokeRect(-boxW/2,-boxH/2,boxW,boxH);
-  ctx.fillStyle="#111";ctx.textAlign="center";ctx.textBaseline="middle";
-  ctx.font=`900 ${Math.max(22,boxH*.42)}px ${Fonts.stack("text",settings)}`;
-  ctx.fillText("DRAFT PREVIEW",0,1);
+  ctx.rotate(-Math.PI/6);
+  const fontSize=Math.max(42,Math.min(180,Math.min(width,height)*.18));
+  ctx.textAlign="center";ctx.textBaseline="middle";
+  ctx.font=`900 ${fontSize}px ${Fonts.stack("text",settings)}`;
+  ctx.globalAlpha=.18;
+  ctx.lineWidth=Math.max(2,fontSize*.055);
+  ctx.strokeStyle="#fff";
+  if(typeof ctx.strokeText==="function")ctx.strokeText("SAMPLE",0,0);
+  ctx.fillStyle="#111";
+  ctx.fillText("SAMPLE",0,0);
   ctx.restore();
 }
 
@@ -1800,22 +2023,134 @@ let polaroidToken=0;
 let polaroidVideoBlob=null;
 let polaroidVideoUrl=null;
 let polaroidState="idle";
+let polaroidPreviewEpoch=0;
+let polaroidHandoffTimer=0;
+let polaroidVisibilityHandler=null;
 
 function polaroidOptions(images){
+  const palette=outputPalette(settings);
   return {
     images,
     copy:Polaroid.copyFor(settings),
     hand:Fonts.stack("hand",settings),
     transition:settings.polaroidTransition||"crossfade",
+    backdrop:palette.secondary,
     attribution:currentBranding(),
     draftPreview:eventIsDraft()
   };
+}
+function clearPolaroidHandoff(){
+  if(polaroidHandoffTimer){clearTimeout(polaroidHandoffTimer);polaroidHandoffTimer=0;}
+  if(polaroidVisibilityHandler){
+    document.removeEventListener("visibilitychange",polaroidVisibilityHandler);
+    polaroidVisibilityHandler=null;
+  }
+}
+function polaroidPreviewSeconds(now){
+  if(!polaroidJob||!polaroidJob.timeline)return 0;
+  const epoch=polaroidPreviewEpoch||Number(now)||performance.now();
+  const elapsed=Math.max(0,((Number(now)||performance.now())-epoch)/1000);
+  return (polaroidJob.timeline.previewStart||0)+elapsed;
+}
+function startPolaroidPreviewLoop(token,ctx){
+  clearPolaroidHandoff();
+  stopPolaroidLoop();
+  polaroidPreviewEpoch=performance.now();
+  polaroidJob.drawAt(ctx,polaroidPreviewSeconds(polaroidPreviewEpoch));
+  (function step(){
+    if(token!==polaroidToken||!polaroidJob)return;
+    polaroidJob.drawAt(ctx,polaroidPreviewSeconds());
+    polaroidRaf=requestAnimationFrame(step);
+  })();
+}
+/* Encoding finishes at an arbitrary point in the canvas loop. Prepare the
+   video out of sight, then replace the canvas only at their common Photo-1
+   seam. Both surfaces therefore show identical pixels during the handoff. */
+function queuePolaroidVideoHandoff(token,job){
+  const v=$("polaroidVideo"),c=$("mainCanvas");
+  if(!v||!c||!polaroidVideoUrl)return;
+  clearPolaroidHandoff();
+  let scheduled=false,revealed=false;
+  const valid=()=>token===polaroidToken&&currentMode==="polaroid"&&polaroidJob===job;
+  const complete=()=>{
+    if(revealed)return;
+    if(!valid()){v.pause();return;}
+    if(document.visibilityState&&document.visibilityState!=="visible"){
+      v.onplaying=null;v.pause();
+      return;
+    }
+    const state=job.timeline.at(polaroidPreviewSeconds());
+    if(state.a!==0||state.b!==0){
+      v.onplaying=null;v.pause();
+      try{v.currentTime=0;}catch(error){}
+      attempt();
+      return;
+    }
+    revealed=true;v.onplaying=null;
+    stopPolaroidLoop();
+    c.hidden=true;v.hidden=false;
+    v.onpause=()=>{
+      if(valid()&&!v.hidden&&(!document.visibilityState||document.visibilityState==="visible"))v.play().catch(()=>{});
+    };
+  };
+  const beginPlayback=()=>{
+    v.onseeked=null;
+    if(!valid()||(document.visibilityState&&document.visibilityState!=="visible"))return;
+    v.onplaying=complete;
+    const playback=v.play();
+    if(playback&&typeof playback.then==="function")playback.then(complete).catch(()=>{v.onplaying=null;v.pause();});
+  };
+  const reveal=()=>{
+    polaroidHandoffTimer=0;
+    if(!valid())return;
+    v.pause();v.onseeked=beginPlayback;
+    try{v.currentTime=0;}catch(error){}
+    if(!v.seeking)beginPlayback();
+  };
+  const attempt=()=>{
+    polaroidHandoffTimer=0;
+    if(!valid())return;
+    if(document.visibilityState&&document.visibilityState!=="visible")return;
+    const duration=job.timeline.duration;
+    const wait=Polaroid.timeToSeam(polaroidPreviewSeconds(),duration);
+    const tolerance=2/POLAROID_FPS;
+    /* Timer throttling can wake just after the seam. Both sides of this small
+       window are still the same Photo-1 hold, so revealing remains seamless. */
+    if(wait>tolerance&&wait<duration-tolerance){
+      polaroidHandoffTimer=setTimeout(attempt,wait*1000);
+      return;
+    }
+    reveal();
+  };
+  const schedule=()=>{
+    if(scheduled)return;
+    scheduled=true;v.pause();
+    try{v.currentTime=0;}catch(error){}
+    attempt();
+  };
+  polaroidVisibilityHandler=()=>{
+    if(!valid()||document.visibilityState!=="visible")return;
+    if(revealed){if(!v.hidden&&v.paused)v.play().catch(()=>{});}
+    else attempt();
+  };
+  document.addEventListener("visibilitychange",polaroidVisibilityHandler);
+  v.hidden=true;
+  v.autoplay=false;
+  v.onloadeddata=schedule;
+  v.onplaying=null;
+  v.onpause=null;
+  v.onseeked=null;
+  v.src=polaroidVideoUrl;
+  v.load();
+  if(v.readyState>=2)schedule();
 }
 /* Bumping the token orphans any in-flight build or encode, so a settings
    save mid-render can never drop a stale video on the next guest. */
 function invalidatePolaroid(){
   polaroidToken++;
+  clearPolaroidHandoff();
   stopPolaroidLoop();
+  polaroidPreviewEpoch=0;
   polaroidJob=null;
   polaroidVideoBlob=null;
   polaroidState="idle";
@@ -1824,39 +2159,40 @@ function invalidatePolaroid(){
   if(v){
     /* Drop the handlers first — the resume-on-pause nudge would otherwise
        fight this teardown. */
-    v.onloadeddata=v.onplaying=v.onpause=null;
+    v.onloadeddata=v.onplaying=v.onpause=v.onseeked=null;
     v.pause();v.removeAttribute("src");v.load();v.hidden=true;
   }
   const c=$("mainCanvas");if(c)c.hidden=false;
+  const play=$("polaroidPlayBtn");if(play)play.hidden=true;
 }
 function stopPolaroidLoop(){if(polaroidRaf){cancelAnimationFrame(polaroidRaf);polaroidRaf=0;}}
 function leavePolaroid(){
+  clearPolaroidHandoff();
   stopPolaroidLoop();
+  polaroidPreviewEpoch=0;
   const v=$("polaroidVideo");
-  if(v&&!v.hidden){v.pause();v.hidden=true;}
+  if(v){v.onloadeddata=v.onplaying=v.onpause=v.onseeked=null;v.pause();v.hidden=true;}
   $("mainCanvas").hidden=false;
+  const play=$("polaroidPlayBtn");if(play)play.hidden=true;
 }
 function polaroidStatus(){
   const el=$("polaroidStatus");if(!el)return;
-  el.textContent=looseText(
+  const reduced=prefersReducedMotion()&&!motionPlaybackRequested;
+  const reducedReady=reduced&&(polaroidState==="ready"||polaroidState==="unsupported");
+  el.textContent=reducedReady?"Motion is paused to match your device setting. The finished Polaroid is ready.":looseText(
     polaroidState==="ready"?"polaroidReadyLabel":
     polaroidState==="unsupported"?"polaroidStillLabel":"polaroidBusyLabel");
   el.classList.toggle("ready",polaroidState==="ready");
+  const play=$("polaroidPlayBtn");
+  if(play)play.hidden=!(reducedReady&&sharedOutputSession);
 }
 
 async function enterPolaroid(){
   const token=++polaroidToken;
-  polaroidStatus();
-  if(sharedOutputSession&&polaroidVideoBlob&&polaroidVideoUrl){
-    const video=$("polaroidVideo");
-    video.src=polaroidVideoUrl;video.hidden=false;
-    $("mainCanvas").hidden=true;
-    polaroidState="ready";polaroidStatus();
-    refreshExportControls();
-    video.play().catch(()=>{});
-    return;
-  }
-  if(sharedOutputSession){polaroidState="working";polaroidStatus();refreshExportControls();}
+  const reduced=prefersReducedMotion()&&!motionPlaybackRequested;
+  const encodedReady=!!(sharedOutputSession&&polaroidVideoBlob&&polaroidVideoUrl);
+  if(sharedOutputSession){polaroidState=encodedReady?"ready":"working";polaroidStatus();refreshExportControls();}
+  else polaroidStatus();
   const imgs=await Promise.all(photos.map(loadImage));
   if(token!==polaroidToken||currentMode!=="polaroid")return;
 
@@ -1868,12 +2204,12 @@ async function enterPolaroid(){
     const c=$("mainCanvas"),ctx=c.getContext("2d");
     c.width=polaroidJob.geo.W;c.height=polaroidJob.geo.H;c.hidden=false;
     polaroidJob.drawStill(ctx,0);
-    drawDraftPreview(ctx,c.width,c.height);
     polaroidVideoBlob=motionCaptureBlob||null;
     polaroidState=motionCaptureBlob?"ready":"unsupported";
     polaroidStatus();
     refreshExportControls();
     if(!motionCaptureBlob)return;
+    if(reduced)return;
     if(polaroidVideoUrl)URL.revokeObjectURL(polaroidVideoUrl);
     polaroidVideoUrl=URL.createObjectURL(motionCaptureBlob);
     const v=$("polaroidVideo");
@@ -1892,14 +2228,14 @@ async function enterPolaroid(){
   const c=$("mainCanvas"),ctx=c.getContext("2d");
   c.width=polaroidJob.geo.W;c.height=polaroidJob.geo.H;
   c.hidden=false;
-  const started=performance.now();
-  (function step(){
-    if(token!==polaroidToken||!polaroidJob)return;
-    polaroidJob.drawAt(ctx,(performance.now()-started)/1000);
-    polaroidRaf=requestAnimationFrame(step);
-  })();
-
-  encodePolaroid(token);
+  if(reduced){
+    polaroidJob.drawStill(ctx,0);
+    if(!encodedReady)encodePolaroid(token);
+    return;
+  }
+  startPolaroidPreviewLoop(token,ctx);
+  if(encodedReady)queuePolaroidVideoHandoff(token,polaroidJob);
+  else encodePolaroid(token);
 }
 
 async function encodePolaroid(token){
@@ -1919,21 +2255,8 @@ async function encodePolaroid(token){
     polaroidVideoUrl=URL.createObjectURL(blob);
     polaroidState="ready";polaroidStatus();refreshExportControls();
     if(currentMode!=="polaroid")return;
-    const v=$("polaroidVideo");
-    v.src=polaroidVideoUrl;
-    v.hidden=false;
-    /* Only stop the canvas once the video has a frame to show, so a slow
-       first decode never leaves the guest looking at an empty stage. Both
-       events, because a video that is blocked from autoplaying still decodes
-       — and showing its first frame beats showing it beside the canvas. */
-    const swap=()=>{if(currentMode==="polaroid"){stopPolaroidLoop();$("mainCanvas").hidden=true;}};
-    v.onloadeddata=swap;
-    v.onplaying=swap;
-    /* iOS pauses inline video when the booth is backgrounded and does not
-       resume on return. Nothing in the UI can pause it deliberately, so any
-       pause while the guest is still here is one to undo. */
-    v.onpause=()=>{if(currentMode==="polaroid"&&!v.hidden)v.play().catch(()=>{});};
-    v.play().catch(()=>{});
+    if(prefersReducedMotion()&&!motionPlaybackRequested)return;
+    queuePolaroidVideoHandoff(token,job);
   }catch(e){
     if(token!==polaroidToken)return;
     polaroidState="unsupported";polaroidStatus();refreshExportControls();
@@ -1951,7 +2274,6 @@ async function polaroidPrintBlob(){
   /* Magazine's favourite is a Magazine decision. The Moving Polaroid seam
      starts and ends on photo one, so its still always matches that print. */
   job.drawStill(ctx,0);
-  drawDraftPreview(ctx,c.width,c.height);
   return new Promise((resolve,reject)=>c.toBlob(blob=>blob?resolve(blob):reject(new Error("The Polaroid print could not be prepared.")),"image/png",1));
 }
 
@@ -1959,7 +2281,7 @@ function renderStrip(ctx,c,imgs,s,orientation,creative){
   const chosenFrame=creative&&creative.frameStyle||frameStyle;
   const chosenFilter=creative&&creative.filterStyle||filterStyle;
   const branding=creative&&Object.prototype.hasOwnProperty.call(creative,"branding")?creative.branding:currentBranding();
-  const copy=stripCopyFor(s);
+  const copy=stripCopyFor(s),palette=outputPalette(s,{personal:creative&&creative.paletteMode==="personal"});
   if(!STRIP)throw new Error("The Photo Strip renderer is unavailable.");
   return STRIP.render(ctx,{
     canvas:c,
@@ -1967,7 +2289,7 @@ function renderStrip(ctx,c,imgs,s,orientation,creative){
     frameStyle:chosenFrame,
     filterStyle:chosenFilter,
     fonts:typography(s),
-    accent:s.accent,
+    accent:palette.primary,
     event:{name:copy.signature||s.eventTitle,location:s.location,date:copy.date||s.date},
     footer:{primary:copy.signature||s.eventTitle,location:s.location,date:copy.date||s.date},
     branding,
@@ -2072,47 +2394,198 @@ function resetIdle(){
   }
 }
 
-/* The admin preview runs the real cover renderer against a stand-in photo,
-   so what the host tunes here is exactly what guests get. */
-function renderAdminPreview(){
+/* Design photos are deliberately memory-only. They never enter EventConfig,
+   the shared guest `photos` array or IndexedDB, but they survive the host's
+   customise → camera test → customise loop for as long as this page is open. */
+function stopAdminPreviewMotion(){
+  if(adminPreviewMotionFrame){cancelAnimationFrame(adminPreviewMotionFrame);adminPreviewMotionFrame=0;}
+}
+async function readPreviewPhoto(file){
+  if(!file||!/^image\//i.test(file.type||""))throw new Error("Choose image files from your photo library.");
+  if(file.size>15*1024*1024)throw new Error("Each preview photo must be smaller than 15 MB.");
+  const objectUrl=URL.createObjectURL(file);
+  try{
+    const image=await loadImage(objectUrl);
+    const sourceWidth=image.naturalWidth||image.width,sourceHeight=image.naturalHeight||image.height;
+    if(!sourceWidth||!sourceHeight)throw new Error("invalid image");
+    const maxEdge=2048,maxPixels=3000000;
+    const scale=Math.min(1,maxEdge/sourceWidth,maxEdge/sourceHeight,Math.sqrt(maxPixels/(sourceWidth*sourceHeight)));
+    const canvas=document.createElement("canvas");
+    canvas.width=Math.max(1,Math.round(sourceWidth*scale));
+    canvas.height=Math.max(1,Math.round(sourceHeight*scale));
+    const context=canvas.getContext("2d");
+    context.imageSmoothingEnabled=true;
+    context.imageSmoothingQuality="high";
+    context.drawImage(image,0,0,canvas.width,canvas.height);
+    return canvas;
+  }catch(error){
+    throw new Error("One of those photo formats cannot be previewed in this browser.");
+  }finally{
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+function releaseAdminPreviewPhotos(photosToRelease){
+  (photosToRelease||[]).forEach(source=>{
+    if(source instanceof HTMLCanvasElement){source.width=1;source.height=1;}
+  });
+}
+function previewPhotoThumb(source){
+  const canvas=document.createElement("canvas"),context=canvas.getContext("2d");
+  canvas.width=160;canvas.height=200;
+  const sourceWidth=source.width||1,sourceHeight=source.height||1;
+  const scale=Math.max(canvas.width/sourceWidth,canvas.height/sourceHeight);
+  const width=sourceWidth*scale,height=sourceHeight*scale;
+  context.drawImage(source,(canvas.width-width)/2,(canvas.height-height)/2,width,height);
+  return canvas;
+}
+function renderPreviewPhotoThumbs(){
+  const host=$("previewPhotoThumbs"),status=$("previewPhotoStatus"),clear=$("clearPreviewPhotos");
+  if(!host||!status||!clear)return;
+  host.innerHTML="";
+  clear.hidden=!adminPreviewPhotos.length;
+  if(!adminPreviewPhotos.length){
+    status.textContent="Using the built-in sample. Choose up to three photos from this device to make the preview yours.";
+    return;
+  }
+  status.textContent=adminPreviewPhotos.length+" photo"+(adminPreviewPhotos.length===1?"":"s")+" selected. Photo "+(adminPreviewPhotoIndex+1)+" is the Magazine favourite; Strip and Moving Polaroid use all three.";
+  adminPreviewPhotos.forEach((source,index)=>{
+    const button=document.createElement("button");
+    const selected=index===adminPreviewPhotoIndex;
+    button.type="button";
+    button.className="preview-photo-thumb"+(selected?" active":"");
+    button.setAttribute("aria-label","Use preview photo "+(index+1)+" for the Magazine cover");
+    button.setAttribute("aria-pressed",String(selected));
+    button.appendChild(previewPhotoThumb(source));
+    button.onclick=()=>{
+      adminPreviewPhotoIndex=index;
+      renderPreviewPhotoThumbs();
+      renderAdminPreview();
+    };
+    host.appendChild(button);
+  });
+}
+async function useAdminPreviewPhotos(){
+  const input=$("adminPreviewPhotos"),status=$("previewPhotoStatus");
+  const files=Array.from(input&&input.files||[]).slice(0,3);
+  if(!files.length)return;
+  status.textContent="Preparing your photos…";
+  const selected=[];
+  try{
+    for(const file of files)selected.push(await readPreviewPhoto(file));
+    releaseAdminPreviewPhotos(adminPreviewPhotos);
+    adminPreviewPhotos=selected;
+    adminPreviewPhotoIndex=0;
+    renderPreviewPhotoThumbs();
+    await renderAdminPreview();
+  }catch(error){
+    releaseAdminPreviewPhotos(selected);
+    status.textContent=error.message||"Those photos could not be used for the preview.";
+  }finally{
+    if(input)input.value="";
+  }
+}
+function clearAdminPreviewPhotos(){
+  releaseAdminPreviewPhotos(adminPreviewPhotos);
+  adminPreviewPhotos=[];
+  adminPreviewPhotoIndex=0;
+  renderPreviewPhotoThumbs();
+  renderAdminPreview();
+}
+function builtInAdminPreviewImages(){
+  if(adminPreviewSamplePromise)return adminPreviewSamplePromise;
+  adminPreviewSamplePromise=loadImage("assets/demo-photos.jpg").then(image=>{
+    if(image.naturalWidth!==1536||image.naturalHeight<640)throw new Error("invalid sample sheet");
+    const cropY=Math.floor((image.naturalHeight-640)/2);
+    return [0,1,2].map(index=>{
+      const canvas=document.createElement("canvas");canvas.width=512;canvas.height=640;
+      canvas.getContext("2d").drawImage(image,index*512,cropY,512,640,0,0,512,640);
+      return canvas;
+    });
+  }).catch(()=>{
+    const sample=Covers.placeholder();
+    return [sample,sample,sample];
+  });
+  return adminPreviewSamplePromise;
+}
+async function adminPreviewImages(){
+  if(!adminPreviewPhotos.length)return builtInAdminPreviewImages();
+  const images=adminPreviewPhotos.slice();
+  while(images.length<3)images.push(images[images.length-1]);
+  return images.slice(0,3);
+}
+
+/* Every host output uses the same production renderer as Review. The smaller
+   preview surface changes only the working resolution, never the geometry or
+   composition rules. */
+async function renderAdminPreview(){
   if(adminPreviewTimer){clearTimeout(adminPreviewTimer);adminPreviewTimer=0;}
-  const s=draftSettings(),c=$("adminPreviewCanvas"),ctx=c.getContext("2d");
-  const land=adminOrientation==="landscape";
-  const adminDraft=String(s.eventStatus||"DRAFT")==="DRAFT";
+  stopAdminPreviewMotion();
+  const token=++adminPreviewRenderToken;
+  const s=draftSettings(),palette=paletteFor(s),c=$("adminPreviewCanvas");
+  if(!c)return;
+  const ctx=c.getContext("2d"),adminDraft=String(s.eventStatus||"DRAFT")==="DRAFT";
+  applyRootPalette(palette.id);
+  let images;
+  try{images=await adminPreviewImages();}
+  catch(error){if($("previewPhotoStatus"))$("previewPhotoStatus").textContent="Those photos could not be drawn. Try another image.";return;}
+  if(token!==adminPreviewRenderToken)return;
+  c.dataset.renderer=adminPreviewType;
+  c.setAttribute("aria-label",(adminPreviewType==="strip"?"Photo Strip":adminPreviewType==="magazine"?"Magazine":"Moving Polaroid")+" live output preview");
+  const orientationControl=document.querySelector(".orientation-control");
+  if(orientationControl)orientationControl.hidden=adminPreviewType==="polaroid";
+  const playMotion=$("adminPreviewPlayMotion");
+  if(playMotion)playMotion.hidden=true;
 
   if(adminPreviewType==="strip"){
-    const photo=Covers.placeholder();
-    renderStrip(ctx,c,[photo,photo,photo],s,adminOrientation,{frameStyle:"white",filterStyle:"original",branding:personalPreviewBranding(),draft:adminDraft});
-    return;
-  }
-
-  /* Instant film has one shape, so the Polaroid preview ignores the
-     landscape/portrait tabs — a session's orientation changes the crop
-     inside the window, never the print. */
-  if(adminPreviewType==="polaroid"){
-    const geo=Polaroid.size(430);
-    c.width=geo.W;c.height=geo.H;
-    Polaroid.render(ctx,{
-      width:430,img:Covers.placeholder(),
-      copy:Polaroid.copyFor(s),
-      hand:Fonts.stack("hand",s),transition:s.polaroidTransition,
-      attribution:personalPreviewBranding()
+    renderStrip(ctx,c,images,s,adminOrientation,{
+      frameStyle:s.stripFrame,
+      filterStyle:s.stripFilter,
+      branding:personalPreviewBranding(s),
+      paletteMode:"personal",
+      draft:adminDraft
     });
-    drawDraftPreview(ctx,c.width,c.height,adminDraft);
     return;
   }
 
-  const size=Covers.coverSize(adminOrientation,land?520:600);
+  if(adminPreviewType==="polaroid"){
+    const job=Polaroid.compose({
+      base:520,
+      images,
+      copy:Polaroid.copyFor(s),
+      hand:Fonts.stack("hand",s),
+      transition:s.polaroidTransition,
+      backdrop:palette.secondary,
+      attribution:personalPreviewBranding(s),
+      draftPreview:adminDraft
+    });
+    c.width=job.geo.W;c.height=job.geo.H;
+    if(prefersReducedMotion()&&!adminPreviewMotionRequested){
+      job.drawStill(ctx,0);
+      if(playMotion)playMotion.hidden=false;
+      return;
+    }
+    if(!adminPolaroidPreviewEpoch)adminPolaroidPreviewEpoch=performance.now();
+    const epoch=adminPolaroidPreviewEpoch;
+    (function drawPreview(){
+      if(token!==adminPreviewRenderToken||adminPreviewType!=="polaroid"||!$("settings").classList.contains("active"))return;
+      job.drawAt(ctx,(job.timeline.previewStart||0)+(performance.now()-epoch)/1000);
+      adminPreviewMotionFrame=requestAnimationFrame(drawPreview);
+    })();
+    return;
+  }
+
+  const size=Covers.coverSize(adminOrientation,adminOrientation==="landscape"?720:760);
   c.width=size.width;c.height=size.height;
   Covers.render(ctx,{
-    img:Covers.placeholder(),
+    img:images[Math.min(adminPreviewPhotoIndex,images.length-1)],
     width:size.width,height:size.height,
     copy:Covers.copyFor(s),
     fonts:Fonts.faces(s),
-    accent:s.accent,
-    template:adminPreviewType,
+    accent:palette.primary,
+    accentInk:safeForeground(palette.primary),
+    template:s.magazineTemplate||"keepsake",
     edition:{no:14},
-    branding:personalPreviewBranding()
+    branding:personalPreviewBranding(s)
   });
   drawDraftPreview(ctx,c.width,c.height,adminDraft);
 }
@@ -2121,21 +2594,34 @@ function scheduleAdminPreview(){
   adminPreviewTimer=setTimeout(()=>{adminPreviewTimer=0;renderAdminPreview();},90);
 }
 
-function setSetupStep(step){
+function setSetupStep(step,options){
   activeSetupStep=Math.max(0,Math.min(4,Number(step)||0));
+  let activePanel=null;
   document.querySelectorAll("[data-setup-panel]").forEach(panel=>{
     const active=Number(panel.dataset.setupPanel)===activeSetupStep;
     panel.hidden=!active;panel.classList.toggle("active",active);
+    panel.setAttribute("aria-hidden",String(!active));
+    if(active)activePanel=panel;
   });
-  document.querySelectorAll("[data-setup-step]").forEach(button=>button.classList.toggle("active",Number(button.dataset.setupStep)===activeSetupStep));
+  document.querySelectorAll("[data-setup-step]").forEach(button=>{
+    const active=Number(button.dataset.setupStep)===activeSetupStep;
+    button.classList.toggle("active",active);
+    button.setAttribute("aria-selected",String(active));
+    if(active)button.setAttribute("aria-current","step");else button.removeAttribute("aria-current");
+  });
   $("setupBack").hidden=activeSetupStep===0;
   $("setupNext").hidden=activeSetupStep===4;
-  if(activeSetupStep===3||activeSetupStep===4)renderAdminPreview();
+  renderAdminPreview();
+  if((!options||options.focus!==false)&&$("settings").classList.contains("active")&&activePanel){
+    const heading=activePanel.querySelector("h3");
+    if(heading){heading.tabIndex=-1;requestAnimationFrame(()=>heading.focus({preventScroll:false}));}
+  }
 }
 function openPersonalSettings(returnScreen){
   settingsReturnScreen=returnScreen||"landing";
-  fillSettingsUI();setSetupStep(0);showScreen("settings");
-  setTimeout(()=>{buildFontRoles();renderAdminPreview();renderEventGallery();},0);
+  adminPolaroidPreviewEpoch=adminPreviewType==="polaroid"?performance.now():0;
+  fillSettingsUI();showScreen("settings");setSetupStep(0,{focus:false});
+  setTimeout(()=>{buildFontRoles();renderPreviewPhotoThumbs();renderAdminPreview();renderEventGallery();},0);
 }
 function showSettingsSaveStatus(message){
   const el=$("settingsSaveStatus");
@@ -2162,6 +2648,56 @@ async function configuredDraftFromForm(){
     else throw new Error("Enter a four-digit Guest PIN, or turn Guest PIN off.");
   }
   return draft;
+}
+async function startHostCameraTest(returnScreen){
+  const target=returnScreen==="welcome"?"welcome":"settings";
+  const guestPinDraft=target==="settings"&&$("setGuestPin")?$("setGuestPin").value:"";
+  let draft=settings;
+  if(target==="settings"){
+    clearSettingsSaveStatus();
+    try{draft=await configuredDraftFromForm();}
+    catch(error){showSettingsSaveStatus(error.message);return false;}
+  }
+  hostTestContext={
+    returnScreen:target,
+    setupStep:activeSetupStep,
+    example:boothExampleMode,
+    originalSettings:settings,
+    draftSettings:draft,
+    guestPinDraft
+  };
+  enterHostTestHistory(hostTestContext);
+  settings=draft;
+  activeCapturePurpose="host-test";
+  setBoothReturnScreen("welcome");
+  applyHostTestUI();
+  beginSharedSession(false,{purpose:"host-test"});
+  return true;
+}
+function exitHostTestPreview(){
+  const context=hostTestContext||{returnScreen:"welcome",setupStep:activeSetupStep,example:boothExampleMode,originalSettings:settings,draftSettings:settings};
+  const testedSettings=context.draftSettings||settings;
+  hostTestContext=null;
+  activeCapturePurpose="guest";
+  teardownBoothSession();
+  if(context.returnScreen==="settings"){
+    /* Populate the controls with the tested draft, then restore the saved
+       EventConfig behind them. The next explicit Save commits the form; simply
+       testing the camera never does. */
+    settings=testedSettings;
+    fillSettingsUI();
+    if($("setGuestPin"))$("setGuestPin").value=context.guestPinDraft||"";
+    settings=context.originalSettings||testedSettings;
+    showScreen("settings");
+    setSetupStep(context.setupStep,{focus:false});
+    renderPreviewPhotoThumbs();
+    renderAdminPreview();
+    return;
+  }
+  settings=testedSettings;
+  boothExampleMode=!!context.example;
+  showEventHome(boothExampleMode,true);
+  if(history.replaceState)history.replaceState({surface:HISTORY_SURFACE.EVENT_HOME,example:boothExampleMode,hostView:true},"",location.href);
 }
 async function savePersonalSettings(showBooth){
   if(!capabilities.canPersonaliseEvent&&!legacyProfileAvailable){
@@ -2433,11 +2969,7 @@ async function submitGuestPin(event){
 }
 function previewEventAsGuest(){
   activationConfirmationPending=false;
-  if(history.replaceState&&(history.state||{}).surface===HISTORY_SURFACE.EVENT_HOME){
-    history.replaceState({...history.state,hostView:false},"",location.href);
-  }
-  updateWelcomeMode(false);
-  $("startBtn").focus();
+  startHostCameraTest("welcome");
 }
 function activateEvent(){
   if(!EVENT)return;
@@ -2490,22 +3022,42 @@ $("stillPhotoBtn").onclick=async()=>{
     if(exportSession===captureSessionId){exportBusy=false;refreshExportControls();}
   }
 };
+$("polaroidPlayBtn").onclick=()=>{
+  motionPlaybackRequested=true;
+  $("polaroidPlayBtn").hidden=true;
+  enterPolaroid();
+  resetIdle();
+};
 $("changeCoverPhoto").onclick=()=>{
   coverIndex=null;
   $("magazinePickStep").hidden=false;
   $("magazineStyleStep").hidden=true;
-  document.querySelectorAll(".photo-choice").forEach(x=>x.classList.remove("active"));
+  document.querySelectorAll(".photo-choice").forEach(x=>{x.classList.remove("active");x.setAttribute("aria-pressed","false");});
   syncReviewModeUI();refreshExportControls();resetIdle();
 };
 
 $("openSettings").onclick=()=>openPersonalSettings("welcome");
-$("closeSettings").onclick=()=>showScreen(settingsReturnScreen||"landing");
+$("closeSettings").onclick=()=>{fillSettingsUI();showScreen(settingsReturnScreen||"landing");};
 $("saveSettings").onclick=()=>savePersonalSettings(false);
 $("launchCustomBooth").onclick=previewPersonalSettings;
+$("testCameraFromSettings").onclick=()=>startHostCameraTest("settings");
+$("exitTestPreview").onclick=requestHostTestExit;
+$("adminPreviewPlayMotion").onclick=()=>{
+  adminPreviewMotionRequested=true;
+  adminPolaroidPreviewEpoch=performance.now();
+  renderAdminPreview();
+};
+$("adminPreviewPhotos").onchange=useAdminPreviewPhotos;
+$("clearPreviewPhotos").onclick=clearAdminPreviewPhotos;
 $("copySetupPass").onclick=copySetupPass;
 $("shareSetupPass").onclick=shareSetupPass;
 $("setGuestPinEnabled").onchange=()=>{$("setGuestPinField").hidden=!$("setGuestPinEnabled").checked;if($("setGuestPinEnabled").checked)$("setGuestPin").focus();};
-$("setLook").onchange=()=>{const look=eventLook($("setLook").value);$("setAccent").value=look.accent;scheduleAdminPreview();};
+document.querySelectorAll('input[name="eventPalette"]').forEach(input=>input.onchange=()=>{
+  if(!input.checked)return;
+  syncPaletteUI(input.value);
+  applyRootPalette(input.value);
+  renderAdminPreview();
+});
 $("resetSettings").onclick=()=>{
   if(!confirm("Reset this booth to the MyBishBash defaults? Your local gallery will not be removed."))return;
   settings=EVENT?EVENT.createEventConfig(DEFAULTS,{defaults:DEFAULTS}):{...DEFAULTS};persistSettings();fillSettingsUI();renderAdminPreview();
@@ -2517,9 +3069,6 @@ $("clearGallery").onclick=async()=>{
 $("setupBack").onclick=()=>setSetupStep(activeSetupStep-1);
 $("setupNext").onclick=()=>setSetupStep(activeSetupStep+1);
 document.querySelectorAll("[data-setup-step]").forEach(button=>button.onclick=()=>setSetupStep(button.dataset.setupStep));
-document.querySelectorAll("[data-accent]").forEach(button=>button.onclick=()=>{
-  $("setAccent").value=button.dataset.accent;refreshCoverPlaceholders();scheduleAdminPreview();
-});
 $("choosePersonalPlan").onclick=()=>{showProductRoute("personal",true);setTimeout(()=>$("pricing").scrollIntoView({behavior:"smooth"}),0);};
 $("openPersonalSetup").onclick=()=>openPersonalSettings("landing");
 $("openPersonalSetupSecondary").onclick=()=>openPersonalSettings("landing");
@@ -2570,13 +3119,24 @@ $("businessContinue").onclick=()=>{
 };
 
 document.querySelectorAll(".admin-preview-tab").forEach(b=>b.onclick=()=>{
-  adminPreviewType=b.dataset.preview;
-  document.querySelectorAll(".admin-preview-tab").forEach(x=>x.classList.toggle("active",x.dataset.preview===adminPreviewType));
+  const nextType=b.dataset.preview;
+  if(nextType!==adminPreviewType){
+    adminPreviewMotionRequested=false;
+    adminPolaroidPreviewEpoch=nextType==="polaroid"?performance.now():0;
+  }
+  adminPreviewType=nextType;
+  document.querySelectorAll(".admin-preview-tab").forEach(x=>{
+    const selected=x.dataset.preview===adminPreviewType;
+    x.classList.toggle("active",selected);
+    x.setAttribute("aria-selected",String(selected));
+    x.setAttribute("aria-pressed",String(selected));
+    x.tabIndex=0;
+  });
   renderAdminPreview();
 });
 document.querySelectorAll(".admin-orientation-tab").forEach(b=>b.onclick=()=>{
   adminOrientation=b.dataset.orientation;
-  document.querySelectorAll(".admin-orientation-tab").forEach(x=>x.classList.toggle("active",x===b));
+  document.querySelectorAll(".admin-orientation-tab").forEach(x=>{const selected=x===b;x.classList.toggle("active",selected);x.setAttribute("aria-pressed",String(selected));});
   renderAdminPreview();
 });
 document.querySelectorAll("#settings input,#settings select").forEach(el=>el.addEventListener("input",()=>{

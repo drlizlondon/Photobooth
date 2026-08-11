@@ -26,6 +26,13 @@ function rawSetupFragment(payload) {
     .replace(/=+$/g, "");
 }
 
+function rawSetupPayload(fragment) {
+  var encoded = String(fragment).replace(/^#setup=r\./, "")
+    .replace(/-/g, "+").replace(/_/g, "/");
+  while (encoded.length % 4) encoded += "=";
+  return JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+}
+
 test("exports the accepted event vocabulary through CommonJS and a browser global", function () {
   var source = fs.readFileSync(path.resolve(__dirname, "../event.js"), "utf8");
   var context = {
@@ -46,8 +53,8 @@ test("exports the accepted event vocabulary through CommonJS and a browser globa
   };
   vm.runInNewContext(source, context);
 
-  assert.equal(Event.EVENT_CONFIG_SCHEMA_VERSION, 1);
-  assert.equal(Event.SETUP_PASS_VERSION, 1);
+  assert.equal(Event.EVENT_CONFIG_SCHEMA_VERSION, 2);
+  assert.equal(Event.SETUP_PASS_VERSION, 2);
   assert.equal(Event.LIVE_DURATION_MS, 48 * 60 * 60 * 1000);
   assert.deepEqual(Event.EVENT_TYPES, [
     "birthday",
@@ -58,8 +65,13 @@ test("exports the accepted event vocabulary through CommonJS and a browser globa
     "party",
     "other"
   ]);
-  assert.equal(context.self.MyBishBashEvent.VERSION, "1.0.0");
+  assert.equal(context.self.MyBishBashEvent.VERSION, "2.0.0");
   assert.equal(Object.isFrozen(Event.EVENT_FIELD_DEFAULTS), true);
+  assert.deepEqual(Event.PALETTE_IDS, [
+    "lilac-pop", "pink-party", "blue-sky", "sunshine"
+  ]);
+  assert.equal(Object.isFrozen(Event.PALETTES), true);
+  assert.equal(Object.isFrozen(Event.PALETTES["lilac-pop"]), true);
 });
 
 test("migrates old flat settings additively without losing renderer fields", function () {
@@ -71,22 +83,28 @@ test("migrates old flat settings additively without losing renderer fields", fun
     mirror: true
   };
   var oldSettings = {
+    schemaVersion: 1,
     eventTitle: "  Sophie's Hen  ",
     date: "16.05.27",
+    look: "sky",
     accent: "#9f78ff",
     stripSignature: "SOPHIE'S HEN",
     mirror: false
   };
   var migrated = Event.migrateEventConfig(oldSettings, fixedOptions({ defaults: oldDefaults }));
 
-  assert.equal(migrated.schemaVersion, 1);
+  assert.equal(migrated.schemaVersion, 2);
   assert.equal(migrated.eventId, FIXED_ID);
   assert.equal(migrated.eventType, "birthday", "legacy output keeps the existing Birthday voice");
   assert.equal(migrated.eventTitle, "Sophie's Hen");
   assert.equal(migrated.date, "16.05.27");
   assert.equal(migrated.datePrecision, "exact");
-  assert.equal(migrated.look, "pink-purple");
-  assert.equal(migrated.accent, "#9f78ff");
+  assert.equal(migrated.paletteId, "blue-sky");
+  assert.equal(migrated.palettePrimary, "#245f9f");
+  assert.equal(migrated.paletteSecondary, "#dcecff");
+  assert.equal(migrated.paletteHighlight, "#fff0aa");
+  assert.equal(migrated.look, undefined);
+  assert.equal(migrated.accent, undefined);
   assert.equal(migrated.stripSignature, "SOPHIE'S HEN");
   assert.equal(migrated.mirror, false);
   assert.equal(migrated.eventStatus, "DRAFT");
@@ -97,7 +115,91 @@ test("migrates old flat settings additively without losing renderer fields", fun
     FIXED_ID,
     "persisted event identity remains stable across future loads"
   );
-  assert.equal(oldSettings.schemaVersion, undefined, "migration must not mutate old saved data");
+  assert.equal(oldSettings.schemaVersion, 1, "migration must not mutate old saved data");
+  assert.equal(oldSettings.look, "sky");
+  assert.equal(oldSettings.accent, "#9f78ff");
+});
+
+test("defines four canonical, frozen palettes with contrast-safe foregrounds", function () {
+  var expected = {
+    "lilac-pop": ["Lilac Pop", "#66519c", "#eee6ff", "#ffdce8"],
+    "pink-party": ["Pink Party", "#b52167", "#ffdce8", "#eee6ff"],
+    "blue-sky": ["Blue Sky", "#245f9f", "#dcecff", "#fff0aa"],
+    sunshine: ["Sunshine", "#9a5c00", "#fff0aa", "#ffdce8"]
+  };
+
+  Event.PALETTE_IDS.forEach(function (id) {
+    var palette = Event.resolvePalette(id);
+    var values = expected[id];
+    assert.equal(palette.id, id);
+    assert.equal(palette.name, values[0]);
+    assert.equal(palette.primary, values[1]);
+    assert.equal(palette.secondary, values[2]);
+    assert.equal(palette.highlight, values[3]);
+    assert.equal(Object.isFrozen(palette), true);
+    [palette.primary, palette.secondary, palette.highlight].forEach(function (colour) {
+      var foreground = Event.safeForeground(colour);
+      assert.ok(Event.contrastRatio(colour, foreground) >= 4.5,
+        colour + " must have an AA-safe foreground");
+      assert.ok(foreground === "#111111" || foreground === "#ffffff");
+    });
+  });
+
+  assert.equal(Event.resolvePalette({ paletteId: "pink-party" }).id, "pink-party");
+  assert.equal(Event.resolvePalette("not-a-palette").id, "lilac-pop");
+  assert.throws(function () { Event.contrastRatio("tomato", "#ffffff"); }, /six-digit/i);
+});
+
+test("canonicalises palette roles from the id and survives persistence", function () {
+  Event.PALETTE_IDS.forEach(function (id) {
+    var palette = Event.resolvePalette(id);
+    var created = Event.createEventConfig({
+      schemaVersion: 2,
+      paletteId: id,
+      palettePrimary: "#000000",
+      paletteSecondary: "#000000",
+      paletteHighlight: "#000000"
+    }, fixedOptions());
+    var restored = Event.createEventConfig(JSON.parse(JSON.stringify(created)));
+
+    assert.equal(created.palettePrimary, palette.primary);
+    assert.equal(created.paletteSecondary, palette.secondary);
+    assert.equal(created.paletteHighlight, palette.highlight);
+    assert.equal(restored.paletteId, id);
+    assert.equal(restored.palettePrimary, palette.primary);
+    assert.equal(restored.paletteSecondary, palette.secondary);
+    assert.equal(restored.paletteHighlight, palette.highlight);
+  });
+});
+
+test("maps every legacy look and safely defaults missing or unknown looks", function () {
+  var cases = [
+    ["lilac", "lilac-pop"],
+    ["pink-purple", "lilac-pop"],
+    ["pink", "pink-party"],
+    ["sky", "blue-sky"],
+    ["butter", "sunshine"],
+    ["unknown-look", "lilac-pop"],
+    [undefined, "lilac-pop"]
+  ];
+
+  cases.forEach(function (entry) {
+    var legacy = { schemaVersion: 1, accent: "#123456", stripFrame: "film" };
+    if (entry[0] !== undefined) legacy.look = entry[0];
+    var migrated = Event.migrateEventConfig(legacy, fixedOptions());
+    var palette = Event.resolvePalette(entry[1]);
+    assert.equal(migrated.schemaVersion, 2);
+    assert.equal(migrated.paletteId, entry[1]);
+    assert.equal(migrated.palettePrimary, palette.primary);
+    assert.equal(migrated.paletteSecondary, palette.secondary);
+    assert.equal(migrated.paletteHighlight, palette.highlight);
+    assert.equal(migrated.look, undefined);
+    assert.equal(migrated.accent, undefined);
+    assert.equal(migrated.stripFrame, "film");
+  });
+
+  assert.equal(Event.migrateEventConfig({ look: "pink" }, fixedOptions()).paletteId,
+    "pink-party", "a pre-schema saved event also migrates");
 });
 
 test("does not migrate or persist a plaintext PIN field", function () {
@@ -139,6 +241,12 @@ test("uses the seven accepted types and degrades an explicit unknown type to Oth
   assert.equal(Event.EVENT_TYPE_LABELS.other, "Other");
   assert.throws(function () {
     Event.createEventConfig({ schemaVersion: 99 }, fixedOptions());
+  }, /Unsupported EventConfig schemaVersion/);
+  assert.throws(function () {
+    Event.createEventConfig({ schemaVersion: 1 }, fixedOptions());
+  }, /Unsupported EventConfig schemaVersion/);
+  assert.throws(function () {
+    Event.migrateEventConfig({ schemaVersion: 3 }, fixedOptions());
   }, /Unsupported EventConfig schemaVersion/);
 });
 
@@ -247,7 +355,7 @@ test("encodes a sparse raw Setup Pass in the URL fragment and imports it as DRAF
   var defaults = {
     eventTitle: "Your Celebration",
     date: "",
-    accent: "#ff5b52",
+    paletteId: "lilac-pop",
     mirror: true,
     stripSignature: ""
   };
@@ -258,8 +366,7 @@ test("encodes a sparse raw Setup Pass in the URL fragment and imports it as DRAF
     location: "Ibiza",
     date: "16.05.27",
     datePrecision: "exact",
-    look: "pink-purple",
-    accent: "#9f78ff",
+    paletteId: "pink-party",
     mirror: true,
     stripSignature: "SOPHIE'S HEN"
   }, { defaults: defaults });
@@ -271,10 +378,16 @@ test("encodes a sparse raw Setup Pass in the URL fragment and imports it as DRAF
 
   assert.match(fragment, /^#setup=r\.[A-Za-z0-9_-]+$/);
   assert.doesNotMatch(fragment, /^\?/);
+  assert.equal(rawSetupPayload(fragment).v, 2);
   assert.equal(imported.eventId, FIXED_ID);
   assert.equal(imported.eventTitle, "Sophie's Hen");
   assert.equal(imported.location, "Ibiza");
-  assert.equal(imported.accent, "#9f78ff");
+  assert.equal(imported.paletteId, "pink-party");
+  assert.equal(imported.palettePrimary, "#b52167");
+  assert.equal(imported.paletteSecondary, "#ffdce8");
+  assert.equal(imported.paletteHighlight, "#eee6ff");
+  assert.equal(imported.look, undefined);
+  assert.equal(imported.accent, undefined);
   assert.equal(imported.mirror, true);
   assert.equal(imported.eventStatus, "DRAFT");
   assert.equal(imported.activatedAt, "");
@@ -283,6 +396,37 @@ test("encodes a sparse raw Setup Pass in the URL fragment and imports it as DRAF
     Event.buildSetupPassUrl("https://mybishbash.app/photobooth/#old", fragment),
     "https://mybishbash.app/photobooth/" + fragment
   );
+});
+
+test("imports a version 1 Setup Pass through legacy palette migration", async function () {
+  var fragment = rawSetupFragment({
+    v: 1,
+    c: {
+      eventId: FIXED_ID,
+      eventTitle: "Summer Party",
+      look: "butter",
+      accent: "#d88600",
+      mirror: false,
+      eventStatus: "LIVE",
+      activatedAt: "2027-05-16T18:00:00.000Z",
+      endsAt: "2027-05-18T18:00:00.000Z"
+    }
+  });
+  var imported = await Event.decodeSetupPass(fragment);
+
+  assert.equal(imported.schemaVersion, 2);
+  assert.equal(imported.eventId, FIXED_ID);
+  assert.equal(imported.eventTitle, "Summer Party");
+  assert.equal(imported.paletteId, "sunshine");
+  assert.equal(imported.palettePrimary, "#9a5c00");
+  assert.equal(imported.paletteSecondary, "#fff0aa");
+  assert.equal(imported.paletteHighlight, "#ffdce8");
+  assert.equal(imported.look, undefined);
+  assert.equal(imported.accent, undefined);
+  assert.equal(imported.mirror, false);
+  assert.equal(imported.eventStatus, "DRAFT");
+  assert.equal(imported.activatedAt, "");
+  assert.equal(imported.endsAt, "");
 });
 
 test("Setup Pass carries the derived Guest PIN fields but never its plaintext", async function () {
@@ -345,8 +489,8 @@ test("rejects query-string, malformed and unknown-version Setup Passes", async f
   );
   await assert.rejects(Event.decodeSetupPass("#setup=x.abc"), /Unknown Setup Pass encoding/);
   await assert.rejects(
-    Event.decodeSetupPass(rawSetupFragment({ v: 2, c: { eventId: FIXED_ID } })),
-    /Unsupported Setup Pass version: 2/
+    Event.decodeSetupPass(rawSetupFragment({ v: 3, c: { eventId: FIXED_ID } })),
+    /Unsupported Setup Pass version: 3/
   );
   await assert.rejects(Event.decodeSetupPass("#setup=r.not-valid-json"), /not valid JSON/);
 });

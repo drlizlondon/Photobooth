@@ -30,7 +30,7 @@ Three chains are load-bearing:
 | # | Packet | Phase | Status | Commit |
 |---|--------|-------|--------|--------|
 | 1 | PB-01 Replace the dead Business contact URL | P0 | ☑ | `904bd4f` |
-| 2 | PB-02 Make the commerce state honest *(amended 001)* | P0 | ☑ | *(pending)* |
+| 2 | PB-02 Make the commerce state honest *(amended 001)* | P0 | ☑ | `db7c64c` |
 | 3 | PB-03 Never silently discard a guest's configuration | P0 | ☑ | `0fd9ca1` |
 | 4 | PB-04 Publish terms, privacy and cancellation | P1 | ☐ | — |
 | 5 | PB-05 Origin constant + complete social metadata | P2 | ☑ | `9197594` |

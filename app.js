@@ -177,7 +177,7 @@ const SITE_ORIGIN=metaContent("site-origin").replace(/\/$/,"");
 const SURFACE_META={
   personal:{
     title:"MyBishBash Photobooth — Your event. Your photobooth.",
-    description:"Create a personalised photobooth for your event. Guests choose an experience, capture it live, then save or share what they make.",
+    description:"Create a personalised photobooth for your event. Guests take three photos, turn them into party keepsakes, then save or share their favourites.",
     path:"/"
   },
   business:{
@@ -299,7 +299,8 @@ let stream=null;
 let photos=[];
 let currentMode="strip";
 let currentExperience="strip";
-let legacySessionMode=false;
+let sharedOutputSession=false;
+let activeGalleryRecordId=null;
 let frameStyle="white";
 let filterStyle="original";
 let coverIndex=null;
@@ -333,7 +334,7 @@ let guestPinThrottle=EVENT?EVENT.createGuestPinThrottleState():{failures:0,block
 let activationConfirmationPending=false;
 
 const $=id=>document.getElementById(id);
-const screens=["landing","business","welcome","experience","camera","review","timeout","settings"];
+const screens=["landing","business","welcome","camera","review","timeout","settings"];
 
 /* Copy written under the old two-cover settings moves to the unified cover
    model — but only where the host actually edited it. Anything left at an old
@@ -506,9 +507,11 @@ function sessionBytes(item){
     return total+(typeof photo==="string"?photo.length:0);
   },0);
 }
-function galleryRecord(sessionPhotos,orientation,experience){
+function galleryRecord(sessionPhotos,orientation,experience,recordId){
   const bytes=sessionPhotos.map(dataUrlToBytes);
-  const base={id:Date.now(),createdAt:new Date().toISOString(),orientation,experience:experience||"legacy"};
+  const hasRecordId=recordId!==null&&recordId!==undefined&&Number.isFinite(Number(recordId));
+  const id=hasRecordId?Number(recordId):Date.now();
+  const base={id,createdAt:new Date(id).toISOString(),orientation,experience:experience||"shared"};
   if(bytes.every(Boolean))return {...base,schema:GALLERY_SCHEMA,photoType:"image/jpeg",photos:bytes};
   /* A photo that will not decode to bytes is still worth keeping verbatim. */
   return {...base,photos:[...sessionPhotos]};
@@ -537,9 +540,9 @@ async function dropOldestSessions(count){
   db.close();
   return true;
 }
-async function saveSessionToGallery(sessionPhotos,orientation,experience){
-  if(!sessionPhotos||sessionPhotos.length<1||sessionPhotos.length>3)return;
-  const record=galleryRecord(sessionPhotos,orientation,experience);
+async function saveSessionToGallery(sessionPhotos,orientation,experience,recordId){
+  if(!sessionPhotos||sessionPhotos.length<1||sessionPhotos.length>3)return null;
+  const record=galleryRecord(sessionPhotos,orientation,experience,recordId);
   try{
     try{
       await putSession(record);
@@ -554,12 +557,14 @@ async function saveSessionToGallery(sessionPhotos,orientation,experience){
     clearStorageNotice();
     await trimGallery();
     await warnIfStorageLow();
+    return record;
   }catch(error){
     /* Swallowing this loses a guest's photographs and nobody finds out until
        the party is over. */
     showStorageNotice(isQuotaError(error)
       ?"This device is out of space, so the last session was not saved. Free up space, or clear older sessions in Settings."
       :"The last session could not be saved to this device.");
+    return null;
   }
 }
 async function storageBudget(){
@@ -669,15 +674,19 @@ async function renderEventGallery(){
     btn.onclick=async()=>{
       photos=[...session.photos];
       sessionOrientation=session.orientation||"landscape";
-      currentExperience=session.experience&&session.experience!=="legacy"?session.experience:"strip";
-      legacySessionMode=!session.experience||session.experience==="legacy";
+      const recordedExperience=String(session.experience||"legacy");
+      const hasThreeSources=session.photos.length===3;
+      sharedOutputSession=hasThreeSources&&["shared","legacy","strip"].includes(recordedExperience);
+      currentExperience=sharedOutputSession?"strip":(["strip","polaroid","magazine"].includes(recordedExperience)?recordedExperience:"strip");
+      /* Reopened history is a source, not the current guest. Retake creates a
+         new record instead of overwriting something from earlier in the event. */
+      activeGalleryRecordId=null;
       sessionEdition=sessions.length-sessions.indexOf(session);
       const eventContext=settingsReturnScreen==="welcome";
       if(!eventContext)boothExampleMode=false;
       setBoothReturnScreen(eventContext?"welcome":"landing");
       enterBoothHistory();
       resetCreativeState(currentExperience);
-      if(currentExperience==="magazine")coverIndex=0;
       buildReviewControls();
       showScreen("review");
       if(currentExperience==="polaroid")await enterPolaroid();else await renderWithFade();
@@ -793,9 +802,12 @@ function teardownBoothSession(){
   stopCamera();
   invalidatePolaroid();
   photos=[];
+  sharedOutputSession=false;
+  activeGalleryRecordId=null;
   motionCaptureBlob=null;
   motionFinalStill="";
   exportBusy=false;
+  resetGuestCompletionState(true);
 }
 function setBoothReturnScreen(target){
   boothReturnScreen=target==="welcome"?"welcome":"landing";
@@ -1292,8 +1304,22 @@ function photoDataFromSource(source){
   return c.toDataURL("image/jpeg",.96);
 }
 function cancelCapture(){
-  if(boothReturnScreen==="welcome"){showExperienceChooser();return;}
   showBoothReturnScreen();
+}
+function syncReviewModeUI(){
+  document.querySelectorAll(".mode-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode===currentMode));
+  $("stripControls").classList.toggle("active",currentMode==="strip");
+  $("magazineControls").classList.toggle("active",currentMode==="magazine");
+  $("polaroidControls").classList.toggle("active",currentMode==="polaroid");
+  if(currentMode==="magazine"){
+    $("magazinePickStep").hidden=coverIndex!==null;
+    $("magazineStyleStep").hidden=coverIndex===null;
+  }
+  const awaitingMagazine=currentMode==="magazine"&&coverIndex===null;
+  const resultNames={strip:"YOUR PHOTO STRIP",polaroid:"YOUR MOVING POLAROID",magazine:awaitingMagazine?"PICK YOUR COVER PHOTO":"YOUR MAGAZINE COVER"};
+  $("resultsKicker").textContent=resultNames[currentMode];
+  $("stillPhotoBtn").hidden=currentMode!=="polaroid";
+  $("retakeBtn").textContent=sharedOutputSession?"Retake three photos":currentMode==="strip"?"Retake three photos":currentMode==="polaroid"?"Retake moving moment":"Retake photo";
 }
 function resetCreativeState(experience){
   currentExperience=["strip","polaroid","magazine"].includes(experience)?experience:"strip";
@@ -1303,34 +1329,11 @@ function resetCreativeState(experience){
   coverIndex=null;
   magazineStyle=settings.magazineTemplate||"keepsake";
   invalidatePolaroid();
-  document.querySelectorAll(".mode-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode===currentMode));
-  $("stripControls").classList.toggle("active",currentMode==="strip");
-  $("magazineControls").classList.toggle("active",currentMode==="magazine");
-  $("polaroidControls").classList.toggle("active",currentMode==="polaroid");
-  $("magazinePickStep").hidden=currentMode==="magazine";
-  $("magazineStyleStep").hidden=currentMode!=="magazine";
-  $("reviewModeNav").hidden=!legacySessionMode;
-  $("review").querySelector(".review-panel").classList.toggle("output-locked",eventIsPersonalised()&&!legacySessionMode);
-  const resultNames={strip:"YOUR PHOTO STRIP",polaroid:"YOUR MOVING POLAROID",magazine:"YOUR MAGAZINE COVER"};
-  $("resultsKicker").textContent=resultNames[currentMode];
-  $("stillPhotoBtn").hidden=currentMode!=="polaroid";
-  $("retakeBtn").textContent=currentMode==="strip"?"Retake three photos":currentMode==="polaroid"?"Retake moving moment":"Retake photo";
-  businessCompletionSatisfied=false;
+  $("reviewModeNav").hidden=!sharedOutputSession;
+  $("review").querySelector(".review-panel").classList.toggle("output-locked",eventIsPersonalised());
+  syncReviewModeUI();
   setExportStatus("");
   refreshExportControls();
-}
-
-function showExperienceChooser(){
-  teardownBoothSession();
-  legacySessionMode=false;
-  const home=$("experienceHomeBtn");
-  const label=boothReturnScreen==="welcome"?"Event Home":"Home";
-  home.textContent=label;
-  home.setAttribute("aria-label",label);
-  applyEventLook($("experience"),settings.look);
-  showScreen("experience");
-  const first=document.querySelector("[data-experience]");
-  if(first&&typeof first.focus==="function")first.focus();
 }
 
 async function captureMovingPolaroid(sid){
@@ -1401,7 +1404,7 @@ async function captureMovingPolaroid(sid){
   }
 }
 
-async function beginSession(experience){
+async function beginSession(experience,options){
   /* A newly activated worker waits until the previous guest is finished. The
      next Start/Retake/Next guest tap is a safe boundary to load the new app. */
   if(serviceWorkerRefreshPending){showBoothReturnScreen();return;}
@@ -1418,15 +1421,21 @@ async function beginSession(experience){
      complete into this camera session. */
   exportBusy=false;
   const sid=captureSessionId;
+  const shared=experience==="shared";
+  const retaking=!!(options&&options.retake);
+  const replaceId=shared&&retaking?activeGalleryRecordId:null;
+  const replacingRecord=replaceId!==null&&replaceId!==undefined&&Number.isFinite(Number(replaceId));
+  if(!replacingRecord)activeGalleryRecordId=null;
+  if(!retaking)resetGuestCompletionState(true);
   photos=[];
   motionCaptureBlob=null;
   motionFinalStill="";
-  legacySessionMode=false;
-  resetCreativeState(experience||currentExperience);
+  sharedOutputSession=shared;
+  resetCreativeState(shared?"strip":(experience||currentExperience));
   initAudio();
   const labels={strip:"PHOTO STRIP",polaroid:"MOVING POLAROID",magazine:"MAGAZINE COVER"};
-  $("cameraExperienceLabel").textContent=labels[currentExperience];
-  $("stripFramingGuide").hidden=currentExperience!=="strip";
+  $("cameraExperienceLabel").textContent=shared?"YOUR PHOTOBOOTH":labels[currentExperience];
+  $("stripFramingGuide").hidden=!(shared||currentExperience==="strip");
   showScreen("camera");
 
   const promptList=capturePrompts();
@@ -1434,14 +1443,14 @@ async function beginSession(experience){
     await startCamera(sid);
     if(sid!==captureSessionId)return;
     await delay(400);
-    if(currentExperience==="polaroid"){
+    if(!shared&&currentExperience==="polaroid"){
       $("shotLabel").textContent="ONE MOVING MOMENT";
       await captureMovingPolaroid(sid);
     }else{
-      const total=currentExperience==="strip"?3:1;
+      const total=shared||currentExperience==="strip"?3:1;
       for(let i=0;i<total;i++){
       if(sid!==captureSessionId)return;
-      $("shotLabel").textContent=currentExperience==="magazine"?"ONE HERO PHOTO":shotLabel(i+1,total);
+      $("shotLabel").textContent=!shared&&currentExperience==="magazine"?"ONE HERO PHOTO":shotLabel(i+1,total);
       if(settings.prompts){
         $("promptText").textContent=promptList[i]||"";
         $("promptText").classList.add("show");
@@ -1457,11 +1466,14 @@ async function beginSession(experience){
     }
     if(sid!==captureSessionId)return;
     stopCamera();
-    await saveSessionToGallery(photos,sessionOrientation,currentExperience);
+    const galleryRecord=await saveSessionToGallery(photos,sessionOrientation,shared?"shared":currentExperience,replaceId);
     if(sid!==captureSessionId)return;
-    const galleryCount=await countGallerySessions();
-    if(sid!==captureSessionId)return;
-    sessionEdition=nextEditionNumber(galleryCount);
+    if(galleryRecord)activeGalleryRecordId=galleryRecord.id;
+    if(!replacingRecord){
+      const galleryCount=await countGallerySessions();
+      if(sid!==captureSessionId)return;
+      sessionEdition=nextEditionNumber(galleryCount);
+    }
     if(currentExperience==="magazine")coverIndex=0;
     buildReviewControls();
     showScreen("review");
@@ -1477,6 +1489,9 @@ async function beginSession(experience){
     }
   }
 }
+
+function beginSharedSession(retake){return beginSession("shared",{retake:!!retake});}
+function restartCurrentSession(){return sharedOutputSession?beginSharedSession(true):beginSession(currentExperience,{retake:true});}
 
 /* One alert() used to cover six different causes and told everyone to fix
    Safari - including the in-app browsers a party link is actually opened in,
@@ -1587,6 +1602,7 @@ function buildReviewControls(){
       $("magazinePickStep").hidden=true;
       $("magazineStyleStep").hidden=false;
       document.querySelectorAll(".photo-choice").forEach(x=>x.classList.toggle("active",x===b));
+      syncReviewModeUI();
       renderStyleThumbs();
       renderWithFade();
       refreshExportControls();
@@ -1649,14 +1665,7 @@ async function renderStyleThumbs(){
 
 function setMode(mode){
   currentMode=mode;
-  document.querySelectorAll(".mode-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode===mode));
-  $("stripControls").classList.toggle("active",mode==="strip");
-  $("magazineControls").classList.toggle("active",mode==="magazine");
-  $("polaroidControls").classList.toggle("active",mode==="polaroid");
-  if(mode==="magazine"){
-    $("magazinePickStep").hidden=coverIndex!==null;
-    $("magazineStyleStep").hidden=coverIndex===null;
-  }
+  syncReviewModeUI();
   refreshExportControls();
   /* The Polaroid drives its own canvas on a rAF loop, so it skips the
      fade-and-redraw the still modes use — that would flash mid-animation. */
@@ -1838,14 +1847,23 @@ function polaroidStatus(){
 async function enterPolaroid(){
   const token=++polaroidToken;
   polaroidStatus();
+  if(sharedOutputSession&&polaroidVideoBlob&&polaroidVideoUrl){
+    const video=$("polaroidVideo");
+    video.src=polaroidVideoUrl;video.hidden=false;
+    $("mainCanvas").hidden=true;
+    polaroidState="ready";polaroidStatus();
+    refreshExportControls();
+    video.play().catch(()=>{});
+    return;
+  }
+  if(sharedOutputSession){polaroidState="working";polaroidStatus();refreshExportControls();}
   const imgs=await Promise.all(photos.map(loadImage));
   if(token!==polaroidToken||currentMode!=="polaroid")return;
 
-  /* New experience-first sessions arrive with their real captured motion.
-     Reopened sessions retain the exact still, even when the browser could not
-     store a moving file. The old three-still compositor remains available only
-     for legacy gallery records created before experience-first capture. */
-  if(!legacySessionMode&&currentExperience==="polaroid"){
+  /* Older one-moment records retain the exact still even when the browser
+     could not store their transient moving file. Shared sessions continue to
+     the canonical three-photo compositor below. */
+  if(!sharedOutputSession&&currentExperience==="polaroid"){
     polaroidJob=Polaroid.compose(Object.assign({base:POLAROID_VIDEO_BASE},polaroidOptions(imgs)));
     const c=$("mainCanvas"),ctx=c.getContext("2d");
     c.width=polaroidJob.geo.W;c.height=polaroidJob.geo.H;c.hidden=false;
@@ -1854,6 +1872,7 @@ async function enterPolaroid(){
     polaroidVideoBlob=motionCaptureBlob||null;
     polaroidState=motionCaptureBlob?"ready":"unsupported";
     polaroidStatus();
+    refreshExportControls();
     if(!motionCaptureBlob)return;
     if(polaroidVideoUrl)URL.revokeObjectURL(polaroidVideoUrl);
     polaroidVideoUrl=URL.createObjectURL(motionCaptureBlob);
@@ -1884,8 +1903,8 @@ async function enterPolaroid(){
 }
 
 async function encodePolaroid(token){
-  if(!MP4.isSupported()){polaroidState="unsupported";polaroidStatus();return;}
-  polaroidState="working";polaroidStatus();
+  if(!MP4.isSupported()){polaroidState="unsupported";polaroidStatus();refreshExportControls();return;}
+  polaroidState="working";polaroidStatus();refreshExportControls();
   const job=polaroidJob;
   try{
     const blob=await MP4.encode({
@@ -1898,7 +1917,7 @@ async function encodePolaroid(token){
     polaroidVideoBlob=blob;
     if(polaroidVideoUrl)URL.revokeObjectURL(polaroidVideoUrl);
     polaroidVideoUrl=URL.createObjectURL(blob);
-    polaroidState="ready";polaroidStatus();
+    polaroidState="ready";polaroidStatus();refreshExportControls();
     if(currentMode!=="polaroid")return;
     const v=$("polaroidVideo");
     v.src=polaroidVideoUrl;
@@ -1917,7 +1936,7 @@ async function encodePolaroid(token){
     v.play().catch(()=>{});
   }catch(e){
     if(token!==polaroidToken)return;
-    polaroidState="unsupported";polaroidStatus();
+    polaroidState="unsupported";polaroidStatus();refreshExportControls();
   }
 }
 
@@ -1929,7 +1948,9 @@ async function polaroidPrintBlob(){
   const c=document.createElement("canvas");
   c.width=job.geo.W;c.height=job.geo.H;
   const ctx=c.getContext("2d");
-  job.drawStill(ctx,coverIndex===null?0:coverIndex);
+  /* Magazine's favourite is a Magazine decision. The Moving Polaroid seam
+     starts and ends on photo one, so its still always matches that print. */
+  job.drawStill(ctx,0);
   drawDraftPreview(ctx,c.width,c.height);
   return new Promise((resolve,reject)=>c.toBlob(blob=>blob?resolve(blob):reject(new Error("The Polaroid print could not be prepared.")),"image/png",1));
 }
@@ -2026,10 +2047,17 @@ async function saveCurrent(){
     if(exportSession===captureSessionId){exportBusy=false;refreshExportControls();}
   }
 }
-function exportReady(){return currentMode!=="magazine"||coverIndex!==null;}
+function exportReady(){
+  if(currentMode==="magazine"&&coverIndex===null)return false;
+  if(currentMode==="polaroid"&&polaroidState!=="ready"&&polaroidState!=="unsupported")return false;
+  return true;
+}
 function refreshExportControls(){
   const ready=exportReady()&&!exportBusy;
   [$("shareBtn"),$("saveBtn")].forEach(button=>{if(button)button.disabled=!ready;});
+  document.querySelectorAll(".mode-tab,.choice,.photo-choice,.mag-style-choice,#changeCoverPhoto,#stillPhotoBtn").forEach(button=>{
+    button.disabled=exportBusy;
+  });
 }
 function setExportStatus(message,error){
   const el=$("exportStatus");if(!el)return;
@@ -2167,7 +2195,7 @@ function launchFreeBooth(){
     settings=EVENT?EVENT.createEventConfig(DEFAULTS,{defaults:DEFAULTS}):{...DEFAULTS};
     fillSettingsUI();
   }
-  boothExampleMode=false;setBoothReturnScreen("landing");enterBoothHistory();showExperienceChooser();
+  boothExampleMode=false;setBoothReturnScreen("landing");enterBoothHistory();beginSharedSession(false);
 }
 function previewExampleBooth(){
   enterEventHome(true);
@@ -2358,6 +2386,14 @@ function applyBusinessEventFlow(){
   $("shareBtn").hidden=isBusiness&&(!businessEventConfig.allowShare||waitingForCompletion);
   $("saveBtn").hidden=isBusiness&&(!businessEventConfig.allowSave||waitingForCompletion);
 }
+function resetGuestCompletionState(clearFields){
+  businessCompletionSatisfied=false;
+  if(!clearFields)return;
+  const email=$("guestEmail"),marketing=$("guestMarketingConsent"),publicity=$("guestPublicityConsent");
+  if(email)email.value="";
+  if(marketing)marketing.checked=false;
+  if(publicity)publicity.checked=false;
+}
 
 function enterGuestBooth(){
   if(EVENT&&eventIsPersonalised()){
@@ -2373,7 +2409,7 @@ function enterGuestBooth(){
   }
   setBoothReturnScreen("welcome");
   enterBoothHistory();
-  showExperienceChooser();
+  beginSharedSession(false);
 }
 async function submitGuestPin(event){
   event.preventDefault();
@@ -2430,15 +2466,13 @@ $("startBtn").onclick=enterGuestBooth;
 $("previewEventBtn").onclick=previewEventAsGuest;
 $("activateEventBtn").onclick=activateEvent;
 $("welcomePinForm").onsubmit=submitGuestPin;
-document.querySelectorAll("[data-experience]").forEach(button=>button.onclick=()=>beginSession(button.dataset.experience));
-$("experienceHomeBtn").onclick=showBoothReturnScreen;
 $("cancelCapture").onclick=cancelCapture;
-$("retakeBtn").onclick=()=>beginSession(currentExperience);
-$("nextGuestBtn").onclick=showExperienceChooser;
+$("retakeBtn").onclick=restartCurrentSession;
+$("nextGuestBtn").onclick=()=>beginSharedSession(false);
 $("boothHomeBtn").onclick=showBoothReturnScreen;
 /* Retry re-enters capture in place: no page reload, so a guest who fixes a
    permission prompt is still in the booth rather than back on the landing page. */
-$("cameraErrorRetry").onclick=()=>{hideCameraError();beginSession(currentExperience);};
+$("cameraErrorRetry").onclick=()=>{hideCameraError();restartCurrentSession();};
 $("cameraErrorBack").onclick=()=>{hideCameraError();cancelCapture();};
 $("shareBtn").onclick=shareCurrent;
 $("saveBtn").onclick=saveCurrent;
@@ -2461,7 +2495,7 @@ $("changeCoverPhoto").onclick=()=>{
   $("magazinePickStep").hidden=false;
   $("magazineStyleStep").hidden=true;
   document.querySelectorAll(".photo-choice").forEach(x=>x.classList.remove("active"));
-  renderWithFade();refreshExportControls();resetIdle();
+  syncReviewModeUI();refreshExportControls();resetIdle();
 };
 
 $("openSettings").onclick=()=>openPersonalSettings("welcome");

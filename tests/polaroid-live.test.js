@@ -103,6 +103,29 @@ test("live compositor preserves canonical Polaroid geometry and chrome", functio
   assert.equal(typeof h.Polaroid.compose, "function", "the original still compositor remains available");
 });
 
+test("three-photo compositor builds and displays every captured plate", function () {
+  var h = rendererHarness();
+  var images = [
+    { id: "first", width: 1600, height: 1200 },
+    { id: "second", width: 1200, height: 1600 },
+    { id: "third", width: 1920, height: 1080 }
+  ];
+  var job = h.Polaroid.compose({ base: 600, images: images, transition: "cut" });
+  var output = new h.Canvas();
+
+  assert.deepEqual(h.coverCalls.map(function (call) { return call.source.id; }), ["first", "second", "third"]);
+  var plates = h.coverCalls.map(function (call) { return call.ctx.canvas; });
+
+  job.drawAt(output.context, 0.2);
+  job.drawAt(output.context, 0.8);
+  job.drawAt(output.context, 2.2);
+
+  var usedPlateIndexes = output.context.draws
+    .filter(function (source) { return plates.indexOf(source) !== -1; })
+    .map(function (source) { return plates.indexOf(source); });
+  assert.deepEqual(usedPlateIndexes, [0, 1, 2], "the timeline reaches every captured photograph");
+});
+
 test("live and final frames share crop and finish while the final still freezes exactly once", function () {
   var h = rendererHarness();
   var live = h.Polaroid.composeLive({ base: 600, anchorY: 0.42 });

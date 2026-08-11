@@ -3,15 +3,15 @@
 MyBishBash is a personalised photobooth experience for a real event. A host
 creates the event identity and Look before the party, opens its event entrance
 on a suitable phone or tablet, and deliberately starts the event. Guests then
-choose a Photo Strip, Moving Polaroid or Magazine Cover, capture that experience
-and save or share what they make. The public funnel, booth and Business surface
-all live in this standalone repository.
+take three photographs once, use all three for a Photo Strip or Moving Polaroid,
+pick their favourite for a Magazine Cover, and save or share what they make. The
+public funnel, booth and Business surface all live in this standalone repository.
 
-The implementation remains local-first, but capture is now experience-first:
-Strip takes three still photographs, Magazine takes one hero photograph, and
-Moving Polaroid records one short silent moving moment that resolves into its
-exact final still. Magazine's established renderer and editorial finish remain
-unchanged.
+The implementation remains local-first and uses one shared three-photo session.
+The established Strip consumes all three, Magazine consumes the guest's chosen
+favourite, and the Moving Polaroid animates the same three real captures inside
+one instant-film print. Magazine's established renderer and editorial finish
+remain unchanged.
 
 Productisation was baselined before editing at `main` commit
 `e6313f8d8115164e9e8ecdbfaaa131fd6c3bc41a`. The current pass deliberately
@@ -51,8 +51,8 @@ prefix registry. A session seeing a foreign prefix here should stop and ask.
 ## Product surfaces
 
 - `/` is the Personal landing page. Its short first-visit entrance demonstrates
-  the event-arrival idea; **Start Photobooth** opens the real free experience
-  chooser with no login, checkout or email gate.
+  the event-arrival idea; **Start Photobooth** opens the real free three-photo
+  capture with no login, checkout or email gate.
 - `/business` is the separate For Business surface. `vercel.json` rewrites the
   static route back to `index.html`, where the client selects the surface.
 - Host setup creates a small personalised event entrance and configures event
@@ -136,16 +136,16 @@ The checked-in Worker still speaks the retired catalogue and does not yet bind
 event binding have been migrated to £19 / £49 and verified together.
 
 ## Guest flow
-Event entrance → choose experience → capture → finished keepsake → Save / Share → Next Guest.
+Event entrance → take three photos → choose what to make → Save / Share → Next Guest.
 
-- **Photo Strip:** three still photographs and the host's selected treatment.
-- **Moving Polaroid:** one short silent moving moment, the exact final photograph,
-  then a final-still hold.
-- **Magazine Cover:** one hero photograph through the host's selected real cover.
+- **Photo Strip:** all three photographs in the host's selected treatment.
+- **Moving Polaroid:** all three photographs animated through one instant-film print.
+- **Magazine Cover:** the guest's favourite of the three through the host's selected real cover.
 
-Every new guest returns to the experience chooser. Retake repeats the current
-experience; Event Home returns to the personalised entrance. Temporary capture,
-video and render state is cleared between guests.
+Next Guest starts a clean three-photo session immediately. Retake replaces the
+current guest's three source photographs without consuming another local edition;
+Event Home returns to the personalised entrance. Temporary capture, video and
+render state is cleared between guests.
 
 ## Strip
 Host-selectable treatments currently include:
@@ -180,10 +180,9 @@ Four cover styles, each laid out separately for portrait and landscape sessions:
 - **Noir** — deep tonal drama, centred masthead and cover line. It retains the photograph's original hues.
 - **Press** — solid sidebar carrying the masthead, accent issue chip, name and standfirst on the photo.
 
-The experience-first Magazine captures one hero photograph. The host selects the
-event's default cover before going live; the guest receives the finished cover
-without entering a freeform editor. Older three-photo gallery records remain
-readable and can still select a source photograph through the legacy review path.
+Magazine receives the shared session's three photographs. The host selects the
+event's default cover before going live; the guest picks their favourite source
+photograph and receives the finished cover without entering a freeform editor.
 
 **Editorial finish.** Every magazine cover — all four styles — puts the same deterministic, adaptive luxury-print pass on the photograph. It samples the untouched capture before making a bounded midtone exposure and colour-cast correction, then applies a gentle S-curve, soft highlight shoulder, protected shadow density, clean whites and an almost imperceptible matte floor. The analysis keys exposure from the median and upper midtones instead of applying one fixed brightness value. Dark venues receive a lift; bright, complex scenes receive a restrained reduction; flat pale scenes are specifically protected from being made unnecessarily dark.
 
@@ -213,7 +212,7 @@ It runs on the photo rectangle only, before the existing cover scrims, typograph
 | Existing template tone | Editorial `contrast 1.04 / brightness 1.01`; Noir `contrast 1.07 / brightness 0.985`; Keepsake `contrast 1.05 / brightness 0.99`; Press `contrast 1.04`; folded into the float pass without a separate clamp |
 | Output | High-quality cover resize; monotonic 4096-step tone LUT; gamut-safe chroma reconstruction; final range `2.5/255…253/255` |
 
-The finish is automatic and is the **only** grade a cover photo gets beyond its template's own. The guest's filter choice is deliberately switched off for magazine — a cover has one house look, so every cover from the booth matches whatever the guest was playing with on their strip. Strips keep all five filters and are unaffected by the finish.
+The finish is automatic and is the **only** grade a cover photo gets beyond its template's own. The guest's filter choice is deliberately switched off for magazine — a cover has one house look, so every cover from the booth matches whatever the guest was playing with on their strip. Strips keep their selected filters and are unaffected by the finish.
 
 Cover copy lives in one set of slots shared by all four styles (`covers.js`). Every slot is editable in Admin; **leaving a slot blank generates it from the event title** — masthead, age in words, issue lines, script line and barcode all follow "Rae's 26th Birthday" / "Sam's 30th" / "Aisha & Tom's Wedding" without any admin work.
 
@@ -276,9 +275,10 @@ laptop the settings were tuned on and the booth iPad are not the same machine,
 so check the specimens on the iPad before the night.
 
 ## Moving Polaroid
-A distinct experience next to Strip and Magazine: one instant-film object whose
-image moves for about 2.5 seconds, resolves into the exact final photograph and
-holds that still for about one second before looping.
+A distinct keepsake next to Strip and Magazine: one instant-film object that
+moves through the session's three photographs. Each image settles long enough
+to read before the next transition, and the loop begins and ends inside the same
+photo-one hold.
 
 **The print.** Real Polaroid 600 geometry — a nearly square image area with
 equal borders on the sides and top. Warm white paper with a gradient and fine
@@ -313,19 +313,18 @@ Each line gets a tiny tilt and offset derived from a hash of its own text —
 deterministic, so the animated preview and the exported file agree, and so
 consecutive video frames do not shimmer.
 
-**The motion.** `motion.js` records the composed Polaroid canvas, not the raw
-camera stream. The frame, paper, shadow, handwriting and event identity therefore
-remain part of every video frame, while audio is never requested or included. At
-the motion boundary the final camera frame is frozen once and reused for both the
-video hold and the downloadable still, so the moving moment genuinely becomes the
-photograph rather than cutting to a lookalike frame.
+**The motion.** The canonical compositor builds one finished plate from each of
+the three captured photographs, then moves between them inside stationary instant
+film. Each photograph holds long enough to read, transitions remain restrained,
+and the loop seam falls inside an identical hold on photo one so iOS cannot expose
+an obvious hitch. The paper, shadow, handwriting and event identity are therefore
+identical in the preview and every exported frame.
 
-**Exports.** MediaRecorder negotiates H.264/MP4 first where Safari advertises it,
-then WebM variants on Chromium/Firefox. Save and Share prefer the recorded moving
-file; **Still photo** creates the exact final PNG separately. If canvas recording,
-MediaRecorder or a usable codec is unavailable—or recording is interrupted—the
-experience finishes honestly as a still Polaroid and the UI says so. No format
-choice or codec terminology is shown to guests.
+**Exports.** Save and Share prefer the locally encoded H.264/MP4 where the
+browser's video encoder is available. **Still photo** creates a deterministic PNG
+from photo one, matching the loop seam. If video encoding is unavailable, the
+finished Polaroid still remains available and the UI says so. No format or codec
+terminology is shown to guests.
 
 **The photograph** keeps the Moving Polaroid's existing lightweight fixed
 print pass. The new adaptive finish is deliberately magazine-only, so this
@@ -333,10 +332,9 @@ cover change cannot alter Polaroid video plates. There is no
 beautifying, relighting, glow or bloom. The fixed pass runs once per photo
 rather than once per frame: it is a pass on the photograph, not on the film.
 
-The previous three-still crossfade compositor remains for legacy gallery records
-created before experience-first capture and for the rights-cleared static-photo
-homepage demonstration. It is not the new live capture product: a real guest
-Moving Polaroid is recorded from camera motion through `composeLive()`.
+The separate `motion.js` / `composeLive()` real-camera recorder remains tested as
+dormant groundwork. It is not wired into the current shared guest flow, which is
+deliberately based on the same three photographs as Strip and Magazine.
 
 ## Admin
 Live previews (using the real cover renderer with a stand-in photo):
@@ -364,22 +362,22 @@ The contract is the same everywhere: **leave a field blank and you get the defau
 - Free and Personal sessions never upload photographs.
 - Business photo collection remains off unless the event enables it and the
   attendee grants the separately recorded photo-use permission.
-- Full-frame camera preview with a restrained Strip crop guide only when the
-  three-photo Strip is selected.
-- Session orientation is locked for the selected experience.
+- Full-frame camera preview with a restrained crop guide for the shared
+  three-photo session.
+- Session orientation is locked for the three captures.
 - Public capture and results expose **Home**, which stops all in-flight camera,
   render and timeout work before returning to the public landing page.
 - A personalised event exposes **Event Home**, returning to its Tap to Begin
   welcome screen without leaving event mode.
 - Browser Back follows the same context-aware path; transient camera/results
   states are never resumed from history.
-- Next Guest returns to a clean live experience chooser and never opens marketing.
-- Retake repeats the current experience.
+- Next Guest starts a clean three-photo session and never opens marketing.
+- Retake replaces the current guest's three captures.
 - Soft confetti follows a completed capture.
 - Two-minute review timeout.
 - Share uses the iOS Share sheet where supported.
 - Save exports the current high-resolution output. Moving Polaroid prefers the
-  on-device MP4/WebM motion file and also offers its exact final PNG.
+  on-device MP4 and also offers its deterministic still PNG.
 
 ## Vercel deployment
 This is a plain static site.
@@ -398,22 +396,22 @@ Use HTTPS so Safari can access the camera.
 
 ## Session and gallery behaviour
 
-- A new live session is tied to the selected experience: three stills for Strip,
-  one still for Magazine, or one final still plus an optional transient motion
-  file for Moving Polaroid.
+- A new live session stores three still photographs once and exposes the complete
+  output choice from that shared source set.
 - Finished still-source records are stored locally in IndexedDB. Capacity is
   storage-aware rather than a commercial session limit; the operator is warned
   when the browser is running short of space.
-- Motion video is a current-session deliverable. The local gallery preserves the
-  exact final still; it does not promise durable storage of the recorded video.
-- Legacy three-photo records remain readable without redefining the new live flow.
+- Moving Polaroid video is rebuilt locally from the saved three-photo source set;
+  the gallery does not need to retain a separate video recording.
+- Legacy and earlier experience-specific records remain readable without
+  pretending a one-photo record contains three sources.
 - Nothing in a Free or Personal gallery is uploaded to a backend. Clear Event
   Gallery removes the locally stored records from that browser.
 
 
 ## Premium magazine architecture
-- Experience-first capture supplies Magazine with one hero photograph; the
-  renderer and its photograph treatment remain unchanged.
+- Shared capture supplies Magazine with the guest's favourite of three source
+  photographs; the renderer and its photograph treatment remain unchanged.
 - All four covers share one non-destructive photograph pipeline.
 - The original guest capture remains unchanged in memory and IndexedDB; only the exported cover canvas is finished.
 - Design remains typography, rules, barcode and graphic layers over that transient photograph render.
@@ -433,18 +431,14 @@ Use HTTPS so Safari can access the camera.
 
 ## Video encoding
 
-New live Moving Polaroids use `motion.js` and MediaRecorder over a silent composed
-canvas stream. MIME support is probed rather than inferred from the browser name:
-MP4/H.264 candidates are offered first, followed by WebM. Page hiding, aborts,
-recording errors and unsupported canvas capture stop cleanly and retain the exact
-final still.
-
-`mp4.js` remains the deterministic on-device H.264 writer for the legacy
-three-still Polaroid compositor. It probes WebCodecs and Safari's MP4 MediaRecorder
-path and yields between frames with `MessageChannel`; every frame checks an abort
-token. Neither pipeline makes a universal Safari promise. Camera permission,
-MediaRecorder MIME support, native Share acceptance and download behaviour must be
-verified over HTTPS on the actual iPhone/iPad intended for an event.
+`mp4.js` is the deterministic on-device H.264 writer for the active three-photo
+Polaroid compositor. It probes WebCodecs and Safari's MP4 MediaRecorder path,
+yields between frames with `MessageChannel`, and checks an abort token for every
+frame. The dormant `motion.js` canvas recorder still probes MP4/H.264 and WebM
+without inferring support from a browser name, but it is not part of the current
+shared guest flow. Camera permission, video encoding, native Share acceptance and
+download behaviour must be verified over HTTPS on the actual iPhone/iPad intended
+for an event.
 
 ## Service worker
 The current cache is the MyBishBash product shell. Its finite legacy list knows

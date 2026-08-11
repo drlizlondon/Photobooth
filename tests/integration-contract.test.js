@@ -22,16 +22,19 @@ var serviceWorker = source("sw.js");
 var vercelIgnore = source(".vercelignore");
 var vercel = JSON.parse(source("vercel.json"));
 
-test("sends public Start to the experience chooser before the existing capture engine", function () {
+test("sends public Start directly into one shared three-photo capture", function () {
   var launch = app.slice(app.indexOf("function launchFreeBooth"), app.indexOf("function previewExampleBooth"));
-  assert.match(launch, /enterBoothHistory\(\);showExperienceChooser\(\)/);
+  var session = app.slice(app.indexOf("async function beginSession"), app.indexOf("function beginSharedSession"));
+  assert.match(launch, /enterBoothHistory\(\);beginSharedSession\(false\)/);
   assert.match(app, /document\.querySelectorAll\("\[data-start-photobooth\]"\)/);
   assert.doesNotMatch(launch, /(checkout|register|email)/i);
-  assert.match(html, /id="experience"/);
-  ["strip", "polaroid", "magazine"].forEach(function (experience) {
-    assert.match(html, new RegExp('data-experience="' + experience + '"'));
-  });
-  assert.match(app, /const total=currentExperience==="strip"\?3:1/);
+  assert.doesNotMatch(html, /id="experience"/);
+  assert.doesNotMatch(html, /data-experience=/);
+  assert.match(session, /const shared=experience==="shared"/);
+  assert.match(session, /sharedOutputSession=shared/);
+  assert.match(session, /const total=shared\|\|currentExperience==="strip"\?3:1/);
+  assert.match(session, /photos\.push\(capturePhoto\(\)\)/);
+  assert.match(app, /\$\("reviewModeNav"\)\.hidden=!sharedOutputSession/);
 });
 
 test("exposes Personal and Business as separate static product surfaces", function () {
@@ -110,17 +113,24 @@ test("keeps the locked Personal pricing visible while checkout stays honest", fu
 });
 
 test("separates public Home, Event Home, Next Guest and Retake semantics", function () {
+  var cancel = app.slice(app.indexOf("function cancelCapture"), app.indexOf("function syncReviewModeUI"));
+  var enterGuest = app.slice(app.indexOf("function enterGuestBooth"), app.indexOf("async function submitGuestPin"));
+  var restart = app.slice(app.indexOf("function beginSharedSession"), app.indexOf("function inAppBrowser"));
   assert.match(html, /id="boothHomeBtn"[^>]*>Home</);
   assert.match(app, /const HISTORY_SURFACE=\{PRODUCT:"product",EVENT_HOME:"event-home",BOOTH:"booth"\}/);
   assert.match(app, /function setBoothReturnScreen\(target\)[\s\S]*?"Event Home":"Home"/);
   assert.match(app, /function teardownBoothSession\(\)[\s\S]*?captureSessionId\+\+[\s\S]*?clearTimeout\(idleTimer\)[\s\S]*?stillRenderToken\+\+[\s\S]*?stopCamera\(\)[\s\S]*?invalidatePolaroid\(\)/);
-  assert.match(app, /function cancelCapture\(\)[\s\S]*?boothReturnScreen==="welcome"[\s\S]*?showExperienceChooser\(\)[\s\S]*?showBoothReturnScreen\(\)/);
-  assert.match(app, /function launchFreeBooth\(\)[\s\S]*?setBoothReturnScreen\("landing"\);enterBoothHistory\(\);showExperienceChooser\(\)/);
+  assert.match(cancel, /function cancelCapture\(\)\{\s*showBoothReturnScreen\(\);\s*\}/);
+  assert.match(app, /function launchFreeBooth\(\)[\s\S]*?setBoothReturnScreen\("landing"\);enterBoothHistory\(\);beginSharedSession\(false\)/);
+  assert.match(enterGuest, /setBoothReturnScreen\("welcome"\);\s*enterBoothHistory\(\);\s*beginSharedSession\(false\)/);
   assert.match(app, /\$\("startBtn"\)\.onclick=enterGuestBooth/);
-  assert.match(app, /\$\("nextGuestBtn"\)\.onclick=showExperienceChooser/);
-  assert.match(app, /\$\("retakeBtn"\)\.onclick=\(\)=>beginSession\(currentExperience\)/);
+  assert.match(restart, /function beginSharedSession\(retake\)\{return beginSession\("shared",\{retake:!!retake\}\);\}/);
+  assert.match(restart, /function restartCurrentSession\(\)\{return sharedOutputSession\?beginSharedSession\(true\):beginSession\(currentExperience,\{retake:true\}\);\}/);
+  assert.match(app, /\$\("nextGuestBtn"\)\.onclick=\(\)=>beginSharedSession\(false\)/);
+  assert.match(app, /\$\("retakeBtn"\)\.onclick=restartCurrentSession/);
   assert.match(app, /window\.addEventListener\("popstate",handleHistoryChange\)/);
   assert.match(app, /bootstrapNavigation\(\)/);
+  assert.doesNotMatch(app, /showExperienceChooser/);
 });
 
 test("keeps an ended event in guest-safe navigation", function () {
@@ -144,11 +154,54 @@ test("cancels stale capture work without stopping a newer camera stream", functi
   assert.match(camera, /if\(stream===target\)stream=null/);
   assert.match(session, /await startCamera\(sid\)/);
   assert.match(session, /await delay\(420\);[\s\S]*?if\(sid!==captureSessionId\)return;\s*stopCamera\(\)/);
-  assert.match(session, /await saveSessionToGallery\(photos,sessionOrientation,currentExperience\);\s*if\(sid!==captureSessionId\)return/);
+  assert.match(session, /const galleryRecord=await saveSessionToGallery\(photos,sessionOrientation,shared\?"shared":currentExperience,replaceId\);\s*if\(sid!==captureSessionId\)return/);
+  assert.match(session, /if\(galleryRecord\)activeGalleryRecordId=galleryRecord\.id/);
   assert.match(session, /const galleryCount=await countGallerySessions\(\);\s*if\(sid!==captureSessionId\)return/);
   assert.match(session, /if\(currentExperience==="polaroid"\)await enterPolaroid\(\);else await renderWithFade\(\);\s*if\(sid!==captureSessionId\)return/);
   var sessionCatch = session.slice(session.indexOf("}catch(err){"));
   assert.ok(sessionCatch.indexOf("sid!==captureSessionId") < sessionCatch.indexOf("stopCamera()"));
+});
+
+test("persists one shared source record per guest and reopens all three outputs", function () {
+  var record = app.slice(app.indexOf("function galleryRecord"), app.indexOf("function putSession"));
+  var save = app.slice(app.indexOf("async function saveSessionToGallery"), app.indexOf("async function storageBudget"));
+  var gallery = app.slice(app.indexOf("async function renderEventGallery"), app.indexOf("function persistSettings"));
+  var session = app.slice(app.indexOf("async function beginSession"), app.indexOf("function beginSharedSession"));
+
+  assert.match(record, /const hasRecordId=recordId!==null&&recordId!==undefined&&Number\.isFinite\(Number\(recordId\)\)/);
+  assert.match(record, /const id=hasRecordId\?Number\(recordId\):Date\.now\(\)/);
+  assert.match(record, /experience:experience\|\|"shared"/);
+  assert.match(save, /const record=galleryRecord\(sessionPhotos,orientation,experience,recordId\)/);
+  assert.match(save, /await putSession\(record\)/);
+  assert.match(save, /return record/);
+
+  assert.match(session, /const retaking=!!\(options&&options\.retake\)/);
+  assert.match(session, /const replaceId=shared&&retaking\?activeGalleryRecordId:null/);
+  assert.match(session, /const replacingRecord=replaceId!==null&&replaceId!==undefined&&Number\.isFinite\(Number\(replaceId\)\)/);
+  assert.match(session, /if\(!replacingRecord\)activeGalleryRecordId=null/);
+  assert.match(session, /if\(!replacingRecord\)\{[\s\S]*?sessionEdition=nextEditionNumber\(galleryCount\)/);
+
+  assert.match(gallery, /const hasThreeSources=session\.photos\.length===3/);
+  assert.match(gallery, /sharedOutputSession=hasThreeSources&&\["shared","legacy","strip"\]\.includes\(recordedExperience\)/);
+  assert.match(gallery, /currentExperience=sharedOutputSession\?"strip"/);
+  assert.match(gallery, /activeGalleryRecordId=null/);
+  assert.match(gallery, /resetCreativeState\(currentExperience\)[\s\S]*?buildReviewControls\(\)[\s\S]*?showScreen\("review"\)/);
+});
+
+test("clears Business completion for a fresh guest while preserving it for Retake", function () {
+  var session = app.slice(app.indexOf("async function beginSession"), app.indexOf("function beginSharedSession"));
+  var reset = app.slice(app.indexOf("function resetGuestCompletionState"), app.indexOf("function enterGuestBooth"));
+  var teardown = app.slice(app.indexOf("function teardownBoothSession"), app.indexOf("function setBoothReturnScreen"));
+
+  assert.match(session, /const retaking=!!\(options&&options\.retake\)/);
+  assert.match(session, /if\(!retaking\)resetGuestCompletionState\(true\)/);
+  assert.doesNotMatch(session, /if\(retaking\)resetGuestCompletionState/);
+  assert.match(reset, /businessCompletionSatisfied=false/);
+  assert.match(reset, /if\(!clearFields\)return/);
+  assert.match(reset, /email\.value=""/);
+  assert.match(reset, /marketing\.checked=false/);
+  assert.match(reset, /publicity\.checked=false/);
+  assert.match(teardown, /resetGuestCompletionState\(true\)/);
 });
 
 test("matches the Strip framing guide to the contained camera pixels", function () {

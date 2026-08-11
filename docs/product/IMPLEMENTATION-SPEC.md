@@ -840,4 +840,76 @@ The capture flow (`startCamera`, countdown, `capturePhoto`, review) — the dire
 
 ---
 
-*Twenty-eight packets proposed, twenty-one accepted. The engine is still not touched. `CAPABILITY_MATRIX` is widened exactly once, by exactly one packet, on the record.*
+---
+
+# Amendment 004 — Amendment 003 ACCEPTED; blockers resolved
+
+**Date:** 2026-08-11
+**Status:** **ACCEPTED AND BINDING.** Amendment 003 is hereby accepted; PB-22…PB-28 and the PB-14/18/19/20 amendments are executable. Amendments 001 and 002 remain binding except where explicitly superseded below.
+
+## A4.1 — The three blocking decisions, resolved
+
+| A3.5 decision | Resolution |
+|---|---|
+| 1 — Event type list | **Seven, one list, used everywhere:** Birthday · Wedding · Baby Shower · Anniversary · Graduation · Party · Other. Supersedes Amendment 002's four. `Other` must degrade gracefully and must never infer something ridiculous from a name or a trailing title word. |
+| 2 — `PURCHASED_UNUSED` | **Rejected as a lifecycle state.** Lifecycle and entitlement stay orthogonal: lifecycle `DRAFT / LIVE / ENDED` × entitlement `trial \| paid`. A customer who has paid but not pressed START EVENT is **`DRAFT` + paid**. This preserves Amendment 002's three-state lock. *(The direction wrote `EXPIRED`; `ENDED` is the already-locked name and is retained. Trivial to overrule.)* |
+| 3 — Setup Pass vs email restore | **Adopted as the V1 transfer method, and it does not replace the restore flow — they solve different problems.** Setup Pass moves **configuration** to the event device. Restore recovers **entitlement**. Do not build email infrastructure to transport configuration. |
+
+## A4.2 — New requirements not present in Amendment 003
+
+These are additions, and they change packet scope.
+
+### Event timing is three-valued (new)
+
+`date` is today a single free-text string ([app.js:3](../../app.js:3), `<input id="setDate" maxlength="32">`) carrying **no precision information**. The product now requires three distinct timings:
+
+| Precision | Customer enters | Rendered as (example) |
+|---|---|---|
+| Exact | 15/08/2026 | `15.08.26` |
+| Approximate | August 2026 | `AUGUST 2026` |
+| Unknown | "not sure yet" | omit date furniture, or year only if genuinely known and aesthetically right |
+
+**Do not fabricate precision** — "August 2026" must never become "15/08/2026". **Never render `TBC`, `UNKNOWN` or `NO DATE`** on a guest-facing output unless the customer deliberately chose that wording.
+
+**Owned by PB-22** (config: add a precision field alongside `date`) and **PB-23** (generator and templates render each precision appropriately).
+
+### Planned date never activates anything (new, locked)
+
+Entering a date does not start the event. **Reaching** that date does not start the event. Only a deliberate START EVENT on the event device begins the 48 hours. Planned timing exists for personalisation, planning, eventual grace logic and customer clarity. **Owned by PB-20.**
+
+### Timing is amendable before activation (new) — *already satisfied*
+
+Changing planned timing must regenerate deterministic defaults while preserving intentional overrides. **The existing contract already does this**: `copyFor` re-derives every blank slot on each call and lets a stored non-blank value win ([covers.js:110](../../covers.js:110)). So a date change automatically refreshes `dateLine`, `skyline2` and `barcode` unless the customer overrode them. No second generator, and no new mechanism. Recorded so nobody builds one.
+
+### Unused paid entitlements (new, directional)
+
+"Paid but unused forever" must not be the commercial contract, **and** no arbitrary short activation deadline may make advance planning awkward. A long-stop/grace mechanism may eventually attach to unused paid events. For the backend-free MVP: retain planned timing, do not over-engineer expiry, do not pretend client-side enforcement is secure, and **never start the 48 hours at purchase as a workaround**. **PB-04** must consider how cancellation wording interacts with this; **accounting treatment must not be invented in application code.**
+
+### Setup Pass does not activate (new, locked)
+
+`PAY → GENERATE SETUP PASS → IMPORT SETUP PASS` must **not** start the event. After import the event is paid and unused — `DRAFT` + paid. **Owned by PB-14 and PB-20.**
+
+## A4.3 — Packet scope changes
+
+| Packet | Change |
+|---|---|
+| **PB-22** | Adds the timing precision field. Event types become the seven-value list. |
+| **PB-23** | Presets keyed by the seven types; **today's copy remains the Birthday preset and the default**, so Birthday output is unchanged. Must render all three timing precisions without fabricating precision or emitting placeholder text. |
+| **PB-14** | Setup Pass confirmed as the V1 method. Must not activate on import. |
+| **PB-18** | Its event-type list becomes the seven. |
+| **PB-20** | Lifecycle stays three states; entitlement is a separate axis. Planned date is not a trigger. |
+| **PB-04** | Additionally reconciles cancellation wording against unused paid entitlements. |
+
+## A4.4 — Execution order confirmed
+
+`PB-17 → PB-10 → PB-05 → PB-07 → PB-09 → PB-03` — unchanged and now authorised to proceed. **PB-17 starts immediately.**
+
+## A4.5 — PB-01 is NOT actually unblocked
+
+The direction states PB-01 is unblocked "by the Business contact decision below", but **the message ended mid-sentence at §26 and no contact address arrived.** PB-01 remains blocked on one input: the monitored email address. It will not be executed on a guessed or invented address.
+
+Similarly **PB-04 can now be drafted** against the guidance above, but still needs Lizzie's sign-off and the cancellation classification before it can be marked done.
+
+---
+
+*Twenty-eight packets, all accepted. The engine is still not touched. `CAPABILITY_MATRIX` is widened exactly once, by exactly one packet, on the record.*

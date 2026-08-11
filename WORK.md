@@ -89,8 +89,8 @@ A packet that would "fix" one of these must not run until the behaviour is confi
 
 ## Inputs needed from Lizzie
 
-- [ ] **PB-01:** the monitored email address for Business enquiries. **This is the only thing blocking a packet today.**
-- [ ] **PB-04:** sign-off on the legal content, **and** the cancellation classification — whether the one-event entitlement is treated as digital content, a service, or both, since the consent and acknowledgement checkout must capture differs. The executor drafts and flags; it does not decide this.
+- [ ] **PB-01:** the monitored email address for Business enquiries. **STILL BLOCKED** — the 2026-08-11 direction said this was unblocked "by the Business contact decision below", but the message ended mid-sentence at §26 and no address arrived. Will not be executed on a guessed address.
+- [ ] **PB-04:** now draftable per Amendment 004 (must also reconcile cancellation wording against unused paid entitlements; accounting treatment must not be invented in application code). Still needs sign-off on the legal content **and** the cancellation classification — whether the one-event entitlement is treated as digital content, a service, or both, since the consent and acknowledgement checkout must capture differs. The executor drafts and flags; it does not decide this.
 - [ ] **PB-15:** approval to cut over, and whether/when to announce the new URL.
 
 **Resolved 2026-08-10 — no longer inputs:** PB-11 price point (£0 / £19 / £49) · PB-18 event types (Birthday · Wedding · Party · Celebration) · PB-20 ENDED behaviour (photos always survive) · PB-20 reactivation (none; new purchase creates a new event) · PB-16 Annual gating (gated, along with One Event).

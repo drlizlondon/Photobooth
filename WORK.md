@@ -9,11 +9,11 @@ Update this file **in the same commit** as each packet. Keep it terse — reason
 
 ## Status
 
-- **Current phase:** P0 — Stop the site lying. Not started.
+- **Current phase:** P2 — Be findable and fast. Six packets landed and pushed; PB-07 next.
 - **Completed packets:** PB-08 (mobile nav) · PB-06 (page weight −85%) · PB-17 (storage) · PB-01 (Business contact + enquiry email) · PB-10 (accessibility) · PB-05 (social metadata + origin constant)
 - **Next packet:** **PB-07 — robots.txt, sitemap.xml, branded 404.** Depends on PB-05 (landed). Then PB-09 → PB-03. All unblocked.
 - **Programme started:** —
-- **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. 002 (2026-08-10) — lifecycle decisions locked, cancellation governance corrected. **003 (2026-08-11) — PROPOSED, NOT ACCEPTED**: reconciles the "we build your photobooth" direction. Proposes PB-22…PB-28 and amends PB-14/18/19/20. Evidence: `docs/product/RECONCILIATION-003.md`. **Three decisions block acceptance — see spec A3.5.**
+- **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. 002 (2026-08-10) — lifecycle decisions locked, cancellation governance corrected. 003 (2026-08-11) — reconciles the "we build your photobooth" direction; adds PB-22…PB-28, amends PB-14/18/19/20. Evidence: `docs/product/RECONCILIATION-003.md`. **004 (2026-08-11) — ACCEPTS 003 and resolves all three blocking decisions** (seven event types; lifecycle × entitlement orthogonal; Setup Pass adopted and distinct from entitlement restore), and adds the three-valued event-timing model. **Both are ACCEPTED and BINDING — PB-22…PB-28 are executable.**
 - **Reconciliation 003 verdict:** the programme survives. The immediate run `PB-17 → PB-10 → PB-05 → PB-07 → PB-09 → PB-03` is unchanged and remains executable now; PB-06 and PB-08 stay closed with no regression found.
 - **Live defect found during Amendment 001, not in the audit:** `trimGallery(20)` silently deleted a party's earliest sessions past 20, and `saveSessionToGallery` swallowed write failures with `catch(e){}`. **Fixed by PB-17.**
 
@@ -33,7 +33,7 @@ Three chains are load-bearing:
 | 2 | PB-02 Make the commerce state honest *(amended 001)* | P0 | ☐ | — |
 | 3 | PB-03 Never silently discard a guest's configuration | P0 | ☐ | — |
 | 4 | PB-04 Publish terms, privacy and cancellation | P1 | ☐ | — |
-| 5 | PB-05 Origin constant + complete social metadata | P2 | ☑ | *(pending)* |
+| 5 | PB-05 Origin constant + complete social metadata | P2 | ☑ | `9197594` |
 | 6 | PB-06 Cut the demo contact sheet to under 200 KB | P2 | ☑ | `e690d01` |
 | 7 | PB-07 robots.txt, sitemap.xml, branded 404 | P2 | ☐ | — |
 | 8 | PB-08 Fix the mobile navigation containing block | P3 | ☑ | `2c47613` |

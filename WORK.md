@@ -38,7 +38,7 @@ Three chains are load-bearing:
 | 7 | PB-07 robots.txt, sitemap.xml, branded 404 | P2 | ☐ | — |
 | 8 | PB-08 Fix the mobile navigation containing block | P3 | ☑ | `2c47613` |
 | 9 | PB-09 Differentiate camera failures, remove the alert | P3 | ☐ | — |
-| 10 | PB-10 Close the measured accessibility gaps | P3 | ☑ | *(pending)* |
+| 10 | PB-10 Close the measured accessibility gaps | P3 | ☑ | `ab8ca06` |
 | 11 | **PB-17 Make local photo storage survivable** | P3 | ☑ | `69f7dbe` |
 | 12 | **PB-18 Persistent Free booth with event-type identity** | P3 | ☐ | — |
 | 13 | **PB-19 "Your Photobooth" return access + three entry routes** | P3 | ☐ | — |

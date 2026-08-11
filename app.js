@@ -119,6 +119,19 @@ function businessContactHref(){
   }
   return BUSINESS_CONTACT.url||"";
 }
+function applyBillingState(){
+  if(BILLING_LIVE)return;
+  const notice=$("pricingNotice");
+  if(notice)notice.hidden=false;
+  /* Amendment 004 retired the Lifetime tier from sale, so a scarcity claim
+     for it cannot be truthful. loadFoundingAvailability only ever overwrites
+     this line from verified purchase records, never from a guess. */
+  const founding=$("foundingAvailability");
+  if(founding)founding.textContent="Founding Lifetime is not currently on sale.";
+  /* A restore path implies purchases exist to restore. None can yet. */
+  const restore=$("restoreAccessSection");
+  if(restore)restore.hidden=true;
+}
 function applyBusinessContact(){
   const href=businessContactHref();
   document.querySelectorAll("[data-business-contact]").forEach(el=>{
@@ -192,6 +205,15 @@ function assertOriginConsistency(){
   }
   return stale.length===0;
 }
+/* Billing is not open. Nothing can be bought yet: the Worker that issues
+   Checkout sessions is written and tested but not deployed, and Amendments
+   003/004 gate both paid products behind PB-16 until entitlement recovery
+   exists. One flag, so PB-16 flips exactly this and nothing else.
+
+   NOTE: this is about whether a purchase can be MADE. It has nothing to do
+   with the 48-hour live event period, which begins only at a deliberate
+   START EVENT on the event device. Purchase time is not event start time. */
+const BILLING_LIVE=false;
 const API_META=document.querySelector('meta[name="photobooth-api-base"]');
 const API_BASE=String(API_META&&API_META.content||"").trim().replace(/\/$/,"");
 const HISTORY_SURFACE={PRODUCT:"product",EVENT_HOME:"event-home",BOOTH:"booth"};
@@ -1842,6 +1864,16 @@ async function loadFoundingAvailability(){
 }
 async function startCheckout(plan){
   const status=$("checkoutStatus");
+  /* loadFoundingAvailability already guarded on API_BASE; this did not, which
+     is why pressing a plan produced a red failure for a condition that is
+     simply "not open yet". Same guard, honest wording, no error styling. */
+  if(!BILLING_LIVE||!API_BASE){
+    if(status){
+      status.textContent="Personal plans are not on sale yet — we are finalising them. The free photobooth is ready to use now.";
+      status.className="checkout-status";
+    }
+    return;
+  }
   if(status){status.textContent="Opening secure checkout…";status.className="checkout-status";}
   try{
     const data=await jsonRequest("/v1/billing/checkout",{
@@ -2062,6 +2094,7 @@ setSetupStep(0);
 syncBusinessConfigurator();
 updateBusinessBrandText();
 applyBusinessContact();
+applyBillingState();
 applySurfaceMetadata(routeFromLocation());
 assertOriginConsistency();
 bootstrapNavigation();

@@ -427,3 +427,8 @@ canvas.mag-style-preview{display:block;width:100%;height:auto;background:#e9e2d8
    announced without stealing focus from whatever the organiser is typing. */
 .settings-save-status{margin:0 0 14px;padding:12px 14px;border:1px solid var(--ink);border-radius:12px;background:var(--party-yellow);color:var(--ink);font-size:13px;line-height:1.5;font-weight:700}
 .settings-save-status[hidden]{display:none}
+
+/* Says plainly that nothing is on sale yet, rather than letting a customer
+   discover it by pressing a price and getting a failure. */
+.pricing-notice{margin:0 0 26px;padding:14px 18px;border:1px solid var(--ink);border-radius:12px;background:var(--party-yellow);font-size:14px;line-height:1.5;font-weight:700}
+.pricing-notice[hidden]{display:none}

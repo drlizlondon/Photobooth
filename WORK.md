@@ -10,8 +10,8 @@ Update this file **in the same commit** as each packet. Keep it terse — reason
 ## Status
 
 - **Current phase:** approved run COMPLETE. Nine packets landed and pushed. P0 has one packet left (PB-02); P1 (PB-04) is draftable.
-- **Completed packets (9):** PB-01 · PB-03 · PB-05 · PB-06 · PB-07 · PB-08 · PB-09 · PB-10 · PB-17 — the whole approved run, all pushed to `origin/main`.
-- **Next packet:** **PB-02 — make the commerce state honest** (the last P0 packet), then PB-04. Beyond that the direction work: PB-22 → PB-23 → PB-13 → PB-14 → PB-15 → PB-26 → PB-20 → PB-21 → PB-11 → PB-12 → PB-16. **Awaiting Lizzie's go-ahead — the approved run is complete.**
+- **Completed packets (10):** PB-01 · PB-02 · PB-03 · PB-05 · PB-06 · PB-07 · PB-08 · PB-09 · PB-10 · PB-17 — all pushed to `origin/main`. **P0 is complete.**
+- **Next packet:** **PB-04 — terms, privacy and cancellation.** Then the direction work: PB-22 → PB-23 → PB-13 → PB-14 → PB-15 → PB-26 → PB-20 → PB-21 → PB-11 → PB-12 → PB-16.
 - **Programme started:** —
 - **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. 002 (2026-08-10) — lifecycle decisions locked, cancellation governance corrected. 003 (2026-08-11) — reconciles the "we build your photobooth" direction; adds PB-22…PB-28, amends PB-14/18/19/20. Evidence: `docs/product/RECONCILIATION-003.md`. **004 (2026-08-11) — ACCEPTS 003 and resolves all three blocking decisions** (seven event types; lifecycle × entitlement orthogonal; Setup Pass adopted and distinct from entitlement restore), and adds the three-valued event-timing model. **Both are ACCEPTED and BINDING — PB-22…PB-28 are executable.**
 - **Reconciliation 003 verdict:** the programme survives. The immediate run `PB-17 → PB-10 → PB-05 → PB-07 → PB-09 → PB-03` is unchanged and remains executable now; PB-06 and PB-08 stay closed with no regression found.
@@ -30,7 +30,7 @@ Three chains are load-bearing:
 | # | Packet | Phase | Status | Commit |
 |---|--------|-------|--------|--------|
 | 1 | PB-01 Replace the dead Business contact URL | P0 | ☑ | `904bd4f` |
-| 2 | PB-02 Make the commerce state honest *(amended 001)* | P0 | ☐ | — |
+| 2 | PB-02 Make the commerce state honest *(amended 001)* | P0 | ☑ | *(pending)* |
 | 3 | PB-03 Never silently discard a guest's configuration | P0 | ☑ | `0fd9ca1` |
 | 4 | PB-04 Publish terms, privacy and cancellation | P1 | ☐ | — |
 | 5 | PB-05 Origin constant + complete social metadata | P2 | ☑ | `9197594` |
@@ -112,6 +112,12 @@ Recorded by PB-05 as its criterion requires. All five live in `index.html`; noth
 | 7 | `sitemap.xml` — both `<loc>` values *(added by PB-07)* |
 
 Locations 2–5 are static **by necessity**, not oversight: link-preview crawlers (Facebook, WhatsApp, Slack, iMessage, X) do not execute JavaScript, so a JS-written `og:image` is invisible to precisely the surfaces the metadata exists to serve. `assertOriginConsistency()` runs at boot and warns if any of them stops agreeing with `site-origin`, so the duplication cannot drift silently. `robots.txt` and `sitemap.xml` are static files that cannot read a meta tag, so they carry the origin too — seven locations in total, all listed here.
+
+## Billing switch
+
+`BILLING_LIVE` in `app.js` is the single flag controlling whether a purchase can be made. It is `false`. Flipping it to `true` — verified by doing so — hides the pricing notice, restores the founding line and the restore path, and lets `startCheckout` run. **PB-16 flips exactly this, plus the `photobooth-api-base` meta, and nothing else.**
+
+It has nothing to do with the 48-hour live event period: purchase time is not event start time, and only a deliberate START EVENT begins the live window.
 
 ## Decision log
 

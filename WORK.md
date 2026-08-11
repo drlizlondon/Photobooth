@@ -13,7 +13,8 @@ Update this file **in the same commit** as each packet. Keep it terse — reason
 - **Completed packets:** PB-08 (mobile nav containing block) · PB-06 (page weight 2,331,527 → 341,779 bytes)
 - **Next packet:** **PB-17 — make local photo storage survivable.** Promoted 2026-08-10 ahead of the P0/P1 sequence: the 20-session silent deletion and the swallowed quota failure are live defects in a shipped product, not future commercial architecture, and they depend on none of the gated decisions. PB-01 remains blocked on the contact address; PB-03 and PB-06…PB-10 are unblocked and can run in parallel sessions.
 - **Programme started:** —
-- **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. Added PB-17…PB-21, amended PB-02/11/12/14/16, reordered the tail. See spec Amendment 001.
+- **Amendments:** 001 (2026-08-10) — four experiences, event lifecycle, £19/£49 model. 002 (2026-08-10) — lifecycle decisions locked, cancellation governance corrected. **003 (2026-08-11) — PROPOSED, NOT ACCEPTED**: reconciles the "we build your photobooth" direction. Proposes PB-22…PB-28 and amends PB-14/18/19/20. Evidence: `docs/product/RECONCILIATION-003.md`. **Three decisions block acceptance — see spec A3.5.**
+- **Reconciliation 003 verdict:** the programme survives. The immediate run `PB-17 → PB-10 → PB-05 → PB-07 → PB-09 → PB-03` is unchanged and remains executable now; PB-06 and PB-08 stay closed with no regression found.
 - **Live defect found during Amendment 001, not in the audit:** `trimGallery(20)` ([app.js:301](app.js:301)) silently deletes a party's earliest sessions past 20, and `saveSessionToGallery` swallows write failures with `catch(e){}`. Owned by PB-17.
 
 ## Packet checklist (execute strictly in this order)

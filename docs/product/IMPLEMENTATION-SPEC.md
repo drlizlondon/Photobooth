@@ -774,4 +774,70 @@ The four questions Amendment 001 raised are now settled, plus one correction to 
 
 ---
 
-*Twenty-one packets. The engine is still not touched. `CAPABILITY_MATRIX` is widened exactly once, by exactly one packet, on the record.*
+---
+
+# Amendment 003 — Reconciling the "we build your photobooth" direction
+
+**Date:** 2026-08-11
+**Source:** [RECONCILIATION-003.md](RECONCILIATION-003.md) — full evidence, sections A–J.
+**Status:** **PROPOSED, NOT ACCEPTED.** Nothing in this amendment is executable until Lizzie accepts it. Amendments 001 and 002 remain binding meanwhile.
+
+## A3.1 — The programme survives
+
+**The existing packet programme still leads to the right product and does not need restarting.** The direction is largely additive to it.
+
+**The immediate run is unchanged: `PB-17 → PB-10 → PB-05 → PB-07 → PB-09 → PB-03`.** Every packet in it is a live-defect fix or a marketing-surface fix; none touches configuration, lifecycle, pricing or the capture flow. The direction changes what comes *after* that run, not the run itself. PB-06 and PB-08 stay closed — the reconciliation found no regression or incompatibility in either.
+
+The reason the fit is this good: **the generation engine already exists.** `derive()` produces all 28 cover copy slots deterministically from the event title, and `DEFAULTS` implements a blank-means-generate contract across 75 primitive-only fields. The work is a resolver in front of an engine, not a new engine.
+
+## A3.2 — Amendments to existing packets
+
+| Packet | Amendment |
+|---|---|
+| **PB-14** | **Becomes the Setup Pass.** Its objective (portable configuration off one device onto another) is the same mechanism the direction needs; building a file export *and* a Setup Pass would be two solutions to one problem. Now carries: sparse diff vs `DEFAULTS`, deflate-raw + base64url, delivered in a **URL fragment** (never a query string — fragments are not transmitted to servers, so configuration never lands in an access log), `setupVersion: 1`, bundled themes/templates referenced by ID. Hard exclusions: guest photographs, and `businessBrand.logoImage`. |
+| **PB-18** | Its four Free event types must reconcile with the direction's seven creation-flow types — see decision 1 below. Otherwise unchanged. |
+| **PB-19** | Gains the owner/guest separation. It already owns "Your Photobooth" return access, which is the same surface. |
+| **PB-20** | Gains `PURCHASED_UNUSED` — see decision 2. Also gains the two-step activation confirm naming the event and the consequence. |
+| **PB-21** | Unchanged in principle. `ONE_EVENT` remains the widening packet. |
+| **PB-11** | Unchanged. Still the only owner of `PLAN_METADATA`. The direction explicitly does not change pricing. |
+
+## A3.3 — New packets
+
+**PB-22 must run first of these.** Hazard J.2: no event identity exists today, and retrofitting an ID after Setup Passes are in circulation is materially harder than adding one now.
+
+| # | Packet | Grade | Objective |
+|---|---|---|---|
+| **PB-22** | Event identity and the `EventConfig` contract | **Execution-grade** | Add `schemaVersion`, `eventId`, `eventType`, `look` to the existing settings object. Purely additive — no restructuring, since `DEFAULTS` is already flat, primitive-only and fully serialisable. |
+| **PB-23** | Deterministic generation: event-type copy presets | **Execution-grade** | `derive()` selects a copy preset table keyed by `eventType`. **Today's table becomes the `birthday` preset and the default, so current output is preserved byte-for-byte.** `occasionWord()` prefers the declared type over last-word inference. |
+| **PB-24** | Event Look tokens | Directional | Promote `accent` into a named Look resolving to accent + five font roles. Widening to further surfaces (clause 16) needs a design pass first. |
+| **PB-25** | BUILD MY PHOTOBOOTH creation flow | Directional | The four questions, the visual transition, "your photobooth is ready". Needs PB-22–24. Explicitly **not** a builder. |
+| **PB-26** | Magazine per-template field schemas | **Execution-grade** | Give each template its own field list, limits and hierarchy. `COPY_KEYS` is currently one global list of 28 shared by all four templates; per-template schemas must stay backwards compatible with configs already saved under the shared keys. |
+| **PB-27** | Magazine catalogue expansion | Directional | New original editorial systems on the existing registry (`TEMPLATES` + `RENDERERS`). Needs PB-26 and art direction. **The photo treatment is not reopened.** |
+| **PB-28** | Multi-photo template support | Directional | Widen `render()` from a single `opts.img` to optional `img2`/`img3`. `photos[]` already holds three, so the data exists; template-specific by construction. |
+
+## A3.4 — Proposed sequencing
+
+Unchanged immediate run, then the direction's work:
+
+`PB-17 → PB-10 → PB-05 → PB-07 → PB-09 → PB-03` *(unchanged)*
+→ `PB-22 → PB-23` *(config contract, then generation)*
+→ `PB-13 → PB-14 → PB-15` *(migration; PB-14 is now the Setup Pass)*
+→ `PB-26` *(template schemas)*
+→ `PB-20 → PB-21 → PB-11 → PB-16` *(lifecycle → licence → price → gate, unchanged)*
+→ `PB-24, PB-25, PB-27, PB-28` *(directional; need a planning pass before execution)*
+
+PB-22 before PB-14 is deliberate: the Setup Pass should carry an event ID from its first version.
+
+## A3.5 — Decisions required before this amendment can be accepted
+
+1. **Event type list.** Amendment 002 locked four Free types (Birthday · Wedding · Party · Celebration). The direction's creation flow lists seven (adds Baby shower, Anniversary, Graduation, and "Other"). **Recommendation: one list of seven, used by both**, with Free rendering a generic identity per type. Two lists for one concept is sibling synthesis.
+2. **`PURCHASED_UNUSED`.** Amendment 002 locked three lifecycle states. Clause 10 requires a state where the customer owns an unused event. **Recommendation: model it as two orthogonal axes — lifecycle (`DRAFT`/`LIVE`/`ENDED`) × entitlement (none/held) — so `PURCHASED_UNUSED` is `DRAFT` × held.** This honours the locked three-state decision rather than reopening it, and keeps the two clocks (§F) separate.
+3. **Does the Setup Pass replace the email restore flow for consumers?** Today the post-payment step is "request a restore link by email" ([app.js:1570](../../app.js:1570)), which does not fit "pay, then get a Setup Pass". They solve the same problem. Not a decision this document should take.
+
+## A3.6 — Preserved without change
+
+The capture flow (`startCamera`, countdown, `capturePhoto`, review) — the direction's clause 4 depends on the trial *being* the real booth, so the correct action is to leave it alone. The photo treatment (`FINISH`, [covers.js:357-375](../../covers.js:357)) — a separate pass from template drawing, which is exactly why the design layer can be upgraded without reopening it. The photos/configuration storage boundary. `product.js` as the entitlement boundary. The §12 and A1.8 out-of-scope lists, extended with: DSLR tethering, print servers, arbitrary overlay designers, professional booth hardware, and runtime generative AI for event copy.
+
+---
+
+*Twenty-eight packets proposed, twenty-one accepted. The engine is still not touched. `CAPABILITY_MATRIX` is widened exactly once, by exactly one packet, on the record.*

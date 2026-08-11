@@ -13,19 +13,25 @@ function source(name) {
 var app = source("app.js");
 var covers = source("covers.js");
 var polaroid = source("polaroid.js");
+var strip = source("strip.js");
 var marketing = source("marketing.js");
 var html = source("index.html");
 var styles = source("styles.css");
 var manifest = source("manifest.webmanifest");
 var serviceWorker = source("sw.js");
+var vercelIgnore = source(".vercelignore");
 var vercel = JSON.parse(source("vercel.json"));
 
-test("keeps the existing capture engine as the direct public Start destination", function () {
+test("sends public Start to the experience chooser before the existing capture engine", function () {
   var launch = app.slice(app.indexOf("function launchFreeBooth"), app.indexOf("function previewExampleBooth"));
-  assert.match(app, /function launchFreeBooth\(\)\{[\s\S]*?beginSession\(\);[\s\S]*?\}/);
+  assert.match(launch, /enterBoothHistory\(\);showExperienceChooser\(\)/);
   assert.match(app, /document\.querySelectorAll\("\[data-start-photobooth\]"\)/);
   assert.doesNotMatch(launch, /(checkout|register|email)/i);
-  assert.match(app, /for\(let i=0;i<3;i\+\+\)/);
+  assert.match(html, /id="experience"/);
+  ["strip", "polaroid", "magazine"].forEach(function (experience) {
+    assert.match(html, new RegExp('data-experience="' + experience + '"'));
+  });
+  assert.match(app, /const total=currentExperience==="strip"\?3:1/);
 });
 
 test("exposes Personal and Business as separate static product surfaces", function () {
@@ -45,7 +51,8 @@ test("exposes Personal and Business as separate static product surfaces", functi
 });
 
 test("renders attribution inside every output pipeline", function () {
-  assert.match(app, /drawStripBranding\(ctx,W,H,ink,t\.sans,branding,s\.accent\);/);
+  assert.match(app, /return STRIP\.render\(ctx,\{[\s\S]*?branding,/);
+  assert.match(strip, /const brand=brandingLayout\(opts\.branding,geo\)/);
   assert.match(app, /branding:currentBranding\(\)/);
   assert.match(app, /attribution:currentBranding\(\)/);
 
@@ -92,14 +99,14 @@ test("keeps the public landing white, pastel and product-first", function () {
   assert.equal(JSON.parse(manifest).theme_color, "#ffffff");
 });
 
-test("keeps Personal pricing exact and never invents a founding remainder", function () {
-  ["£0", "£30", "£50", "£100"].forEach(function (price) {
+test("keeps the locked Personal pricing visible while checkout stays honest", function () {
+  ["£0", "£19", "£49"].forEach(function (price) {
     assert.ok(html.includes(price), price + " must be visible");
   });
-  assert.match(html, /Limited to the first 500 Founding Lifetime customers\./);
-  assert.doesNotMatch(html + app, /first 100|Limited to 100/i);
-  assert.match(app, /if\(!API_BASE\)return;/);
-  assert.match(app, /limit===500&&remaining>=0&&remaining<=limit&&sold===limit-remaining/);
+  assert.doesNotMatch(html, /Founding Lifetime|£100|£30|£50/);
+  assert.match(html, /One Party and Annual are coming soon/);
+  assert.match(app, /const BILLING_LIVE=false/);
+  assert.match(app, /if\(!BILLING_LIVE\|\|!API_BASE\)/);
 });
 
 test("separates public Home, Event Home, Next Guest and Retake semantics", function () {
@@ -107,13 +114,24 @@ test("separates public Home, Event Home, Next Guest and Retake semantics", funct
   assert.match(app, /const HISTORY_SURFACE=\{PRODUCT:"product",EVENT_HOME:"event-home",BOOTH:"booth"\}/);
   assert.match(app, /function setBoothReturnScreen\(target\)[\s\S]*?"Event Home":"Home"/);
   assert.match(app, /function teardownBoothSession\(\)[\s\S]*?captureSessionId\+\+[\s\S]*?clearTimeout\(idleTimer\)[\s\S]*?stillRenderToken\+\+[\s\S]*?stopCamera\(\)[\s\S]*?invalidatePolaroid\(\)/);
-  assert.match(app, /function cancelCapture\(\)\{\s*showBoothReturnScreen\(\);\s*\}/);
-  assert.match(app, /function launchFreeBooth\(\)[\s\S]*?setBoothReturnScreen\("landing"\);enterBoothHistory\(\);beginSession\(\)/);
-  assert.match(app, /\$\("startBtn"\)\.onclick=\(\)=>\{setBoothReturnScreen\("welcome"\);enterBoothHistory\(\);beginSession\(\);\}/);
-  assert.match(app, /\$\("nextGuestBtn"\)\.onclick=beginSession/);
-  assert.match(app, /\$\("retakeBtn"\)\.onclick=beginSession/);
+  assert.match(app, /function cancelCapture\(\)[\s\S]*?boothReturnScreen==="welcome"[\s\S]*?showExperienceChooser\(\)[\s\S]*?showBoothReturnScreen\(\)/);
+  assert.match(app, /function launchFreeBooth\(\)[\s\S]*?setBoothReturnScreen\("landing"\);enterBoothHistory\(\);showExperienceChooser\(\)/);
+  assert.match(app, /\$\("startBtn"\)\.onclick=enterGuestBooth/);
+  assert.match(app, /\$\("nextGuestBtn"\)\.onclick=showExperienceChooser/);
+  assert.match(app, /\$\("retakeBtn"\)\.onclick=\(\)=>beginSession\(currentExperience\)/);
   assert.match(app, /window\.addEventListener\("popstate",handleHistoryChange\)/);
   assert.match(app, /bootstrapNavigation\(\)/);
+});
+
+test("keeps an ended event in guest-safe navigation", function () {
+  var welcomeMode = app.slice(app.indexOf("function updateWelcomeMode"), app.indexOf("function refreshHostEventStatus"));
+  var enterGuest = app.slice(app.indexOf("function enterGuestBooth"), app.indexOf("async function submitGuestPin"));
+  var begin = app.slice(app.indexOf("async function beginSession"), app.indexOf("function launchConfetti"));
+  assert.match(html, /id="welcomeEndedMessage"/);
+  assert.match(welcomeMode, /guestEnded=!hostView&&String\(settings\.eventStatus\|\|"DRAFT"\)==="ENDED"/);
+  assert.match(welcomeMode, /\$\("startBtn"\)\.hidden=pinRequired\|\|guestEnded/);
+  assert.match(enterGuest, /settings=EVENT\.refreshEventLifecycle\(settings\)[\s\S]*?settings\.eventStatus==="ENDED"[\s\S]*?updateWelcomeMode\(false\);return/);
+  assert.match(begin, /settings\.eventStatus==="ENDED"[\s\S]*?showEventHome\(boothExampleMode,false\);return/);
 });
 
 test("cancels stale capture work without stopping a newer camera stream", function () {
@@ -125,23 +143,41 @@ test("cancels stale capture work without stopping a newer camera stream", functi
   assert.match(camera, /if\(video&&video\.srcObject===target\)video\.srcObject=null/);
   assert.match(camera, /if\(stream===target\)stream=null/);
   assert.match(session, /await startCamera\(sid\)/);
-  assert.match(session, /await delay\(420\);\s*}\s*if\(sid!==captureSessionId\)return;\s*stopCamera\(\)/);
-  assert.match(session, /await saveSessionToGallery\([^)]+\);\s*if\(sid!==captureSessionId\)return/);
+  assert.match(session, /await delay\(420\);[\s\S]*?if\(sid!==captureSessionId\)return;\s*stopCamera\(\)/);
+  assert.match(session, /await saveSessionToGallery\(photos,sessionOrientation,currentExperience\);\s*if\(sid!==captureSessionId\)return/);
   assert.match(session, /const galleryCount=await countGallerySessions\(\);\s*if\(sid!==captureSessionId\)return/);
-  assert.match(session, /await renderWithFade\(\);\s*if\(sid!==captureSessionId\)return/);
+  assert.match(session, /if\(currentExperience==="polaroid"\)await enterPolaroid\(\);else await renderWithFade\(\);\s*if\(sid!==captureSessionId\)return/);
   var sessionCatch = session.slice(session.indexOf("}catch(err){"));
   assert.ok(sessionCatch.indexOf("sid!==captureSessionId") < sessionCatch.indexOf("stopCamera()"));
+});
+
+test("matches the Strip framing guide to the contained camera pixels", function () {
+  var guide = app.slice(app.indexOf("function syncStripFramingGuide"), app.indexOf("async function startCamera"));
+  assert.match(guide, /video\.videoWidth\/video\.videoHeight/);
+  assert.match(guide, /shownWidth=boxRatio>sourceRatio\?availableHeight\*sourceRatio:availableWidth/);
+  assert.match(guide, /const stripGeometry=STRIP&&typeof STRIP\.geometry==="function"\?STRIP\.geometry\(\):null/);
+  assert.match(guide, /const apertureRatio=aperture\?aperture\.w\/aperture\.h:564\/504/);
+  assert.match(guide, /guide\.style\.width=cropWidth\+"px"/);
+  assert.match(guide, /guide\.style\.left=shownLeft\+\(shownWidth-cropWidth\)\/2\+"px"/);
+  assert.match(app, /sessionOrientation=w>=h\?"landscape":"portrait";\s*syncStripFramingGuide\(\)/);
+});
+
+test("marks host draft previews through the canonical output surfaces", function () {
+  var admin = app.slice(app.indexOf("function renderAdminPreview"), app.indexOf("function scheduleAdminPreview"));
+  assert.match(admin, /const adminDraft=String\(s\.eventStatus\|\|"DRAFT"\)==="DRAFT"/);
+  assert.match(admin, /draft:adminDraft/);
+  assert.equal((admin.match(/drawDraftPreview\(ctx,c\.width,c\.height,adminDraft\)/g) || []).length, 2);
 });
 
 test("collapses transient booth history and replaces example Event Home state", function () {
   var restore = app.slice(app.indexOf("function restoreHistorySurface"), app.indexOf("function handleHistoryChange"));
   var enterEvent = app.slice(app.indexOf("function enterEventHome"), app.indexOf("function enterBoothHistory"));
-  var savePersonal = app.slice(app.indexOf("function savePersonalSettings"), app.indexOf("function launchFreeBooth"));
+  var savePersonal = app.slice(app.indexOf("async function savePersonalSettings"), app.indexOf("function launchFreeBooth"));
   assert.match(restore, /next\.surface===HISTORY_SURFACE\.BOOTH[\s\S]*?history\.back&&history\.length>1[\s\S]*?history\.back\(\)/);
   assert.match(app, /let historyTransitionPending=false/);
   assert.match(app, /function handleHistoryChange\(event\)\{\s*historyTransitionPending=false/);
   assert.match(enterEvent, /current\.surface===HISTORY_SURFACE\.EVENT_HOME[\s\S]*?history\.replaceState\(next/);
-  assert.ok(enterEvent.indexOf("history.replaceState") < enterEvent.indexOf("showEventHome(example)"));
+  assert.ok(enterEvent.indexOf("history.replaceState") < enterEvent.indexOf("showEventHome(example,hostView)"));
   assert.match(savePersonal, /if\(boothExampleMode\)\{temporarySettingsSnapshot=null;boothExampleMode=false;\}/);
   assert.match(app, /function productBasePath\(\)[\s\S]*?location\.pathname\.replace\(\/\\\/business\\\/\?\$\/,"\/"\)/);
   assert.match(app, /function productURL\(route\)[\s\S]*?route==="business"[\s\S]*?"\/business":base/);
@@ -150,7 +186,7 @@ test("collapses transient booth history and replaces example Event Home state", 
 });
 
 test("keeps magazine grading independent from Strip filters and older Safari canvas filters", function () {
-  assert.match(app, /Covers\.applyGrade\(ctx,side,y,innerW,photoH,filterCSS\(chosenFilter\)\)/);
+  assert.match(app, /Covers\.applyGrade\(photoContext,destination\.x,destination\.y,destination\.w,destination\.h,filterCSS\(chosenFilter\)\)/);
   assert.doesNotMatch(covers.replace(/\/\*[\s\S]*?\*\//g, ""), /\.filter\s*=/);
   assert.doesNotMatch(polaroid.replace(/\/\*[\s\S]*?\*\//g, ""), /\.filter\s*=/);
   assert.doesNotMatch(app.replace(/\/\*[\s\S]*?\*\//g, ""), /\.filter\s*=/);
@@ -167,6 +203,16 @@ test("migrates legacy local data without deleting its source identifiers", funct
   assert.doesNotMatch(app, /removeItem\(LEGACY_SETTINGS_KEY\)/);
 });
 
+test("persists migrated EventConfig identity and keeps Setup Passes sparse", function () {
+  var load = app.slice(app.indexOf("function loadSettings"), app.indexOf("const EVENT_LOOKS"));
+  var setupPass = app.slice(app.indexOf("async function setupPassLink"), app.indexOf("async function copySetupPass"));
+  assert.match(load, /const serialised=JSON\.stringify\(migrated\)/);
+  assert.match(load, /localStorage\.setItem\(SETTINGS_KEY,serialised\)/);
+  assert.match(load, /delete eventDefaults\.eventType/);
+  assert.match(load, /delete eventDefaults\.datePrecision/);
+  assert.match(setupPass, /EVENT\.encodeSetupPass\(draft,\{defaults:DEFAULTS\}\)/);
+});
+
 test("keeps unpaid Personal drafts out of the real Free booth", function () {
   var pricingHandler = app.slice(
     app.indexOf('$("choosePersonalPlan").onclick'),
@@ -175,8 +221,8 @@ test("keeps unpaid Personal drafts out of the real Free booth", function () {
   assert.match(pricingHandler, /showProductRoute\("personal",true\)/);
   assert.doesNotMatch(pricingHandler, /settings=draftSettings\(\)/);
   assert.match(app, /function launchFreeBooth\(\)\{[\s\S]*?restoreTemporarySettings\(\)/);
-  assert.match(app, /!capabilities\.canPersonaliseEvent&&!legacyProfileAvailable[\s\S]*?settings=\{\.\.\.DEFAULTS\}/);
-  assert.match(app, /function showBoothReturnScreen\(\)[\s\S]*?restoreTemporarySettings\(\)/);
+  assert.match(app, /!capabilities\.canPersonaliseEvent&&!legacyProfileAvailable[\s\S]*?settings=EVENT\?EVENT\.createEventConfig\(DEFAULTS/);
+  assert.match(app, /function showProductRoute\(route,push,replace\)[\s\S]*?restoreTemporarySettings\(\)/);
 });
 
 test("requires a finite unexpired server token for cached Personal access", function () {
@@ -193,7 +239,11 @@ test("caches the complete local-first product shell", function () {
     "./assets/demo-photos.jpg",
     "./covers.js",
     "./polaroid.js",
-    "./mp4.js"
+    "./mp4.js",
+    "./event.js",
+    "./strip.js",
+    "./motion.js",
+    "./landing.js"
   ].forEach(function (asset) {
     assert.ok(serviceWorker.includes(JSON.stringify(asset)), asset + " must remain available offline");
   });
@@ -212,7 +262,13 @@ test("does not force-reload safe-worker booths or cache product API responses", 
   assert.doesNotMatch(legacySet, /rae-photo-booth-live-v(?:8|9|10|11)/);
   var assetList = serviceWorker.slice(serviceWorker.indexOf("const ASSETS"), serviceWorker.indexOf("const CACHEABLE_ASSET_URLS"));
   assert.doesNotMatch(assetList, /\/v1\//);
-  assert.match(serviceWorker, /const CACHE="mybishbash-photobooth-v3"/);
+  assert.match(serviceWorker, /const CACHE="mybishbash-photobooth-v4"/);
+});
+
+test("keeps internal plans, tests and credentials out of the static deployment", function () {
+  [".claude/", ".env*", "README.md", "WORK.md", "docs/", "tests/", "worker/"].forEach(function (entry) {
+    assert.ok(vercelIgnore.split(/\r?\n/).includes(entry), entry + " must be excluded from the static artefact");
+  });
 });
 
 test("loads capabilities before the booth and demo integrations", function () {

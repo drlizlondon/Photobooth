@@ -362,20 +362,84 @@ function buildChrome(geo,copy,hand,backdrop,attribution){
   return c;
 }
 
+function sourceSize(img){
+  if(!img)return {w:0,h:0};
+  return {
+    w:Number(img.videoWidth||img.naturalWidth||img.width||0),
+    h:Number(img.videoHeight||img.naturalHeight||img.height||0)
+  };
+}
+function canDrawSource(img){
+  const source=sourceSize(img);
+  return Number.isFinite(source.w)&&Number.isFinite(source.h)&&source.w>0&&source.h>0;
+}
+function clearPlate(ctx,w,h){
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle="#0d0d0d";
+  ctx.fillRect(0,0,w,h);
+  ctx.restore();
+}
+/* One crop-and-finish path for authored still plates, a live camera frame and
+   the exact photograph frozen at the motion/hold boundary. Keeping that path
+   shared is what prevents the held photograph changing crop or colour when
+   the movement resolves. */
+function paintPlate(ctx,img,w,h,anchorY,mirror){
+  if(!canDrawSource(img))return false;
+  clearPlate(ctx,w,h);
+  ctx.save();
+  if(mirror){ctx.translate(w,0);ctx.scale(-1,1);}
+  Covers.drawPhotoCover(ctx,img,0,0,w,h,anchorY===undefined?0.38:anchorY);
+  ctx.restore();
+  Covers.polaroidFinish(ctx,0,0,w,h);
+  return true;
+}
+
 /* The photograph, cropped to the window and print-finished, once per source
-   image. Doing the finish here rather than per video frame is both 30x
-   cheaper and more correct: it is a pass on the photograph, not on the film. */
+   image. Doing the finish here rather than per authored video frame is both
+   cheaper and more correct: it is a pass on the photograph, not the film. */
 function buildPlate(img,geo){
   const c=document.createElement("canvas");
   c.width=geo.photo.w;c.height=geo.photo.h;
   const ctx=c.getContext("2d",{willReadFrequently:true});
-  ctx.fillStyle="#0d0d0d";
-  ctx.fillRect(0,0,c.width,c.height);
-  if(img){
-    Covers.drawPhotoCover(ctx,img,0,0,c.width,c.height,0.38);
-    Covers.polaroidFinish(ctx,0,0,c.width,c.height);
-  }
+  clearPlate(ctx,c.width,c.height);
+  if(img)paintPlate(ctx,img,c.width,c.height,0.38,false);
   return c;
+}
+
+/* Draft event previews must never be mistaken for an activated keepsake. The
+   watermark is authored as a stationary overlay once, then composited after
+   both the photograph and print chrome so it is present in every frame. */
+function buildDraftLayer(geo){
+  const c=document.createElement("canvas");
+  c.width=geo.W;c.height=geo.H;
+  const ctx=c.getContext("2d");
+  const bandH=Math.max(42,geo.printW*.105);
+  ctx.save();
+  roundRect(ctx,geo.margin,geo.margin,geo.printW,geo.printH,geo.corner);
+  ctx.clip();
+  ctx.translate(geo.W/2,geo.margin+geo.printH*.47);
+  ctx.rotate(-.18);
+  ctx.fillStyle="rgba(25,18,38,.78)";
+  ctx.fillRect(-geo.W,-bandH/2,geo.W*2,bandH);
+  ctx.fillStyle="#f4edff";
+  ctx.textAlign="center";
+  ctx.textBaseline="middle";
+  ctx.font=`900 ${Math.max(20,geo.printW*.047)}px "Avenir Next",Avenir,"Helvetica Neue",Arial,sans-serif`;
+  ctx.fillText("DRAFT PREVIEW",0,1);
+  ctx.restore();
+  return c;
+}
+
+function paintSinglePlate(ctx,geo,chrome,plate,draft){
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,geo.W,geo.H);
+  ctx.drawImage(plate,geo.photo.x,geo.photo.y);
+  ctx.drawImage(chrome,0,0);
+  if(draft)ctx.drawImage(draft,0,0);
+  ctx.restore();
 }
 
 /* ---------- api ---------- */
@@ -417,6 +481,69 @@ function compose(o){
   };
 }
 
+/* A live Moving Polaroid uses the same film geometry, paper, handwriting,
+   attribution and fixed photographic finish as compose(). Only the source in
+   the aperture changes. drawFinalStill() freezes its source on the first call
+   and reuses those exact pixels for every subsequent hold frame.
+
+   Typical motion.js integration:
+     const print=Polaroid.composeLive(options);
+     Motion.record({
+       canvas,
+       drawMotionFrame(ctx){ print.drawLive(ctx,video); },
+       drawFinalStill(ctx){ print.drawFinalStill(ctx,video); }
+     }); */
+function composeLive(options){
+  const o=options||{};
+  const geo=size(o.base||1296);
+  const chrome=buildChrome(geo,o.copy||{},o.hand||HAND_FALLBACK,o.backdrop,o.attribution);
+  const draft=o.draftPreview===true?buildDraftLayer(geo):null;
+  const anchorY=Number.isFinite(Number(o.anchorY))?Math.max(0,Math.min(1,Number(o.anchorY))):0.38;
+  const mirror=o.mirror===true;
+
+  const livePlate=document.createElement("canvas");
+  livePlate.width=geo.photo.w;livePlate.height=geo.photo.h;
+  const liveCtx=livePlate.getContext("2d",{willReadFrequently:true});
+  clearPlate(liveCtx,livePlate.width,livePlate.height);
+
+  const finalPlate=document.createElement("canvas");
+  finalPlate.width=geo.photo.w;finalPlate.height=geo.photo.h;
+  const finalCtx=finalPlate.getContext("2d",{willReadFrequently:true});
+  clearPlate(finalCtx,finalPlate.width,finalPlate.height);
+  let finalReady=false;
+
+  function captureFinalStill(source){
+    if(!canDrawSource(source))return false;
+    const painted=paintPlate(finalCtx,source,finalPlate.width,finalPlate.height,anchorY,mirror);
+    if(painted)finalReady=true;
+    return painted;
+  }
+
+  return {
+    geo,
+    draftPreview:!!draft,
+    drawLive(ctx,source){
+      const ready=paintPlate(liveCtx,source,livePlate.width,livePlate.height,anchorY,mirror);
+      paintSinglePlate(ctx,geo,chrome,livePlate,draft);
+      return ready;
+    },
+    captureFinalStill,
+    drawFinalStill(ctx,source){
+      /* Supplying the live video is safe on every hold frame: it is sampled
+         once, at the boundary, and ignored after the exact plate is ready. */
+      if(!finalReady&&source)captureFinalStill(source);
+      if(!finalReady)throw new Error("Capture the final photograph before drawing its hold.");
+      paintSinglePlate(ctx,geo,chrome,finalPlate,draft);
+      return true;
+    },
+    hasFinalStill(){return finalReady;},
+    resetFinalStill(){
+      finalReady=false;
+      clearPlate(finalCtx,finalPlate.width,finalPlate.height);
+    }
+  };
+}
+
 /* Single still, for the admin preview. */
 function render(ctx,opts){
   const job=compose({
@@ -428,6 +555,6 @@ function render(ctx,opts){
   return job.geo;
 }
 
-global.Polaroid={size,derive,copyFor,copyKeys:COPY_KEYS,timeline,timing,compose,render};
+global.Polaroid={size,derive,copyFor,copyKeys:COPY_KEYS,timeline,timing,compose,composeLive,render};
 
 })(window);

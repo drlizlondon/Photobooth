@@ -68,6 +68,7 @@
 
   var ENTITLEMENTS = deepFreeze({
     FREE: "FREE",
+    ONE_EVENT: "ONE_EVENT",
     PERSONAL_6_MONTH: "PERSONAL_6_MONTH",
     PERSONAL_12_MONTH: "PERSONAL_12_MONTH",
     FOUNDING_LIFETIME: "FOUNDING_LIFETIME",
@@ -76,6 +77,7 @@
 
   var ENTITLEMENT_VALUES = deepFreeze([
     ENTITLEMENTS.FREE,
+    ENTITLEMENTS.ONE_EVENT,
     ENTITLEMENTS.PERSONAL_6_MONTH,
     ENTITLEMENTS.PERSONAL_12_MONTH,
     ENTITLEMENTS.FOUNDING_LIFETIME,
@@ -88,6 +90,13 @@
     }
     return entitlement;
   }
+
+  var PLAN_SALE_STATUS = deepFreeze({
+    FREE: "free",
+    ACTIVE: "active_catalogue",
+    RETIRED: "retired",
+    CONTACT: "contact"
+  });
 
   /* Public product and price metadata lives here, separately from the
      capability matrix below. UI copy or a price change must never grant a
@@ -102,27 +111,47 @@
     durationMonths: null,
     lifetime: false,
     contactSales: false,
-    checkoutProductKey: null
+    checkoutProductKey: null,
+    saleStatus: PLAN_SALE_STATUS.FREE,
+    restoreSupported: false
+  };
+  PLAN_METADATA[ENTITLEMENTS.ONE_EVENT] = {
+    entitlement: ENTITLEMENTS.ONE_EVENT,
+    label: "One Party",
+    amountMinor: 1900,
+    currency: "GBP",
+    durationMonths: null,
+    lifetime: false,
+    contactSales: false,
+    checkoutProductKey: "one_event",
+    saleStatus: PLAN_SALE_STATUS.ACTIVE,
+    /* Recovery for this new entitlement does not exist in the Worker yet.
+       Billing remains closed until PB-16 proves recovery end to end. */
+    restoreSupported: false
   };
   PLAN_METADATA[ENTITLEMENTS.PERSONAL_6_MONTH] = {
     entitlement: ENTITLEMENTS.PERSONAL_6_MONTH,
-    label: "6 Months",
+    label: "Legacy 6 Months",
     amountMinor: 3000,
     currency: "GBP",
     durationMonths: 6,
     lifetime: false,
     contactSales: false,
-    checkoutProductKey: "personal_6_month"
+    checkoutProductKey: null,
+    saleStatus: PLAN_SALE_STATUS.RETIRED,
+    restoreSupported: true
   };
   PLAN_METADATA[ENTITLEMENTS.PERSONAL_12_MONTH] = {
     entitlement: ENTITLEMENTS.PERSONAL_12_MONTH,
-    label: "1 Year",
-    amountMinor: 5000,
+    label: "Annual",
+    amountMinor: 4900,
     currency: "GBP",
     durationMonths: 12,
     lifetime: false,
     contactSales: false,
-    checkoutProductKey: "personal_12_month"
+    checkoutProductKey: "personal_12_month",
+    saleStatus: PLAN_SALE_STATUS.ACTIVE,
+    restoreSupported: true
   };
   PLAN_METADATA[ENTITLEMENTS.FOUNDING_LIFETIME] = {
     entitlement: ENTITLEMENTS.FOUNDING_LIFETIME,
@@ -132,7 +161,9 @@
     durationMonths: null,
     lifetime: true,
     contactSales: false,
-    checkoutProductKey: "founding_lifetime",
+    checkoutProductKey: null,
+    saleStatus: PLAN_SALE_STATUS.RETIRED,
+    restoreSupported: true,
     foundingCustomerLimit: 500,
     remainingQuantitySource: "verified_purchase_records"
   };
@@ -144,7 +175,9 @@
     durationMonths: null,
     lifetime: false,
     contactSales: true,
-    checkoutProductKey: null
+    checkoutProductKey: null,
+    saleStatus: PLAN_SALE_STATUS.CONTACT,
+    restoreSupported: false
   };
   deepFreeze(PLAN_METADATA);
 
@@ -153,11 +186,24 @@
      state written after a verified webhook. */
   var CHECKOUT_POLICY = deepFreeze({
     provider: "stripe_checkout",
+    checkoutCreationEnabled: false,
+    closedReason: "billing_gate_not_passed",
     clientSuccessRedirectGrantsEntitlement: false,
     paidEntitlementAuthority: "verified_webhook",
     foundingCountSource: "verified_purchase_records",
     browserSecretsAllowed: false
   });
+
+  function isCheckoutAvailable(entitlement) {
+    var plan = getPlanMetadata(entitlement);
+    return CHECKOUT_POLICY.checkoutCreationEnabled === true &&
+      plan.saleStatus === PLAN_SALE_STATUS.ACTIVE &&
+      !!plan.checkoutProductKey;
+  }
+
+  function canRestoreEntitlement(entitlement) {
+    return getPlanMetadata(entitlement).restoreSupported === true;
+  }
 
   function capabilities(spec) {
     return deepFreeze({
@@ -182,6 +228,11 @@
   CAPABILITY_MATRIX[ENTITLEMENTS.FREE] = capabilities({
     personalise: false,
     removeFreeBranding: false,
+    business: false
+  });
+  CAPABILITY_MATRIX[ENTITLEMENTS.ONE_EVENT] = capabilities({
+    personalise: true,
+    removeFreeBranding: true,
     business: false
   });
   CAPABILITY_MATRIX[ENTITLEMENTS.PERSONAL_6_MONTH] = capabilities({
@@ -216,16 +267,38 @@
     return PLAN_METADATA[entitlement];
   }
 
+  /* ONE_EVENT is consumed by one EventConfig lifecycle, never by a photo or
+     guest-session counter. This describes the boundary; it is deliberately
+     not presented as secure client-side enforcement. Clearing local state
+     currently fails open, which is another reason checkout remains closed. */
+  var ONE_EVENT_SCOPE = deepFreeze({
+    kind: "single_event_lifecycle",
+    eventCount: 1,
+    bindsTo: "eventId",
+    liveWindowStartsOn: "explicit_start_event",
+    endsOn: "event_status_ended",
+    sessionCap: null,
+    photoCap: null,
+    enforcementAuthority: "local_device_mvp",
+    localStateClearBehaviour: "fails_open"
+  });
+
+  function getEventScope(entitlement) {
+    assertEntitlement(entitlement);
+    return entitlement === ENTITLEMENTS.ONE_EVENT ? ONE_EVENT_SCOPE : null;
+  }
+
   var EXPORT_FORMATS = deepFreeze([
     "strip_png",
     "magazine_png",
     "polaroid_png",
-    "polaroid_mp4"
+    "polaroid_mp4",
+    "polaroid_webm"
   ]);
 
   /* Branding is an export rule, not a DOM-overlay rule. Renderers can use the
-     returned policy for PNG pixels and for every frame passed to the MP4
-     encoder. Business white-labelling is an explicit option, never a new
+     returned policy for PNG pixels and for every frame passed to either
+     moving-output encoder. Business white-labelling is an explicit option, never a new
      entitlement inferred from a label or logo. */
   var OUTPUT_BRANDING_POLICIES = deepFreeze({
     FREE: {
@@ -267,7 +340,8 @@
   });
 
   function isPersonal(entitlement) {
-    return entitlement === ENTITLEMENTS.PERSONAL_6_MONTH ||
+    return entitlement === ENTITLEMENTS.ONE_EVENT ||
+      entitlement === ENTITLEMENTS.PERSONAL_6_MONTH ||
       entitlement === ENTITLEMENTS.PERSONAL_12_MONTH ||
       entitlement === ENTITLEMENTS.FOUNDING_LIFETIME;
   }
@@ -780,8 +854,10 @@
     VERSION: "1.0.0",
     ENTITLEMENTS: ENTITLEMENTS,
     ENTITLEMENT_VALUES: ENTITLEMENT_VALUES,
+    PLAN_SALE_STATUS: PLAN_SALE_STATUS,
     PLAN_METADATA: PLAN_METADATA,
     CHECKOUT_POLICY: CHECKOUT_POLICY,
+    ONE_EVENT_SCOPE: ONE_EVENT_SCOPE,
     CAPABILITY_MATRIX: CAPABILITY_MATRIX,
     EXPORT_FORMATS: EXPORT_FORMATS,
     OUTPUT_BRANDING_POLICIES: OUTPUT_BRANDING_POLICIES,
@@ -789,6 +865,9 @@
     BRAND_ASSET_POLICY: BRAND_ASSET_POLICY,
     assertEntitlement: assertEntitlement,
     getPlanMetadata: getPlanMetadata,
+    isCheckoutAvailable: isCheckoutAvailable,
+    canRestoreEntitlement: canRestoreEntitlement,
+    getEventScope: getEventScope,
     getCapabilities: getCapabilities,
     getOutputBrandingPolicy: getOutputBrandingPolicy,
     validateBusinessEventConfig: validateBusinessEventConfig,

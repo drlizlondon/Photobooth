@@ -46,9 +46,10 @@ function fullWording() {
   };
 }
 
-test("exports the five canonical entitlements and fails closed for unknown values", function () {
+test("exports the six canonical entitlements and fails closed for unknown values", function () {
   assert.deepEqual(Product.ENTITLEMENT_VALUES, [
     "FREE",
+    "ONE_EVENT",
     "PERSONAL_6_MONTH",
     "PERSONAL_12_MONTH",
     "FOUNDING_LIFETIME",
@@ -61,9 +62,16 @@ test("exports the five canonical entitlements and fails closed for unknown value
 
 test("keeps plan pricing central and independent from behaviour", function () {
   assert.equal(Product.getPlanMetadata(E.FREE).amountMinor, 0);
+  assert.equal(Product.getPlanMetadata(E.ONE_EVENT).label, "One Party");
+  assert.equal(Product.getPlanMetadata(E.ONE_EVENT).amountMinor, 1900);
   assert.equal(Product.getPlanMetadata(E.PERSONAL_6_MONTH).amountMinor, 3000);
-  assert.equal(Product.getPlanMetadata(E.PERSONAL_12_MONTH).amountMinor, 5000);
+  assert.equal(Product.getPlanMetadata(E.PERSONAL_6_MONTH).saleStatus, "retired");
+  assert.equal(Product.getPlanMetadata(E.PERSONAL_6_MONTH).checkoutProductKey, null);
+  assert.equal(Product.getPlanMetadata(E.PERSONAL_12_MONTH).label, "Annual");
+  assert.equal(Product.getPlanMetadata(E.PERSONAL_12_MONTH).amountMinor, 4900);
   assert.equal(Product.getPlanMetadata(E.FOUNDING_LIFETIME).amountMinor, 10000);
+  assert.equal(Product.getPlanMetadata(E.FOUNDING_LIFETIME).saleStatus, "retired");
+  assert.equal(Product.getPlanMetadata(E.FOUNDING_LIFETIME).checkoutProductKey, null);
   assert.equal(Product.getPlanMetadata(E.FOUNDING_LIFETIME).foundingCustomerLimit, 500);
   assert.equal(Product.getPlanMetadata(E.FOUNDING_LIFETIME).remainingQuantity, undefined);
   assert.equal(
@@ -72,18 +80,47 @@ test("keeps plan pricing central and independent from behaviour", function () {
   );
   assert.equal(Product.getPlanMetadata(E.BUSINESS).amountMinor, null);
   assert.equal(Product.getPlanMetadata(E.BUSINESS).contactSales, true);
-  assert.equal(Product.PLAN_METADATA[E.PERSONAL_6_MONTH].canPersonaliseEvent, undefined);
+  assert.equal(Product.PLAN_METADATA[E.ONE_EVENT].canPersonaliseEvent, undefined);
   assert.equal(Object.isFrozen(Product.PLAN_METADATA), true);
 });
 
-test("never treats a client-side Checkout redirect as proof of purchase", function () {
+test("keeps billing closed and never treats a client Checkout redirect as proof of purchase", function () {
   assert.deepEqual(Product.CHECKOUT_POLICY, {
     provider: "stripe_checkout",
+    checkoutCreationEnabled: false,
+    closedReason: "billing_gate_not_passed",
     clientSuccessRedirectGrantsEntitlement: false,
     paidEntitlementAuthority: "verified_webhook",
     foundingCountSource: "verified_purchase_records",
     browserSecretsAllowed: false
   });
+  assert.equal(Product.isCheckoutAvailable(E.ONE_EVENT), false);
+  assert.equal(Product.isCheckoutAvailable(E.PERSONAL_12_MONTH), false);
+  assert.equal(Product.isCheckoutAvailable(E.FOUNDING_LIFETIME), false);
+});
+
+test("preserves legacy entitlement recovery while keeping retired plans off sale", function () {
+  assert.equal(Product.canRestoreEntitlement(E.PERSONAL_6_MONTH), true);
+  assert.equal(Product.canRestoreEntitlement(E.PERSONAL_12_MONTH), true);
+  assert.equal(Product.canRestoreEntitlement(E.FOUNDING_LIFETIME), true);
+  assert.equal(Product.canRestoreEntitlement(E.ONE_EVENT), false);
+  assert.equal(Product.canRestoreEntitlement(E.FREE), false);
+});
+
+test("binds One Party to one event lifecycle rather than photo or session counts", function () {
+  assert.deepEqual(Product.getEventScope(E.ONE_EVENT), {
+    kind: "single_event_lifecycle",
+    eventCount: 1,
+    bindsTo: "eventId",
+    liveWindowStartsOn: "explicit_start_event",
+    endsOn: "event_status_ended",
+    sessionCap: null,
+    photoCap: null,
+    enforcementAuthority: "local_device_mvp",
+    localStateClearBehaviour: "fails_open"
+  });
+  assert.equal(Product.getEventScope(E.PERSONAL_12_MONTH), null);
+  assert.equal(Object.isFrozen(Product.ONE_EVENT_SCOPE), true);
 });
 
 test("derives the complete capability surface from entitlement", function () {
@@ -98,7 +135,7 @@ test("derives the complete capability surface from entitlement", function () {
     "canCollectConsentedPhotos"
   ];
   var free = Product.getCapabilities(E.FREE);
-  var personal = Product.getCapabilities(E.PERSONAL_6_MONTH);
+  var personal = Product.getCapabilities(E.ONE_EVENT);
   var business = Product.getCapabilities(E.BUSINESS);
 
   namedCapabilities.forEach(function (key) {
@@ -115,6 +152,10 @@ test("derives the complete capability surface from entitlement", function () {
   assert.equal(personal.canPersonaliseEvent, true);
   assert.equal(personal.canRemoveFreeBranding, true);
   assert.equal(personal.canUploadBusinessLogo, false);
+  [E.ONE_EVENT, E.PERSONAL_6_MONTH, E.PERSONAL_12_MONTH, E.FOUNDING_LIFETIME].forEach(function (entitlement) {
+    assert.equal(Product.getCapabilities(entitlement).canUploadBusinessLogo, false);
+    assert.equal(Product.getCapabilities(entitlement).canCollectEmail, false);
+  });
   assert.equal(business.canUploadBusinessLogo, true);
   assert.equal(business.canCollectConsentedPhotos, true);
   assert.equal(Object.isFrozen(business), true);
@@ -122,7 +163,7 @@ test("derives the complete capability surface from entitlement", function () {
 
 test("applies export branding to every real output format", function () {
   var free = Product.getOutputBrandingPolicy(E.FREE);
-  var personal = Product.getOutputBrandingPolicy(E.FOUNDING_LIFETIME, { whiteLabel: true });
+  var personal = Product.getOutputBrandingPolicy(E.ONE_EVENT, { whiteLabel: true });
   var business = Product.getOutputBrandingPolicy(E.BUSINESS);
   var whiteLabel = Product.getOutputBrandingPolicy(E.BUSINESS, { whiteLabel: true });
 
@@ -138,7 +179,8 @@ test("applies export branding to every real output format", function () {
     "strip_png",
     "magazine_png",
     "polaroid_png",
-    "polaroid_mp4"
+    "polaroid_mp4",
+    "polaroid_webm"
   ]);
   assert.equal(free.renderIntoExportedAsset, true);
 });
@@ -404,6 +446,7 @@ test("loads as a browser global without CommonJS or dependencies", function () {
   var sandbox = {};
   vm.runInNewContext(source, sandbox, { filename: "product.js" });
   assert.equal(sandbox.MyBishBashProduct.ENTITLEMENTS.FREE, "FREE");
+  assert.equal(sandbox.MyBishBashProduct.ENTITLEMENTS.ONE_EVENT, "ONE_EVENT");
   assert.equal(
     sandbox.MyBishBashProduct.getCapabilities("BUSINESS").canConfigureSharing,
     true

@@ -1,6 +1,24 @@
 const DEFAULTS = {
+  schemaVersion:1,
+  eventId:"",
+  eventType:"party",
   eventTitle:"Your Celebration",
+  location:"",
+  eventLine:"",
   date:String(new Date().getFullYear()),
+  datePrecision:"unknown",
+  look:"lilac",
+  eventStatus:"DRAFT",
+  activatedAt:"",
+  endsAt:"",
+  guestPinEnabled:false,
+  guestPinAlgorithm:"SHA-256",
+  guestPinAuthority:"local_device",
+  guestPinSalt:"",
+  guestPinVerifier:"",
+  stripFrame:"white",
+  stripFilter:"original",
+  magazineTemplate:"keepsake",
 
   /* Blank Strip copy now follows the same useful auto-generation contract as
      Magazine and Polaroid. Existing saved Rae wording remains explicit. */
@@ -90,7 +108,10 @@ const DEFAULTS = {
 const FRAMES = [["white","White"],["black","Black"],["editorial","Editorial"],["film","Film"]];
 const FILTERS = [["original","Original"],["bw","B&W"],["vintage","Vintage"],["warm","Warm"],["glow","Glow"]];
 const PRODUCT=window.MyBishBashProduct||null;
-const ENTITLEMENTS=PRODUCT?PRODUCT.ENTITLEMENTS:{FREE:"FREE",PERSONAL_6_MONTH:"PERSONAL_6_MONTH",PERSONAL_12_MONTH:"PERSONAL_12_MONTH",FOUNDING_LIFETIME:"FOUNDING_LIFETIME",BUSINESS:"BUSINESS"};
+const EVENT=window.MyBishBashEvent||null;
+const MOTION=window.MyBishBashMotion||null;
+const STRIP=window.Strip||null;
+const ENTITLEMENTS=PRODUCT?PRODUCT.ENTITLEMENTS:{FREE:"FREE",ONE_EVENT:"ONE_EVENT",PERSONAL_6_MONTH:"PERSONAL_6_MONTH",PERSONAL_12_MONTH:"PERSONAL_12_MONTH",FOUNDING_LIFETIME:"FOUNDING_LIFETIME",BUSINESS:"BUSINESS"};
 const SETTINGS_KEY="mybishbashPhotoboothSettingsV1";
 const LEGACY_SETTINGS_KEY="raePhotoBoothLiveSettings";
 const ACCESS_KEY="mybishbashPhotoboothVerifiedAccessV1";
@@ -123,11 +144,6 @@ function applyBillingState(){
   if(BILLING_LIVE)return;
   const notice=$("pricingNotice");
   if(notice)notice.hidden=false;
-  /* Amendment 004 retired the Lifetime tier from sale, so a scarcity claim
-     for it cannot be truthful. loadFoundingAvailability only ever overwrites
-     this line from verified purchase records, never from a guess. */
-  const founding=$("foundingAvailability");
-  if(founding)founding.textContent="Founding Lifetime is not currently on sale.";
   /* A restore path implies purchases exist to restore. None can yet. */
   const restore=$("restoreAccessSection");
   if(restore)restore.hidden=true;
@@ -160,8 +176,8 @@ function applyBusinessContact(){
 const SITE_ORIGIN=metaContent("site-origin").replace(/\/$/,"");
 const SURFACE_META={
   personal:{
-    title:"MyBishBash Photobooth — 3 photos. 3 ways to keep them.",
-    description:"Take three photos and turn them into a photo strip, magazine cover and moving Polaroid. Free to try, no sign-up, photos stay on your device.",
+    title:"MyBishBash Photobooth — Your event. Your photobooth.",
+    description:"Create a personalised photobooth for your event. Guests choose an experience, capture it live, then save or share what they make.",
     path:"/"
   },
   business:{
@@ -223,13 +239,13 @@ const HISTORY_SURFACE={PRODUCT:"product",EVENT_HOME:"event-home",BOOTH:"booth"};
    shows as its placeholder — same contract as the cover copy. */
 const SCREEN_TEXT = [
   ["welcomeEyebrow","PHOTO BOOTH","welcomeEyebrow"],
-  ["startLabel","START","startLabelText"],
-  ["startHint","tap to begin","startHintText"],
+  ["startLabel","ENTER","startLabelText"],
+  ["startHint","photobooth","startHintText"],
   ["cancelLabel","CANCEL","cancelCapture"],
   ["stripTabLabel","STRIP","stripTab"],
   ["magazineTabLabel","MAGAZINE","magazineTab"],
   ["polaroidTabLabel","POLAROID","polaroidTab"],
-  ["polaroidLabel","LIVING POLAROID","polaroidLabelText"],
+  ["polaroidLabel","MOVING POLAROID","polaroidLabelText"],
   ["frameLabel","FRAME","frameLabelText"],
   ["filterLabel","FILTER","filterLabelText"],
   ["pickLabel","PICK YOUR COVER PHOTO","pickLabelText"],
@@ -249,8 +265,8 @@ const LOOSE_TEXT = [
   ["shotLabelFormat","PHOTO {n} / {total}"],
   ["promptLines","Everyone in!, Squash together!, One more!"],
   ["polaroidBusyLabel","Bringing it to life…"],
-  ["polaroidReadyLabel","Tap Share to send the video ♡"],
-  ["polaroidStillLabel","Save the print — video needs a newer iPad"]
+  ["polaroidReadyLabel","Save or Share your moving Polaroid ♡"],
+  ["polaroidStillLabel","The still photo is ready on this browser"]
 ];
 const looseText=key=>{
   const row=LOOSE_TEXT.find(([k])=>k===key);
@@ -282,6 +298,8 @@ let businessBrand={name:"",primaryColor:"#2357ff",secondaryColor:"#ffcf33",logoI
 let stream=null;
 let photos=[];
 let currentMode="strip";
+let currentExperience="strip";
+let legacySessionMode=false;
 let frameStyle="white";
 let filterStyle="original";
 let coverIndex=null;
@@ -306,9 +324,16 @@ let latestRenderPromise=Promise.resolve();
 let stillRenderToken=0;
 let exportBusy=false;
 let businessCompletionSatisfied=false;
+let motionCaptureAbort=null;
+let motionCaptureBlob=null;
+let motionCaptureExtension="mp4";
+let motionFinalStill="";
+let guestPinUnlocked=false;
+let guestPinThrottle=EVENT?EVENT.createGuestPinThrottleState():{failures:0,blockedUntil:0};
+let activationConfirmationPending=false;
 
 const $=id=>document.getElementById(id);
-const screens=["landing","business","welcome","camera","review","timeout","settings"];
+const screens=["landing","business","welcome","experience","camera","review","timeout","settings"];
 
 /* Copy written under the old two-cover settings moves to the unified cover
    model — but only where the host actually edited it. Anything left at an old
@@ -345,15 +370,59 @@ function loadSettings(){
       legacySettingsImported=!!stored;
     }
     const raw=JSON.parse(stored||"{}");
-    const migrated={...DEFAULTS,...Fonts.migrate(migrateSettings(raw))};
-    if(legacySettingsImported){
-      /* Non-destructive dual-read migration: copy the working event profile to
-         the neutral key and leave the Rae key untouched for rollback. */
-      try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(migrated));}catch(e){}
+    const eventDefaults={...DEFAULTS};
+    /* A saved profile with no event fields predates EventConfig. Do not make
+       the new defaults look like deliberate old choices: this lets the event
+       boundary conservatively infer the old Birthday/date voice once. New
+       installs still receive today's Party/Unknown defaults. */
+    if(stored&&!Object.prototype.hasOwnProperty.call(raw,"eventType"))delete eventDefaults.eventType;
+    if(stored&&!Object.prototype.hasOwnProperty.call(raw,"datePrecision"))delete eventDefaults.datePrecision;
+    const legacy={...eventDefaults,...Fonts.migrate(migrateSettings(raw))};
+    const migrated=EVENT?EVENT.migrateEventConfig(legacy,{defaults:eventDefaults}):legacy;
+    /* Persist every real migration, including the generated eventId. Without
+       this, a neutral pre-EventConfig profile received a new identity on each
+       reload until the host happened to press Save. The old Rae key remains
+       untouched for rollback. */
+    const serialised=JSON.stringify(migrated);
+    if(!stored||stored!==serialised||legacySettingsImported){
+      try{localStorage.setItem(SETTINGS_KEY,serialised);}catch(e){}
     }
     return migrated;
   }
-  catch{return {...DEFAULTS};}
+  catch{
+    /* Leave an unreadable stored value untouched so a future recovery path
+       still has the original bytes; only valid migrations are copied forward. */
+    return EVENT?EVENT.createEventConfig(DEFAULTS,{defaults:DEFAULTS}):{...DEFAULTS};
+  }
+}
+
+const EVENT_LOOKS={
+  lilac:{surface:"#ded2f2",accent:"#66519c",shape:"#ffd8ea",ink:"#111111"},
+  pink:{surface:"#ffd8ea",accent:"#e83e8c",shape:"#ded2f2",ink:"#111111"},
+  sky:{surface:"#d9e9ff",accent:"#337fd8",shape:"#fff0ae",ink:"#111111"},
+  butter:{surface:"#fff0ae",accent:"#d88600",shape:"#d9e9ff",ink:"#111111"}
+};
+function eventLook(value){return EVENT_LOOKS[value]||EVENT_LOOKS.lilac;}
+function applyEventLook(target,value){
+  if(!target)return;
+  const look=eventLook(value);
+  target.style.setProperty("--event-surface",look.surface);
+  target.style.setProperty("--event-accent",look.accent);
+  target.style.setProperty("--event-shape",look.shape);
+  target.style.setProperty("--event-ink",look.ink);
+  target.dataset.look=EVENT_LOOKS[value]?value:"lilac";
+}
+function eventMeta(s){
+  const bits=[];
+  if(String(s.location||"").trim())bits.push(String(s.location).trim());
+  if(String(s.date||"").trim())bits.push(String(s.date).trim());
+  return bits.join(" · ");
+}
+function eventIsPersonalised(){
+  return boothReturnScreen==="welcome";
+}
+function eventIsDraft(){
+  return eventIsPersonalised()&&String(settings.eventStatus||"DRAFT")==="DRAFT";
 }
 
 function stripCopyFor(s){
@@ -410,7 +479,7 @@ async function openGalleryDB(){
    and schema 1 records are still read, so existing galleries survive
    untouched. Uint8Array rather than Blob because Blob-in-IndexedDB was
    unreliable on the older iOS Safari this booth targets. */
-const GALLERY_SCHEMA=2;
+const GALLERY_SCHEMA=3;
 /* Never trim below this many sessions however tight storage is: losing a
    party's photographs to save space is the worse failure. */
 const GALLERY_MIN_SESSIONS=20;
@@ -437,9 +506,9 @@ function sessionBytes(item){
     return total+(typeof photo==="string"?photo.length:0);
   },0);
 }
-function galleryRecord(sessionPhotos,orientation){
+function galleryRecord(sessionPhotos,orientation,experience){
   const bytes=sessionPhotos.map(dataUrlToBytes);
-  const base={id:Date.now(),createdAt:new Date().toISOString(),orientation};
+  const base={id:Date.now(),createdAt:new Date().toISOString(),orientation,experience:experience||"legacy"};
   if(bytes.every(Boolean))return {...base,schema:GALLERY_SCHEMA,photoType:"image/jpeg",photos:bytes};
   /* A photo that will not decode to bytes is still worth keeping verbatim. */
   return {...base,photos:[...sessionPhotos]};
@@ -468,9 +537,9 @@ async function dropOldestSessions(count){
   db.close();
   return true;
 }
-async function saveSessionToGallery(sessionPhotos,orientation){
-  if(!sessionPhotos||sessionPhotos.length!==3)return;
-  const record=galleryRecord(sessionPhotos,orientation);
+async function saveSessionToGallery(sessionPhotos,orientation,experience){
+  if(!sessionPhotos||sessionPhotos.length<1||sessionPhotos.length>3)return;
+  const record=galleryRecord(sessionPhotos,orientation,experience);
   try{
     try{
       await putSession(record);
@@ -600,15 +669,18 @@ async function renderEventGallery(){
     btn.onclick=async()=>{
       photos=[...session.photos];
       sessionOrientation=session.orientation||"landscape";
+      currentExperience=session.experience&&session.experience!=="legacy"?session.experience:"strip";
+      legacySessionMode=!session.experience||session.experience==="legacy";
       sessionEdition=sessions.length-sessions.indexOf(session);
       const eventContext=settingsReturnScreen==="welcome";
       if(!eventContext)boothExampleMode=false;
       setBoothReturnScreen(eventContext?"welcome":"landing");
       enterBoothHistory();
-      resetCreativeState();
+      resetCreativeState(currentExperience);
+      if(currentExperience==="magazine")coverIndex=0;
       buildReviewControls();
       showScreen("review");
-      await renderWithFade();
+      if(currentExperience==="polaroid")await enterPolaroid();else await renderWithFade();
       resetIdle();
     };
     host.appendChild(btn);
@@ -669,7 +741,7 @@ function currentBranding(){
 }
 function personalPreviewBranding(){
   if(!PRODUCT)return {mode:"personal",text:"POWERED BY MYBISHBASH PHOTOBOOTH",primaryColor:settings.accent,secondaryColor:settings.accent};
-  return normaliseBranding(PRODUCT.getOutputBrandingPolicy(ENTITLEMENTS.PERSONAL_6_MONTH));
+  return normaliseBranding(PRODUCT.getOutputBrandingPolicy(ENTITLEMENTS.ONE_EVENT||ENTITLEMENTS.PERSONAL_6_MONTH));
 }
 function setEntitlement(next,record){
   if(!PRODUCT||PRODUCT.ENTITLEMENT_VALUES.indexOf(next)===-1)next=ENTITLEMENTS.FREE;
@@ -706,8 +778,12 @@ function restoreTemporarySettings(){
   temporarySettingsSnapshot=null;
   fillSettingsUI();
 }
+function abortMotionCapture(){
+  if(motionCaptureAbort){motionCaptureAbort.abort();motionCaptureAbort=null;}
+}
 function teardownBoothSession(){
   captureSessionId++;
+  abortMotionCapture();
   clearTimeout(idleTimer);idleTimer=null;
   stillRenderToken++;
   const countdown=$("countdown"),prompt=$("promptText"),flash=$("flash");
@@ -717,6 +793,8 @@ function teardownBoothSession(){
   stopCamera();
   invalidatePolaroid();
   photos=[];
+  motionCaptureBlob=null;
+  motionFinalStill="";
   exportBusy=false;
 }
 function setBoothReturnScreen(target){
@@ -767,26 +845,67 @@ function showProductRoute(route,push,replace){
 function routeFromLocation(){return /(?:^|\/)business\/?$/.test(location.pathname)?"business":"personal";}
 function applyExampleBoothSettings(){
   if(!temporarySettingsSnapshot)temporarySettingsSnapshot=settings;
-  settings={...DEFAULTS,eventTitle:"Rae's 26th Birthday",date:"2026",accent:"#d86c8f",stripTop:"THE BIRTHDAY ISSUE",stripSecond:"Rae's 26th Birthday",stripSignature:"Rae's 26th Birthday",stripDate:"2026"};
+  const example={...DEFAULTS,eventType:"birthday",eventTitle:"Rae's 26th Birthday",location:"London",date:"08.08.26",datePrecision:"exact",eventLine:"Good people. Great pictures.",look:"pink",accent:"#d86c8f",stripTop:"",stripSecond:"",stripSignature:"Rae's 26th Birthday",stripDate:"08.08.26"};
+  settings=EVENT?EVENT.createEventConfig(example,{defaults:DEFAULTS}):example;
 }
-function showEventHome(example){
+function updateWelcomeMode(hostView){
+  const welcome=$("welcome");
+  if(!welcome)return;
+  welcome.classList.toggle("host-mode",!!hostView);
+  welcome.classList.toggle("guest-mode",!hostView);
+  const guestEnded=!hostView&&String(settings.eventStatus||"DRAFT")==="ENDED";
+  const pinRequired=!guestEnded&&!hostView&&settings.guestPinEnabled&&!guestPinUnlocked;
+  $("welcomePinPanel").hidden=!pinRequired;
+  $("welcomeEndedMessage").hidden=!guestEnded;
+  $("startBtn").hidden=pinRequired||guestEnded;
+  const hostName=String(settings.eventTitle||"this event").replace(/(?:['’]s\b.*|\b(?:party|wedding|birthday|hen)\b.*)$/i,"").trim();
+  $("welcomePinMessage").textContent="This photobooth is just for "+(hostName||"the event")+"’s guests.";
+}
+function refreshHostEventStatus(){
+  if(!EVENT)return;
+  settings=EVENT.refreshEventLifecycle(settings);
+  const status=settings.eventStatus;
+  const text=$("hostEventStatusText"),label=$("hostEventStatusLabel"),activate=$("activateEventBtn");
+  if(status==="LIVE"){
+    label.textContent="EVENT LIVE";
+    text.textContent="Guests can use the photobooth until "+new Date(settings.endsAt).toLocaleString([], {dateStyle:"medium",timeStyle:"short"})+".";
+    activate.hidden=true;
+  }else if(status==="ENDED"){
+    label.textContent="EVENT ENDED";
+    text.textContent="The 48-hour live event period has ended. Saved guest keepsakes remain on this device.";
+    activate.hidden=true;
+  }else{
+    label.textContent="HOST PREVIEW";
+    text.textContent="Preview the guest experience. Your 48-hour event clock has not started.";
+    activate.hidden=false;
+    activate.textContent=activationConfirmationPending?"CONFIRM — START 48 HOURS":"START EVENT";
+  }
+}
+function showEventHome(example,hostView){
   teardownBoothSession();
   boothExampleMode=!!example;
   if(boothExampleMode)applyExampleBoothSettings();
   setBoothReturnScreen("welcome");
-  fillSettingsUI();showScreen("welcome");
+  guestPinUnlocked=false;
+  guestPinThrottle=EVENT?EVENT.createGuestPinThrottleState():guestPinThrottle;
+  activationConfirmationPending=false;
+  fillSettingsUI();
+  applyEventLook($("welcome"),settings.look);
+  refreshHostEventStatus();
+  updateWelcomeMode(!!hostView);
+  showScreen("welcome");
 }
-function enterEventHome(example){
+function enterEventHome(example,hostView){
   if(history.pushState){
     const current=history.state||{};
-    const next={surface:HISTORY_SURFACE.EVENT_HOME,example:!!example};
+    const next={surface:HISTORY_SURFACE.EVENT_HOME,example:!!example,hostView:!!hostView};
     if(current.surface===HISTORY_SURFACE.EVENT_HOME){
       history.replaceState(next,"",location.href);
     }else{
-      history.pushState({surface:HISTORY_SURFACE.EVENT_HOME,example:!!example},"",location.href);
+      history.pushState(next,"",location.href);
     }
   }
-  showEventHome(example);
+  showEventHome(example,hostView);
 }
 function enterBoothHistory(){
   if(!history.pushState)return;
@@ -806,8 +925,8 @@ function showBoothReturnScreen(){
     return;
   }
   if(boothReturnScreen==="welcome"){
-    showEventHome(boothExampleMode);
-    if(history.replaceState)history.replaceState({surface:HISTORY_SURFACE.EVENT_HOME,example:boothExampleMode},"",location.href);
+    showEventHome(boothExampleMode,false);
+    if(history.replaceState)history.replaceState({surface:HISTORY_SURFACE.EVENT_HOME,example:boothExampleMode,hostView:false},"",location.href);
     return;
   }
   showProductRoute("personal",false,true);
@@ -823,7 +942,7 @@ function returnFromEventToProduct(){
 }
 function restoreHistorySurface(state){
   const next=state||{};
-  if(next.surface===HISTORY_SURFACE.EVENT_HOME){showEventHome(!!next.example);return true;}
+  if(next.surface===HISTORY_SURFACE.EVENT_HOME){showEventHome(!!next.example,!!next.hostView);return true;}
   if(next.surface===HISTORY_SURFACE.BOOTH){
     const eventReturn=next.returnScreen==="welcome";
     boothExampleMode=!!next.example;
@@ -833,8 +952,8 @@ function restoreHistorySurface(state){
       return true;
     }
     if(eventReturn){
-      showEventHome(!!next.example);
-      if(history.replaceState)history.replaceState({surface:HISTORY_SURFACE.EVENT_HOME,example:!!next.example},"",location.href);
+      showEventHome(!!next.example,false);
+      if(history.replaceState)history.replaceState({surface:HISTORY_SURFACE.EVENT_HOME,example:!!next.example,hostView:false},"",location.href);
     }else{
       showProductRoute("personal",false,true);
     }
@@ -859,16 +978,22 @@ function bootstrapNavigation(){
 
 function fillSettingsUI(){
   $("welcomeTitle").textContent=settings.eventTitle;
-  $("welcomeDate").textContent=settings.date;
+  const meta=eventMeta(settings);
+  $("welcomeDate").textContent=meta;
+  $("welcomeDate").hidden=!meta;
+  $("welcomeEventLine").textContent=settings.eventLine||"";
+  $("welcomeEventLine").hidden=!settings.eventLine;
   document.documentElement.style.setProperty("--accent",settings.accent);
   applyScreenText();
 
   const map={
-    setEventTitle:"eventTitle",setDate:"date",
+    setEventType:"eventType",setEventTitle:"eventTitle",setLocation:"location",setDate:"date",setDatePrecision:"datePrecision",setEventLine:"eventLine",setLook:"look",
+    setStripFrame:"stripFrame",setStripFilter:"stripFilter",setMagazineTemplate:"magazineTemplate",
     setStripTop:"stripTop",setStripSecond:"stripSecond",setStripSignature:"stripSignature",setStripDate:"stripDate"
   };
   COVER_FIELDS.concat(TEXT_FIELDS,POLAROID_FIELDS,FONT_FIELDS).forEach(([id,key])=>map[id]=key);
   Object.entries(map).forEach(([id,key])=>{if($(id))$(id).value=settings[key];});
+  if($("setEventType"))$("setEventType").value=String(settings.eventType||"party").replace(/_/g,"-");
   refreshCoverPlaceholders();
   $("setAccent").value=settings.accent;
   $("setPolaroidTransition").value=settings.polaroidTransition;
@@ -878,6 +1003,9 @@ function fillSettingsUI(){
   $("setShutter").checked=settings.shutter;
   $("setFlash").checked=settings.flash;
   $("setConfetti").checked=settings.confetti;
+  $("setGuestPinEnabled").checked=settings.guestPinEnabled;
+  $("setGuestPin").value="";
+  $("setGuestPinField").hidden=!settings.guestPinEnabled;
   const summary=$("setupSummaryTitle");if(summary)summary.textContent=settings.eventTitle||DEFAULTS.eventTitle;
   applyEntitlementUI();
 }
@@ -1023,8 +1151,16 @@ function refreshFontSpecimens(){
 function draftSettings(){
   const draft={
     ...settings,
+    eventType:String($("setEventType").value||"party").replace(/-/g,"_"),
     eventTitle:$("setEventTitle").value.trim()||DEFAULTS.eventTitle,
+    location:$("setLocation").value.trim(),
     date:$("setDate").value.trim(),
+    datePrecision:$("setDatePrecision").value,
+    eventLine:$("setEventLine").value.trim(),
+    look:$("setLook").value,
+    stripFrame:$("setStripFrame").value,
+    stripFilter:$("setStripFilter").value,
+    magazineTemplate:$("setMagazineTemplate").value,
     stripTop:$("setStripTop").value.trim(),
     stripSecond:$("setStripSecond").value.trim(),
     stripSignature:$("setStripSignature").value.trim(),
@@ -1039,7 +1175,7 @@ function draftSettings(){
     confetti:$("setConfetti").checked
   };
   COVER_FIELDS.concat(TEXT_FIELDS,POLAROID_FIELDS,FONT_FIELDS).forEach(([id,key])=>{if($(id))draft[key]=$(id).value.trim();});
-  return draft;
+  return EVENT?EVENT.migrateEventConfig(draft,{defaults:DEFAULTS}):draft;
 }
 
 function releaseMediaStream(target){
@@ -1048,6 +1184,29 @@ function releaseMediaStream(target){
   if(video&&video.srcObject===target)video.srcObject=null;
   if(stream===target)stream=null;
   target.getTracks().forEach(track=>track.stop());
+}
+function syncStripFramingGuide(){
+  const guide=$("stripFramingGuide"),video=$("video"),wrap=video&&video.parentElement;
+  if(!guide||!video||!wrap||!video.videoWidth||!video.videoHeight)return;
+  const availableWidth=wrap.clientWidth,availableHeight=wrap.clientHeight;
+  if(!availableWidth||!availableHeight)return;
+  const sourceRatio=video.videoWidth/video.videoHeight;
+  const boxRatio=availableWidth/availableHeight;
+  const shownWidth=boxRatio>sourceRatio?availableHeight*sourceRatio:availableWidth;
+  const shownHeight=boxRatio>sourceRatio?availableHeight:availableWidth/sourceRatio;
+  const shownLeft=(availableWidth-shownWidth)/2;
+  const shownTop=(availableHeight-shownHeight)/2;
+  const stripGeometry=STRIP&&typeof STRIP.geometry==="function"?STRIP.geometry():null;
+  const aperture=stripGeometry&&stripGeometry.slots&&stripGeometry.slots[0];
+  const apertureRatio=aperture?aperture.w/aperture.h:564/504;
+  const cropWidth=sourceRatio>apertureRatio?shownHeight*apertureRatio:shownWidth;
+  const cropHeight=sourceRatio>apertureRatio?shownHeight:shownWidth/apertureRatio;
+  guide.style.width=cropWidth+"px";
+  guide.style.height=cropHeight+"px";
+  guide.style.left=shownLeft+(shownWidth-cropWidth)/2+"px";
+  guide.style.top=shownTop+(shownHeight-cropHeight)/2+"px";
+  guide.style.transform="none";
+  guide.style.aspectRatio="auto";
 }
 async function startCamera(sessionId){
   stopCamera();
@@ -1066,6 +1225,7 @@ async function startCamera(sessionId){
   const w=video.videoWidth||window.innerWidth;
   const h=video.videoHeight||window.innerHeight;
   sessionOrientation=w>=h?"landscape":"portrait";
+  syncStripFramingGuide();
 }
 function stopCamera(){releaseMediaStream(stream);}
 
@@ -1115,37 +1275,158 @@ function capturePhoto(){
   if(settings.flash){$("flash").classList.add("on");setTimeout(()=>$("flash").classList.remove("on"),120);}
   return c.toDataURL("image/jpeg",.96);
 }
+function freezeCameraFrame(){
+  const video=$("video"),source=document.createElement("canvas");
+  source.width=video.videoWidth||1280;source.height=video.videoHeight||720;
+  source.getContext("2d").drawImage(video,0,0,source.width,source.height);
+  return source;
+}
+function photoDataFromSource(source){
+  const c=$("captureCanvas"),w=source.width,h=source.height;
+  c.width=w;c.height=h;
+  const ctx=c.getContext("2d");
+  ctx.save();
+  if(settings.mirror){ctx.translate(w,0);ctx.scale(-1,1);}
+  ctx.drawImage(source,0,0,w,h);
+  ctx.restore();
+  return c.toDataURL("image/jpeg",.96);
+}
 function cancelCapture(){
+  if(boothReturnScreen==="welcome"){showExperienceChooser();return;}
   showBoothReturnScreen();
 }
-function resetCreativeState(){
-  currentMode="strip";
-  frameStyle="white";
-  filterStyle="original";
+function resetCreativeState(experience){
+  currentExperience=["strip","polaroid","magazine"].includes(experience)?experience:"strip";
+  currentMode=currentExperience;
+  frameStyle=settings.stripFrame||"white";
+  filterStyle=settings.stripFilter||"original";
   coverIndex=null;
-  magazineStyle="keepsake";
+  magazineStyle=settings.magazineTemplate||"keepsake";
   invalidatePolaroid();
-  document.querySelectorAll(".mode-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode==="strip"));
-  $("stripControls").classList.add("active");
-  $("magazineControls").classList.remove("active");
-  $("polaroidControls").classList.remove("active");
-  $("magazinePickStep").hidden=false;
-  $("magazineStyleStep").hidden=true;
+  document.querySelectorAll(".mode-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode===currentMode));
+  $("stripControls").classList.toggle("active",currentMode==="strip");
+  $("magazineControls").classList.toggle("active",currentMode==="magazine");
+  $("polaroidControls").classList.toggle("active",currentMode==="polaroid");
+  $("magazinePickStep").hidden=currentMode==="magazine";
+  $("magazineStyleStep").hidden=currentMode!=="magazine";
+  $("reviewModeNav").hidden=!legacySessionMode;
+  $("review").querySelector(".review-panel").classList.toggle("output-locked",eventIsPersonalised()&&!legacySessionMode);
+  const resultNames={strip:"YOUR PHOTO STRIP",polaroid:"YOUR MOVING POLAROID",magazine:"YOUR MAGAZINE COVER"};
+  $("resultsKicker").textContent=resultNames[currentMode];
+  $("stillPhotoBtn").hidden=currentMode!=="polaroid";
+  $("retakeBtn").textContent=currentMode==="strip"?"Retake three photos":currentMode==="polaroid"?"Retake moving moment":"Retake photo";
   businessCompletionSatisfied=false;
   setExportStatus("");
   refreshExportControls();
 }
 
-async function beginSession(){
+function showExperienceChooser(){
+  teardownBoothSession();
+  legacySessionMode=false;
+  const home=$("experienceHomeBtn");
+  const label=boothReturnScreen==="welcome"?"Event Home":"Home";
+  home.textContent=label;
+  home.setAttribute("aria-label",label);
+  applyEventLook($("experience"),settings.look);
+  showScreen("experience");
+  const first=document.querySelector("[data-experience]");
+  if(first&&typeof first.focus==="function")first.focus();
+}
+
+async function captureMovingPolaroid(sid){
+  const canvas=$("motionCanvas"),video=$("video");
+  const compositor=Polaroid.composeLive({
+    base:POLAROID_VIDEO_BASE,
+    copy:Polaroid.copyFor(settings),
+    hand:Fonts.stack("hand",settings),
+    attribution:currentBranding(),
+    mirror:settings.mirror,
+    draftPreview:eventIsDraft()
+  });
+  canvas.width=compositor.geo.W;canvas.height=compositor.geo.H;
+  let frozenSource=null;
+  const captureFinal=()=>{
+    if(frozenSource)return;
+    frozenSource=freezeCameraFrame();
+    compositor.captureFinalStill(frozenSource);
+    motionFinalStill=photoDataFromSource(frozenSource);
+    photos=[motionFinalStill];
+    shutterSound();
+    if(settings.flash){$("flash").classList.add("on");setTimeout(()=>$("flash").classList.remove("on"),120);}
+  };
+
+  const support=MOTION&&MOTION.inspectSupport(canvas);
+  if(!support||!support.supported){
+    $("promptText").textContent="A little movement… then hold the pose";
+    $("promptText").classList.add("show");
+    await runCountdown(sid);
+    if(sid!==captureSessionId)throw new Error("cancelled");
+    captureFinal();
+    $("promptText").classList.remove("show");
+    polaroidState="unsupported";
+    return;
+  }
+
+  motionCaptureAbort=new AbortController();
+  $("promptText").textContent="Move, laugh, pose…";
+  $("promptText").classList.add("show");
+  try{
+    const result=await MOTION.record({
+      canvas,
+      signal:motionCaptureAbort.signal,
+      motionMs:2500,
+      holdMs:1000,
+      fps:30,
+      drawMotionFrame(ctx){compositor.drawLive(ctx,video);},
+      drawFinalStill(ctx){captureFinal();compositor.drawFinalStill(ctx,frozenSource);},
+      onProgress(point){
+        if(point.phase==="motion")$("countdown").textContent=Math.max(1,Math.ceil((2500-point.elapsedMs)/1000));
+        else $("countdown").textContent="";
+      }
+    });
+    if(sid!==captureSessionId)return;
+    captureFinal();
+    motionCaptureBlob=result.blob;
+    motionCaptureExtension=result.extension||"mp4";
+    polaroidVideoBlob=result.blob;
+    polaroidState="ready";
+  }catch(error){
+    if(sid!==captureSessionId||error&&error.code==="cancelled")throw new Error("cancelled");
+    if(!frozenSource)captureFinal();
+    polaroidState="unsupported";
+  }finally{
+    motionCaptureAbort=null;
+    $("countdown").textContent="";
+    $("promptText").classList.remove("show");
+  }
+}
+
+async function beginSession(experience){
   /* A newly activated worker waits until the previous guest is finished. The
      next Start/Retake/Next guest tap is a safe boundary to load the new app. */
   if(serviceWorkerRefreshPending){showBoothReturnScreen();return;}
+  if(EVENT&&eventIsPersonalised()){
+    settings=EVENT.refreshEventLifecycle(settings);
+    if(settings.eventStatus==="ENDED"){
+      persistSettings();showEventHome(boothExampleMode,false);return;
+    }
+  }
   clearTimeout(idleTimer);
   captureSessionId++;
+  /* Retake can start without passing through teardownBoothSession(). Invalidate
+     any previous guest export here as well, so its eventual Promise cannot
+     complete into this camera session. */
+  exportBusy=false;
   const sid=captureSessionId;
   photos=[];
-  resetCreativeState();
+  motionCaptureBlob=null;
+  motionFinalStill="";
+  legacySessionMode=false;
+  resetCreativeState(experience||currentExperience);
   initAudio();
+  const labels={strip:"PHOTO STRIP",polaroid:"MOVING POLAROID",magazine:"MAGAZINE COVER"};
+  $("cameraExperienceLabel").textContent=labels[currentExperience];
+  $("stripFramingGuide").hidden=currentExperience!=="strip";
   showScreen("camera");
 
   const promptList=capturePrompts();
@@ -1153,9 +1434,14 @@ async function beginSession(){
     await startCamera(sid);
     if(sid!==captureSessionId)return;
     await delay(400);
-    for(let i=0;i<3;i++){
+    if(currentExperience==="polaroid"){
+      $("shotLabel").textContent="ONE MOVING MOMENT";
+      await captureMovingPolaroid(sid);
+    }else{
+      const total=currentExperience==="strip"?3:1;
+      for(let i=0;i<total;i++){
       if(sid!==captureSessionId)return;
-      $("shotLabel").textContent=shotLabel(i+1,3);
+      $("shotLabel").textContent=currentExperience==="magazine"?"ONE HERO PHOTO":shotLabel(i+1,total);
       if(settings.prompts){
         $("promptText").textContent=promptList[i]||"";
         $("promptText").classList.add("show");
@@ -1167,17 +1453,19 @@ async function beginSession(){
       if(sid!==captureSessionId)return;
       photos.push(capturePhoto());
       await delay(420);
+      }
     }
     if(sid!==captureSessionId)return;
     stopCamera();
-    await saveSessionToGallery(photos,sessionOrientation);
+    await saveSessionToGallery(photos,sessionOrientation,currentExperience);
     if(sid!==captureSessionId)return;
     const galleryCount=await countGallerySessions();
     if(sid!==captureSessionId)return;
     sessionEdition=nextEditionNumber(galleryCount);
+    if(currentExperience==="magazine")coverIndex=0;
     buildReviewControls();
     showScreen("review");
-    await renderWithFade();
+    if(currentExperience==="polaroid")await enterPolaroid();else await renderWithFade();
     if(sid!==captureSessionId)return;
     resetIdle();
     if(settings.confetti)launchConfetti();
@@ -1327,6 +1615,7 @@ function buildReviewControls(){
     $("magazineStyleChoices").appendChild(b);
   });
   if(coverIndex!==null)renderStyleThumbs();
+  $("changeCoverPhoto").hidden=photos.length<2;
   applyBusinessEventFlow();
   refreshExportControls();
 }
@@ -1467,6 +1756,23 @@ function renderMagazine(ctx,c,img){
     edition:{no:sessionEdition},
     branding:currentBranding()
   });
+  drawDraftPreview(ctx,c.width,c.height);
+}
+
+function drawDraftPreview(ctx,width,height,draftOverride){
+  const shouldMark=draftOverride===undefined?eventIsDraft():!!draftOverride;
+  if(!shouldMark)return;
+  ctx.save();
+  ctx.translate(width/2,height/2);
+  ctx.rotate(-Math.PI/10);
+  const boxW=Math.min(width*.72,760),boxH=Math.max(54,height*.055);
+  ctx.fillStyle="rgba(222,210,242,.94)";
+  ctx.strokeStyle="#111";ctx.lineWidth=Math.max(2,width/480);
+  ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH);ctx.strokeRect(-boxW/2,-boxH/2,boxW,boxH);
+  ctx.fillStyle="#111";ctx.textAlign="center";ctx.textBaseline="middle";
+  ctx.font=`900 ${Math.max(22,boxH*.42)}px ${Fonts.stack("text",settings)}`;
+  ctx.fillText("DRAFT PREVIEW",0,1);
+  ctx.restore();
 }
 
 /* ---------- living polaroid ---------- */
@@ -1492,7 +1798,8 @@ function polaroidOptions(images){
     copy:Polaroid.copyFor(settings),
     hand:Fonts.stack("hand",settings),
     transition:settings.polaroidTransition||"crossfade",
-    attribution:currentBranding()
+    attribution:currentBranding(),
+    draftPreview:eventIsDraft()
   };
 }
 /* Bumping the token orphans any in-flight build or encode, so a settings
@@ -1533,6 +1840,31 @@ async function enterPolaroid(){
   polaroidStatus();
   const imgs=await Promise.all(photos.map(loadImage));
   if(token!==polaroidToken||currentMode!=="polaroid")return;
+
+  /* New experience-first sessions arrive with their real captured motion.
+     Reopened sessions retain the exact still, even when the browser could not
+     store a moving file. The old three-still compositor remains available only
+     for legacy gallery records created before experience-first capture. */
+  if(!legacySessionMode&&currentExperience==="polaroid"){
+    polaroidJob=Polaroid.compose(Object.assign({base:POLAROID_VIDEO_BASE},polaroidOptions(imgs)));
+    const c=$("mainCanvas"),ctx=c.getContext("2d");
+    c.width=polaroidJob.geo.W;c.height=polaroidJob.geo.H;c.hidden=false;
+    polaroidJob.drawStill(ctx,0);
+    drawDraftPreview(ctx,c.width,c.height);
+    polaroidVideoBlob=motionCaptureBlob||null;
+    polaroidState=motionCaptureBlob?"ready":"unsupported";
+    polaroidStatus();
+    if(!motionCaptureBlob)return;
+    if(polaroidVideoUrl)URL.revokeObjectURL(polaroidVideoUrl);
+    polaroidVideoUrl=URL.createObjectURL(motionCaptureBlob);
+    const v=$("polaroidVideo");
+    v.src=polaroidVideoUrl;v.hidden=false;
+    const swap=()=>{if(currentMode==="polaroid")$("mainCanvas").hidden=true;};
+    v.onloadeddata=swap;v.onplaying=swap;
+    v.onpause=()=>{if(currentMode==="polaroid"&&!v.hidden)v.play().catch(()=>{});};
+    v.play().catch(()=>{});
+    return;
+  }
   polaroidJob=Polaroid.compose(Object.assign({base:POLAROID_VIDEO_BASE},polaroidOptions(imgs)));
 
   /* Animate the canvas straight away rather than making the guest watch a
@@ -1596,7 +1928,9 @@ async function polaroidPrintBlob(){
   const job=Polaroid.compose(Object.assign({base:POLAROID_PRINT_BASE},polaroidOptions(imgs)));
   const c=document.createElement("canvas");
   c.width=job.geo.W;c.height=job.geo.H;
-  job.drawStill(c.getContext("2d"),coverIndex===null?0:coverIndex);
+  const ctx=c.getContext("2d");
+  job.drawStill(ctx,coverIndex===null?0:coverIndex);
+  drawDraftPreview(ctx,c.width,c.height);
   return new Promise((resolve,reject)=>c.toBlob(blob=>blob?resolve(blob):reject(new Error("The Polaroid print could not be prepared.")),"image/png",1));
 }
 
@@ -1605,75 +1939,22 @@ function renderStrip(ctx,c,imgs,s,orientation,creative){
   const chosenFilter=creative&&creative.filterStyle||filterStyle;
   const branding=creative&&Object.prototype.hasOwnProperty.call(creative,"branding")?creative.branding:currentBranding();
   const copy=stripCopyFor(s);
-  const t=typography(s),land=orientation==="landscape",first=imgs[0];
-  const W=land?900:690,side=26,innerW=W-side*2;
-  const ratio=first.width/first.height,photoH=innerW/ratio;
-  const gap=20,headerH=130,footerH=142,H=Math.round(headerH+photoH*3+gap*2+footerH);
-  c.width=W;c.height=H;
-
-  let bg="#fff",ink="#111",photoBg="#f6f2ec";
-  if(chosenFrame==="black"){bg="#090909";ink="#fff";photoBg="#111";}
-  if(chosenFrame==="editorial"){bg="#f7f0e5";ink="#111";photoBg="#eee7dd";}
-  if(chosenFrame==="film"){bg="#090909";ink="#fff";photoBg="#111";}
-
-  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
-
-  if(chosenFrame==="editorial"){
-    ctx.strokeStyle="rgba(17,17,17,.28)";ctx.lineWidth=1;ctx.strokeRect(12,12,W-24,H-24);
-    ctx.beginPath();ctx.moveTo(44,100);ctx.lineTo(W-44,100);ctx.stroke();
-  }
-  if(chosenFrame==="film"){
-    ctx.fillStyle="#fff";
-    for(let y=24;y<H-24;y+=44){ctx.fillRect(8,y,14,24);ctx.fillRect(W-22,y,14,24);}
-  }
-
-  ctx.fillStyle=ink;ctx.textAlign="center";
-  fitText(ctx,copy.top,W-90,14,t.sans,800,9);
-  ctx.globalAlpha=.78;ctx.fillText(copy.top.toUpperCase(),W/2,32);ctx.globalAlpha=1;
-  fitText(ctx,copy.second,W-90,land?28:25,t.serif,400,16);
-  ctx.fillText(copy.second,W/2,68);
-  fitText(ctx,copy.date,W-90,12,t.sans,800,9);
-  ctx.globalAlpha=.58;ctx.fillText(copy.date,W/2,94);ctx.globalAlpha=1;
-
-  imgs.forEach((img,i)=>{
-    const y=headerH+i*(photoH+gap);
-    drawContain(ctx,img,side,y,innerW,photoH,photoBg);
-    /* Graded in pixels, not with ctx.filter — see covers.js. This is the one
-       that guests notice, because the filter buttons sit right there. */
-    Covers.applyGrade(ctx,side,y,innerW,photoH,filterCSS(chosenFilter));
+  if(!STRIP)throw new Error("The Photo Strip renderer is unavailable.");
+  return STRIP.render(ctx,{
+    canvas:c,
+    images:imgs,
+    frameStyle:chosenFrame,
+    filterStyle:chosenFilter,
+    fonts:typography(s),
+    accent:s.accent,
+    event:{name:copy.signature||s.eventTitle,location:s.location,date:copy.date||s.date},
+    footer:{primary:copy.signature||s.eventTitle,location:s.location,date:copy.date||s.date},
+    branding,
+    draft:creative&&Object.prototype.hasOwnProperty.call(creative,"draft")?!!creative.draft:eventIsDraft(),
+    grade({ctx:photoContext,destination}){
+      Covers.applyGrade(photoContext,destination.x,destination.y,destination.w,destination.h,filterCSS(chosenFilter));
+    }
   });
-
-  const base=headerH+photoH*3+gap*2;
-  ctx.fillStyle=ink;ctx.textAlign="center";
-  fitText(ctx,copy.signature,W-90,land?38:32,t.script,400,20);
-  ctx.fillText(copy.signature,W/2,base+64);
-  fitText(ctx,copy.date,W-90,12,t.sans,800,9);
-  ctx.fillText(copy.date,W/2,base+98);
-  drawStripBranding(ctx,W,H,ink,t.sans,branding,s.accent);
-}
-
-function drawStripBranding(ctx,W,H,ink,font,branding,accent){
-  if(!branding)return;
-  const label=String(branding.text||branding.myBishBashText||branding.brandName||"").trim();
-  const logo=branding.logoImage||null;
-  if(!label&&!logo)return;
-  ctx.save();
-  ctx.fillStyle=branding.secondaryColor||accent||ink;
-  ctx.fillRect(W*.43,H-28,W*.14,2);
-  ctx.fillStyle=ink;
-  const size=fitText(ctx,label.toUpperCase(),W-100,11,font,800,8);
-  ctx.textAlign="center";
-  ctx.globalAlpha=.78;
-  ctx.fillText(label.toUpperCase(),W/2,H-10);
-  ctx.globalAlpha=1;
-  if(logo){
-    try{
-      const ih=logo.naturalHeight||logo.height||1,iw=logo.naturalWidth||logo.width||1;
-      const h=18,w=Math.min(70,h*iw/Math.max(1,ih));
-      ctx.drawImage(logo,36,H-h-8,w,h);
-    }catch(e){}
-  }
-  ctx.restore();
 }
 window.MyBishBashRenderers={renderStrip};
 
@@ -1685,7 +1966,7 @@ async function canvasBlob(){
    the moving version is the thing worth sending — and falls back to the
    print everywhere else and whenever the encoder could not run. */
 async function stillBlob(){
-  if(currentMode==="magazine"&&coverIndex===null)throw new Error("Choose Photo 1, 2 or 3 for your Magazine cover first.");
+  if(currentMode==="magazine"&&coverIndex===null)throw new Error("Choose the photo for your Magazine cover first.");
   return currentMode==="polaroid"?polaroidPrintBlob():canvasBlob();
 }
 function download(blob,ext){
@@ -1696,32 +1977,54 @@ function download(blob,ext){
 }
 async function shareCurrent(){
   if(exportBusy||!exportReady())return;
+  const exportSession=captureSessionId;
   exportBusy=true;refreshExportControls();setExportStatus("Preparing your keepsake…");
   resetIdle();
   try{
     await latestRenderPromise;
+    if(exportSession!==captureSessionId)return;
     const video=currentMode==="polaroid"&&polaroidVideoBlob;
     const blob=video?polaroidVideoBlob:await stillBlob();
-    const name=`mybishbash-photobooth-${currentMode}-${Date.now()}.${video?"mp4":"png"}`;
-    const file=new File([blob],name,{type:video?"video/mp4":"image/png"});
+    if(exportSession!==captureSessionId)return;
+    const videoExt=video?(motionCaptureBlob?motionCaptureExtension:(String(blob.type).includes("webm")?"webm":"mp4")):"png";
+    const name=`mybishbash-photobooth-${currentMode}-${Date.now()}.${videoExt}`;
+    const mime=video?(blob.type||(videoExt==="webm"?"video/webm":"video/mp4")):"image/png";
+    const file=new File([blob],name,{type:mime});
     if(navigator.canShare&&navigator.canShare({files:[file]})){
       await navigator.share({files:[file],title:settings.eventTitle,text:settings.eventTitle});
-      setExportStatus("");
+      if(exportSession===captureSessionId)setExportStatus("");
       return;
     }
-    download(blob,video?"mp4":"png");
+    if(exportSession!==captureSessionId)return;
+    download(blob,videoExt);
     setExportStatus("Saved to this device.");
   }catch(e){
-    if(e&&e.name!=="AbortError")setExportStatus(e.message||"This keepsake could not be shared.",true);
-  }finally{exportBusy=false;refreshExportControls();}
+    if(exportSession===captureSessionId&&e&&e.name!=="AbortError")setExportStatus(e.message||"This keepsake could not be shared.",true);
+  }finally{
+    if(exportSession===captureSessionId){exportBusy=false;refreshExportControls();}
+  }
 }
 async function saveCurrent(){
   if(exportBusy||!exportReady())return;
+  const exportSession=captureSessionId;
   exportBusy=true;refreshExportControls();setExportStatus("Preparing your keepsake…");
   resetIdle();
-  try{download(await stillBlob(),"png");setExportStatus("Saved to this device.");}
-  catch(e){setExportStatus(e.message||"This keepsake could not be saved.",true);}
-  finally{exportBusy=false;refreshExportControls();}
+  try{
+    if(currentMode==="polaroid"&&polaroidVideoBlob){
+      const ext=motionCaptureBlob?motionCaptureExtension:(String(polaroidVideoBlob.type).includes("webm")?"webm":"mp4");
+      if(exportSession!==captureSessionId)return;
+      download(polaroidVideoBlob,ext);
+    }else{
+      const blob=await stillBlob();
+      if(exportSession!==captureSessionId)return;
+      download(blob,"png");
+    }
+    setExportStatus("Saved to this device.");
+  }
+  catch(e){if(exportSession===captureSessionId)setExportStatus(e.message||"This keepsake could not be saved.",true);}
+  finally{
+    if(exportSession===captureSessionId){exportBusy=false;refreshExportControls();}
+  }
 }
 function exportReady(){return currentMode!=="magazine"||coverIndex!==null;}
 function refreshExportControls(){
@@ -1747,10 +2050,11 @@ function renderAdminPreview(){
   if(adminPreviewTimer){clearTimeout(adminPreviewTimer);adminPreviewTimer=0;}
   const s=draftSettings(),c=$("adminPreviewCanvas"),ctx=c.getContext("2d");
   const land=adminOrientation==="landscape";
+  const adminDraft=String(s.eventStatus||"DRAFT")==="DRAFT";
 
   if(adminPreviewType==="strip"){
     const photo=Covers.placeholder();
-    renderStrip(ctx,c,[photo,photo,photo],s,adminOrientation,{frameStyle:"white",filterStyle:"original",branding:personalPreviewBranding()});
+    renderStrip(ctx,c,[photo,photo,photo],s,adminOrientation,{frameStyle:"white",filterStyle:"original",branding:personalPreviewBranding(),draft:adminDraft});
     return;
   }
 
@@ -1766,6 +2070,7 @@ function renderAdminPreview(){
       hand:Fonts.stack("hand",s),transition:s.polaroidTransition,
       attribution:personalPreviewBranding()
     });
+    drawDraftPreview(ctx,c.width,c.height,adminDraft);
     return;
   }
 
@@ -1781,6 +2086,7 @@ function renderAdminPreview(){
     edition:{no:14},
     branding:personalPreviewBranding()
   });
+  drawDraftPreview(ctx,c.width,c.height,adminDraft);
 }
 function scheduleAdminPreview(){
   if(adminPreviewTimer)clearTimeout(adminPreviewTimer);
@@ -1815,7 +2121,21 @@ function clearSettingsSaveStatus(){
   const el=$("settingsSaveStatus");
   if(el)el.hidden=true;
 }
-function savePersonalSettings(showBooth){
+async function configuredDraftFromForm(){
+  let draft=draftSettings();
+  const wantsPin=$("setGuestPinEnabled").checked;
+  const pin=$("setGuestPin").value.trim();
+  if(EVENT){
+    if(!wantsPin)draft=EVENT.disableGuestPin(draft,{defaults:DEFAULTS});
+    else if(pin)draft=await EVENT.enableGuestPin(draft,pin,{defaults:DEFAULTS});
+    else if(settings.guestPinEnabled)draft=EVENT.migrateEventConfig({...draft,
+      guestPinEnabled:true,guestPinSalt:settings.guestPinSalt,guestPinVerifier:settings.guestPinVerifier
+    },{defaults:DEFAULTS});
+    else throw new Error("Enter a four-digit Guest PIN, or turn Guest PIN off.");
+  }
+  return draft;
+}
+async function savePersonalSettings(showBooth){
   if(!capabilities.canPersonaliseEvent&&!legacyProfileAvailable){
     /* Never a bare return: the organiser has just filled this in. Their draft
        stays exactly as typed - nothing is cleared and nothing is written to
@@ -1824,21 +2144,77 @@ function savePersonalSettings(showBooth){
     return false;
   }
   clearSettingsSaveStatus();
-  settings=draftSettings();persistSettings();fillSettingsUI();invalidatePolaroid();buildReviewControls();
+  try{settings=await configuredDraftFromForm();}
+  catch(error){showSettingsSaveStatus(error.message);return false;}
+  persistSettings();fillSettingsUI();invalidatePolaroid();buildReviewControls();
   if(boothExampleMode){temporarySettingsSnapshot=null;boothExampleMode=false;}
-  if(showBooth)enterEventHome(false);
+  if(showBooth)enterEventHome(false,true);
   return true;
+}
+async function previewPersonalSettings(){
+  clearSettingsSaveStatus();
+  try{
+    if(!temporarySettingsSnapshot)temporarySettingsSnapshot=settings;
+    settings=await configuredDraftFromForm();
+    enterEventHome(false,true);
+    return true;
+  }catch(error){showSettingsSaveStatus(error.message);return false;}
 }
 function launchFreeBooth(){
   restoreTemporarySettings();
-  if(!capabilities.canPersonaliseEvent&&!legacyProfileAvailable){temporarySettingsSnapshot=settings;settings={...DEFAULTS};fillSettingsUI();}
-  boothExampleMode=false;setBoothReturnScreen("landing");enterBoothHistory();beginSession();
+  if(!capabilities.canPersonaliseEvent&&!legacyProfileAvailable){
+    temporarySettingsSnapshot=settings;
+    settings=EVENT?EVENT.createEventConfig(DEFAULTS,{defaults:DEFAULTS}):{...DEFAULTS};
+    fillSettingsUI();
+  }
+  boothExampleMode=false;setBoothReturnScreen("landing");enterBoothHistory();showExperienceChooser();
 }
 function previewExampleBooth(){
   enterEventHome(true);
 }
 function returnToProduct(){
   returnFromEventToProduct();
+}
+
+async function setupPassLink(){
+  if(!EVENT)throw new Error("Setup Pass is unavailable in this browser.");
+  const draft=await configuredDraftFromForm();
+  const fragment=await EVENT.encodeSetupPass(draft,{defaults:DEFAULTS});
+  return EVENT.buildSetupPassUrl(location.href,fragment);
+}
+async function copySetupPass(){
+  const status=$("setupPassStatus");
+  try{
+    const url=await setupPassLink();
+    await navigator.clipboard.writeText(url);
+    status.textContent="Setup Pass copied. It carries configuration only—no photos or event clock.";
+  }catch(error){status.textContent=error.message||"The Setup Pass could not be copied.";}
+}
+async function shareSetupPass(){
+  const status=$("setupPassStatus");
+  try{
+    const url=await setupPassLink();
+    if(navigator.share)await navigator.share({title:settings.eventTitle+" — Setup Pass",text:"Set up this MyBishBash Photobooth on another device.",url});
+    else if(navigator.clipboard){await navigator.clipboard.writeText(url);status.textContent="Setup Pass copied.";}
+    else throw new Error("Sharing is unavailable here. Try Copy Setup Pass link.");
+  }catch(error){if(error&&error.name!=="AbortError")status.textContent=error.message||"The Setup Pass could not be shared.";}
+}
+async function importSetupPassFromLocation(){
+  if(!EVENT||!/^#setup=/.test(location.hash))return false;
+  try{
+    settings=await EVENT.decodeSetupPass(location.href,{defaults:DEFAULTS});
+    persistSettings();
+    if(history.replaceState)history.replaceState(productHistoryState("personal"),"",location.pathname+location.search);
+    openPersonalSettings("landing");
+    showSettingsSaveStatus("Setup Pass imported on this device. It moved configuration only; the event remains a draft and its 48-hour clock has not started.");
+    return true;
+  }catch(error){
+    showProductRoute("personal",false,true);
+    const status=$("checkoutStatus");
+    status.textContent=error.message||"That Setup Pass could not be opened.";
+    status.className="checkout-status error";
+    return false;
+  }
 }
 
 function idempotencyKey(){
@@ -1852,21 +2228,10 @@ async function jsonRequest(path,options){
   if(!response.ok)throw new Error(data.message||data.error||"This service is not available yet.");
   return data;
 }
-async function loadFoundingAvailability(){
-  if(!API_BASE)return;
-  try{
-    const data=await jsonRequest("/v1/billing/founding");
-    const remaining=Number(data.remaining),limit=Number(data.limit),sold=Number(data.successfulPurchases);
-    if(Number.isInteger(remaining)&&Number.isInteger(limit)&&Number.isInteger(sold)&&limit===500&&remaining>=0&&remaining<=limit&&sold===limit-remaining){
-      $("foundingAvailability").textContent=remaining+" of 500 Founding Lifetime memberships remain, based on verified purchases.";
-    }
-  }catch(e){/* The generic 500-member limit remains truthful before the API is connected. */}
-}
 async function startCheckout(plan){
   const status=$("checkoutStatus");
-  /* loadFoundingAvailability already guarded on API_BASE; this did not, which
-     is why pressing a plan produced a red failure for a condition that is
-     simply "not open yet". Same guard, honest wording, no error styling. */
+  /* A visible planned price is not an offer to sell. Keep the purchase path
+     closed until both billing and its authoritative API are deliberately on. */
   if(!BILLING_LIVE||!API_BASE){
     if(status){
       status.textContent="Personal plans are not on sale yet — we are finalising them. The free photobooth is ready to use now.";
@@ -1923,7 +2288,7 @@ function handleCheckoutReturn(){
 }
 function verifiedAccessRecord(data,token,previousExpiry){
   const plan=String(data&&data.plan||"");
-  const personalPlans=[ENTITLEMENTS.PERSONAL_6_MONTH,ENTITLEMENTS.PERSONAL_12_MONTH,ENTITLEMENTS.FOUNDING_LIFETIME];
+  const personalPlans=[ENTITLEMENTS.ONE_EVENT,ENTITLEMENTS.PERSONAL_6_MONTH,ENTITLEMENTS.PERSONAL_12_MONTH,ENTITLEMENTS.FOUNDING_LIFETIME];
   /* This restore path is Personal-only. Business guests use scoped event
      credentials and must never turn a browser restore token into organiser
      capabilities. */
@@ -1994,17 +2359,103 @@ function applyBusinessEventFlow(){
   $("saveBtn").hidden=isBusiness&&(!businessEventConfig.allowSave||waitingForCompletion);
 }
 
-$("startBtn").onclick=()=>{setBoothReturnScreen("welcome");enterBoothHistory();beginSession();};
+function enterGuestBooth(){
+  if(EVENT&&eventIsPersonalised()){
+    settings=EVENT.refreshEventLifecycle(settings);
+    if(settings.eventStatus==="ENDED"){
+      persistSettings();updateWelcomeMode(false);return;
+    }
+  }
+  if(settings.guestPinEnabled&&!guestPinUnlocked){
+    updateWelcomeMode(false);
+    $("welcomePinInput").focus();
+    return;
+  }
+  setBoothReturnScreen("welcome");
+  enterBoothHistory();
+  showExperienceChooser();
+}
+async function submitGuestPin(event){
+  event.preventDefault();
+  if(!EVENT)return;
+  const status=$("welcomePinStatus"),now=Date.now();
+  const throttle=EVENT.guestPinThrottleStatus(guestPinThrottle,now);
+  if(!throttle.allowed){
+    status.textContent="Try again in "+Math.ceil(throttle.retryAfterMs/1000)+" seconds.";
+    return;
+  }
+  const matched=await EVENT.verifyGuestPin(settings,$("welcomePinInput").value.trim());
+  guestPinThrottle=EVENT.recordGuestPinAttempt(guestPinThrottle,matched,now);
+  if(!matched){
+    const next=EVENT.guestPinThrottleStatus(guestPinThrottle,now);
+    status.textContent=next.allowed?"That PIN did not match. "+next.attemptsRemaining+" tries left.":"Too many tries. Wait 30 seconds, then try again.";
+    $("welcomePinInput").select();
+    return;
+  }
+  guestPinUnlocked=true;$("welcomePinInput").value="";status.textContent="";
+  enterGuestBooth();
+}
+function previewEventAsGuest(){
+  activationConfirmationPending=false;
+  if(history.replaceState&&(history.state||{}).surface===HISTORY_SURFACE.EVENT_HOME){
+    history.replaceState({...history.state,hostView:false},"",location.href);
+  }
+  updateWelcomeMode(false);
+  $("startBtn").focus();
+}
+function activateEvent(){
+  if(!EVENT)return;
+  if(boothExampleMode||(!capabilities.canPersonaliseEvent&&!legacyProfileAvailable)){
+    $("hostEventStatusText").textContent="One Party checkout is not open yet. You can preview this photobooth without starting its event clock.";
+    return;
+  }
+  if(settings.eventStatus!=="DRAFT"){refreshHostEventStatus();return;}
+  if(!activationConfirmationPending){
+    activationConfirmationPending=true;
+    refreshHostEventStatus();
+    $("hostEventStatusText").textContent="Starting is deliberate: the 48-hour live period begins now and cannot be restarted. Press confirm when you are ready.";
+    return;
+  }
+  settings=EVENT.startEvent(settings);
+  persistSettings();
+  activationConfirmationPending=false;
+  refreshHostEventStatus();
+  if(history.replaceState&&(history.state||{}).surface===HISTORY_SURFACE.EVENT_HOME){
+    history.replaceState({...history.state,hostView:false},"",location.href);
+  }
+  updateWelcomeMode(false);
+}
+
+$("startBtn").onclick=enterGuestBooth;
+$("previewEventBtn").onclick=previewEventAsGuest;
+$("activateEventBtn").onclick=activateEvent;
+$("welcomePinForm").onsubmit=submitGuestPin;
+document.querySelectorAll("[data-experience]").forEach(button=>button.onclick=()=>beginSession(button.dataset.experience));
+$("experienceHomeBtn").onclick=showBoothReturnScreen;
 $("cancelCapture").onclick=cancelCapture;
-$("retakeBtn").onclick=beginSession;
-$("nextGuestBtn").onclick=beginSession;
+$("retakeBtn").onclick=()=>beginSession(currentExperience);
+$("nextGuestBtn").onclick=showExperienceChooser;
 $("boothHomeBtn").onclick=showBoothReturnScreen;
 /* Retry re-enters capture in place: no page reload, so a guest who fixes a
    permission prompt is still in the booth rather than back on the landing page. */
-$("cameraErrorRetry").onclick=()=>{hideCameraError();beginSession();};
-$("cameraErrorBack").onclick=()=>{hideCameraError();showBoothReturnScreen();};
+$("cameraErrorRetry").onclick=()=>{hideCameraError();beginSession(currentExperience);};
+$("cameraErrorBack").onclick=()=>{hideCameraError();cancelCapture();};
 $("shareBtn").onclick=shareCurrent;
 $("saveBtn").onclick=saveCurrent;
+$("stillPhotoBtn").onclick=async()=>{
+  if(exportBusy)return;
+  const exportSession=captureSessionId;
+  exportBusy=true;refreshExportControls();setExportStatus("Preparing your still photo…");
+  try{
+    const blob=await polaroidPrintBlob();
+    if(exportSession!==captureSessionId)return;
+    download(blob,"png");setExportStatus("Still photo saved to this device.");
+  }
+  catch(error){if(exportSession===captureSessionId)setExportStatus(error.message||"The still photo could not be saved.",true);}
+  finally{
+    if(exportSession===captureSessionId){exportBusy=false;refreshExportControls();}
+  }
+};
 $("changeCoverPhoto").onclick=()=>{
   coverIndex=null;
   $("magazinePickStep").hidden=false;
@@ -2015,11 +2466,15 @@ $("changeCoverPhoto").onclick=()=>{
 
 $("openSettings").onclick=()=>openPersonalSettings("welcome");
 $("closeSettings").onclick=()=>showScreen(settingsReturnScreen||"landing");
-$("saveSettings").onclick=()=>savePersonalSettings(true);
-$("launchCustomBooth").onclick=()=>savePersonalSettings(true);
+$("saveSettings").onclick=()=>savePersonalSettings(false);
+$("launchCustomBooth").onclick=previewPersonalSettings;
+$("copySetupPass").onclick=copySetupPass;
+$("shareSetupPass").onclick=shareSetupPass;
+$("setGuestPinEnabled").onchange=()=>{$("setGuestPinField").hidden=!$("setGuestPinEnabled").checked;if($("setGuestPinEnabled").checked)$("setGuestPin").focus();};
+$("setLook").onchange=()=>{const look=eventLook($("setLook").value);$("setAccent").value=look.accent;scheduleAdminPreview();};
 $("resetSettings").onclick=()=>{
   if(!confirm("Reset this booth to the MyBishBash defaults? Your local gallery will not be removed."))return;
-  settings={...DEFAULTS};persistSettings();fillSettingsUI();renderAdminPreview();
+  settings=EVENT?EVENT.createEventConfig(DEFAULTS,{defaults:DEFAULTS}):{...DEFAULTS};persistSettings();fillSettingsUI();renderAdminPreview();
 };
 $("clearGallery").onclick=async()=>{
   if(!confirm("Clear every locally saved session from this device? This cannot be undone."))return;
@@ -2036,6 +2491,13 @@ $("openPersonalSetup").onclick=()=>openPersonalSettings("landing");
 $("openPersonalSetupSecondary").onclick=()=>openPersonalSettings("landing");
 $("previewExampleBooth").onclick=previewExampleBooth;
 $("backToProduct").onclick=returnToProduct;
+window.addEventListener("mybishbash:preview-event",event=>{
+  if(!event.detail)return;
+  if(!temporarySettingsSnapshot)temporarySettingsSnapshot=settings;
+  settings=EVENT?EVENT.createEventConfig({...DEFAULTS,...event.detail,eventStatus:"DRAFT"},{defaults:DEFAULTS}):{...DEFAULTS,...event.detail};
+  boothExampleMode=false;
+  enterEventHome(false,false);
+});
 document.querySelectorAll("[data-start-photobooth]").forEach(button=>button.onclick=launchFreeBooth);
 document.querySelectorAll("[data-product-route]").forEach(link=>link.addEventListener("click",event=>{event.preventDefault();showProductRoute(link.dataset.productRoute,true);}));
 window.addEventListener("popstate",handleHistoryChange);
@@ -2088,6 +2550,8 @@ document.querySelectorAll("#settings input,#settings select").forEach(el=>el.add
   refreshFontSpecimens();
   scheduleAdminPreview();
 }));
+window.addEventListener("resize",syncStripFramingGuide);
+if(window.visualViewport)window.visualViewport.addEventListener("resize",syncStripFramingGuide);
 
 fillSettingsUI();
 setSetupStep(0);
@@ -2098,9 +2562,9 @@ applyBillingState();
 applySurfaceMetadata(routeFromLocation());
 assertOriginConsistency();
 bootstrapNavigation();
+importSetupPassFromLocation();
 handleCheckoutReturn();
 loadVerifiedAccess();
-loadFoundingAvailability();
 if("serviceWorker" in navigator){
   let hasServiceWorkerController=Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener("controllerchange",()=>{

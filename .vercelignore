@@ -1,5 +1,7 @@
 .claude/
 .env*
 README.md
+WORK.md
+docs/
 tests/
 worker/

@@ -35,7 +35,7 @@ Three chains are load-bearing:
 | 4 | PB-04 Publish terms, privacy and cancellation | P1 | ☐ | — |
 | 5 | PB-05 Origin constant + complete social metadata | P2 | ☑ | `9197594` |
 | 6 | PB-06 Cut the demo contact sheet to under 200 KB | P2 | ☑ | `e690d01` |
-| 7 | PB-07 robots.txt, sitemap.xml, branded 404 | P2 | ☑ | *(pending)* |
+| 7 | PB-07 robots.txt, sitemap.xml, branded 404 | P2 | ☑ | `31d15f9` |
 | 8 | PB-08 Fix the mobile navigation containing block | P3 | ☑ | `2c47613` |
 | 9 | PB-09 Differentiate camera failures, remove the alert | P3 | ☐ | — |
 | 10 | PB-10 Close the measured accessibility gaps | P3 | ☑ | `ab8ca06` |

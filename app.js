@@ -129,6 +129,12 @@ const ENTITLEMENTS=PRODUCT?PRODUCT.ENTITLEMENTS:{FREE:"FREE",ONE_EVENT:"ONE_EVEN
 const SETTINGS_KEY="mybishbashPhotoboothSettingsV1";
 const LEGACY_SETTINGS_KEY="raePhotoBoothLiveSettings";
 const ACCESS_KEY="mybishbashPhotoboothVerifiedAccessV1";
+/* Founder demo grants are deliberately never written to ACCESS_KEY and never
+   sent to /v1/entitlements/*. They must stay structurally incapable of being
+   mistaken for a server-verified purchase, restored, or reconciled by
+   loadVerifiedAccess. A separate key and code path is the enforcement. */
+const FOUNDER_DEMO_KEY="mybishbashPhotoboothFounderDemoV1";
+const FOUNDER_DEMO_SECRET="56180f4cd6ac23480070a2feea8f5209";
 const GALLERY_DB="mybishbashPhotoboothGallery";
 const LEGACY_GALLERY_DB="raePhotoBoothGallery";
 const GALLERY_MIGRATION_KEY="mybishbashPhotoboothGalleryMigratedV1";
@@ -2963,6 +2969,57 @@ async function verifyRestoreToken(token){
   if(!record)throw new Error("That restore link does not contain active Personal access.");
   setEntitlement(record.plan,record);return record;
 }
+/* Not real auth — a shared secret in client JS is visible to anyone reading
+   source. Acceptable only because the worst case is someone else previewing
+   a demo tier on their own device, never a billing or data exposure. This
+   token must never be used to protect paid or sensitive capabilities;
+   replace it with a server-issued demo token once the Worker entitlement
+   system is deployed. */
+/* Only these three tiers are reachable from a URL. This is not a UX
+   default — it is the boundary that keeps an arbitrary querystring value
+   from ever becoming an entitlement string fed to PRODUCT.getCapabilities. */
+const FOUNDER_DEMO_ALLOWED_TIERS=[ENTITLEMENTS.FREE,ENTITLEMENTS.PERSONAL_12_MONTH,ENTITLEMENTS.BUSINESS];
+function founderDemoBadge(){
+  let el=document.getElementById("founderDemoBadge");
+  if(el)return el;
+  el=document.createElement("div");
+  el.id="founderDemoBadge";
+  el.textContent="Founder demo — not a paying customer";
+  el.style.cssText="position:fixed;bottom:0;left:0;right:0;z-index:99999;padding:6px 12px;background:#111;color:#fff;font:12px/1.4 system-ui,sans-serif;text-align:center;pointer-events:none;opacity:0.85;";
+  document.body.appendChild(el);
+  return el;
+}
+function applyFounderDemoGrant(tier,persist){
+  if(!PRODUCT||FOUNDER_DEMO_ALLOWED_TIERS.indexOf(tier)===-1)return;
+  /* capabilities is recomputed from `entitlement` through the same single
+     resolver every other path uses (PRODUCT.getCapabilities) — demoComp is
+     metadata for the badge/audit trail only and never reaches this call. */
+  entitlement=tier;
+  capabilities=PRODUCT.getCapabilities(entitlement);
+  if(persist!==false){
+    try{localStorage.setItem(FOUNDER_DEMO_KEY,JSON.stringify({plan:tier,demoComp:true,grantedAt:new Date().toISOString()}));}catch(e){}
+  }
+  applyEntitlementUI();
+  founderDemoBadge();
+  invalidatePolaroid();
+  if(photos.length&&currentMode!=="polaroid")renderWithFade();
+}
+function checkFounderDemoAccess(){
+  if(typeof URLSearchParams!=="function")return;
+  const params=new URLSearchParams(location.search),token=params.get("founder");
+  if(token&&token===FOUNDER_DEMO_SECRET){
+    const requested=params.get("tier");
+    const tier=requested&&FOUNDER_DEMO_ALLOWED_TIERS.indexOf(requested)!==-1?requested:ENTITLEMENTS.PERSONAL_12_MONTH;
+    applyFounderDemoGrant(tier);
+    params.delete("founder");params.delete("tier");
+    if(history.replaceState){const query=params.toString();history.replaceState(history.state,"",location.pathname+(query?"?"+query:"")+location.hash);}
+    return;
+  }
+  try{
+    const cached=JSON.parse(localStorage.getItem(FOUNDER_DEMO_KEY)||"null");
+    if(cached&&cached.plan&&PRODUCT&&PRODUCT.ENTITLEMENT_VALUES.indexOf(cached.plan)!==-1)applyFounderDemoGrant(cached.plan,false);
+  }catch(e){}
+}
 async function loadVerifiedAccess(){
   let cached=null;
   try{cached=JSON.parse(localStorage.getItem(ACCESS_KEY)||"null");}catch(e){}
@@ -3271,6 +3328,7 @@ applySurfaceMetadata(routeFromLocation());
 assertOriginConsistency();
 bootstrapNavigation();
 importSetupPassFromLocation();
+checkFounderDemoAccess();
 handleCheckoutReturn();
 loadVerifiedAccess();
 if("serviceWorker" in navigator){

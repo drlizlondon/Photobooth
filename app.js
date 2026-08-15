@@ -2865,12 +2865,21 @@ async function shareSetupPass(){
 }
 async function importSetupPassFromLocation(){
   if(!EVENT||!/^#setup=/.test(location.hash))return false;
+  /* A guest link carries the same Setup Pass payload as a host's edit link —
+     only this query flag decides which screen the recipient lands on. This
+     never changes what data the link can convey (still no entitlement/access,
+     per isForbiddenSetupKey), only which UI opens for it. */
+  const guestLock=typeof URLSearchParams==="function"&&new URLSearchParams(location.search).get("guest")==="1";
   try{
     settings=await EVENT.decodeSetupPass(location.href,{defaults:DEFAULTS});
     persistSettings();
     if(history.replaceState)history.replaceState(productHistoryState("personal"),"",location.pathname+location.search);
-    openPersonalSettings("landing");
-    showSettingsSaveStatus("Setup Pass imported on this device. It moved configuration only; the event remains a draft and its 48-hour clock has not started.");
+    if(guestLock){
+      enterEventHome(false,false);
+    }else{
+      openPersonalSettings("landing");
+      showSettingsSaveStatus("Setup Pass imported on this device. It moved configuration only; the event remains a draft and its 48-hour clock has not started.");
+    }
     return true;
   }catch(error){
     showProductRoute("personal",false,true);

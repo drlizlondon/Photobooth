@@ -3336,6 +3336,15 @@ applyBillingState();
 applySurfaceMetadata(routeFromLocation());
 assertOriginConsistency();
 bootstrapNavigation();
+/* landing.js loads after this script and only suppresses its full-screen
+   entrance overlay while location.hash is still present at the moment its
+   own DOMContentLoaded handler runs. importSetupPassFromLocation() below
+   strips the hash asynchronously (after awaiting EVENT.decodeSetupPass),
+   so relying on that alone loses the race — landing.js's overlay can win
+   and paint over a personalised screen underneath it. Mark the entrance
+   seen synchronously, right now, before landing.js's script has even
+   parsed: this key must stay in sync with ENTRANCE_KEY in landing.js. */
+if(/^#setup=/.test(location.hash)){try{sessionStorage.setItem("mybishbashPhotoboothEntranceSeenV1","1");}catch(e){}}
 importSetupPassFromLocation();
 checkFounderDemoAccess();
 handleCheckoutReturn();

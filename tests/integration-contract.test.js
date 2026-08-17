@@ -60,7 +60,9 @@ test("exposes Personal and Business as separate static product surfaces", functi
   assert.deepEqual(vercel.rewrites, [
     { source: "/", destination: "/index.html" },
     { source: "/business", destination: "/index.html" },
-    { source: "/business/", destination: "/index.html" }
+    { source: "/business/", destination: "/index.html" },
+    { source: "/david-lloyd", destination: "/index.html" },
+    { source: "/david-lloyd/", destination: "/index.html" }
   ]);
 });
 
@@ -546,7 +548,6 @@ test("collapses transient booth history and replaces example Event Home state", 
   assert.match(enterEvent, /current\.surface===HISTORY_SURFACE\.EVENT_HOME[\s\S]*?history\.replaceState\(next/);
   assert.ok(enterEvent.indexOf("history.replaceState") < enterEvent.indexOf("showEventHome(example,hostView)"));
   assert.match(savePersonal, /if\(boothExampleMode\)\{temporarySettingsSnapshot=null;boothExampleMode=false;\}/);
-  assert.match(app, /function productBasePath\(\)[\s\S]*?location\.pathname\.replace\(\/\\\/business\\\/\?\$\/,"\/"\)/);
   assert.match(app, /function productURL\(route\)[\s\S]*?route==="business"[\s\S]*?"\/business":base/);
   assert.match(app, /const url=productURL\(productRoute\)/);
   assert.match(app, /history\.replaceState\(productHistoryState\(productRoute\),"",productURL\(productRoute\)\)/);

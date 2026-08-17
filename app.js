@@ -1060,7 +1060,7 @@ function productHistoryState(route){
   return {surface:HISTORY_SURFACE.PRODUCT,productRoute:route==="business"?"business":"personal"};
 }
 function productBasePath(){
-  const withoutBusiness=location.pathname.replace(/\/business\/?$/,"/");
+  const withoutBusiness=location.pathname.replace(/\/(?:business|david-lloyd)\/?$/,"/");
   return withoutBusiness.endsWith("/")?withoutBusiness:withoutBusiness+"/";
 }
 function productURL(route){
@@ -1086,7 +1086,7 @@ function showProductRoute(route,push,replace){
   }
   window.scrollTo(0,0);
 }
-function routeFromLocation(){return /(?:^|\/)business\/?$/.test(location.pathname)?"business":"personal";}
+function routeFromLocation(){return /(?:^|\/)(business|david-lloyd)\/?$/.test(location.pathname)?"business":"personal";}
 function applyExampleBoothSettings(){
   if(!temporarySettingsSnapshot)temporarySettingsSnapshot=settings;
   const afterDark=themeFor("after-dark");
@@ -3029,6 +3029,24 @@ function checkFounderDemoAccess(){
     if(cached&&cached.plan&&PRODUCT&&PRODUCT.ENTITLEMENT_VALUES.indexOf(cached.plan)!==-1)applyFounderDemoGrant(cached.plan,false);
   }catch(e){}
 }
+function injectDavidLloydConfig(){
+  if(/(?:^|\/)david-lloyd\/?$/.test(location.pathname)){
+    businessBrand.name = "David Lloyd Clubs";
+    businessBrand.whiteLabel = true;
+    const img = new Image();
+    img.src = "assets/david-lloyd-logo.png";
+    businessBrand.logoImage = img;
+
+    const afterDark=themeFor("editorial");
+    const dlConfig={...DEFAULTS,...themeSettings(afterDark),eventType:"party",eventTitle:"5 Steps to your Summer Body, Healthy Living Healthy You",location:"",date:"",datePrecision:"unknown",eventLine:"",stripFrame:afterDark.stripFrame,stripFilter:afterDark.stripFilter,magazineTemplate:afterDark.magazineTemplate,stripTop:"",stripSecond:"",stripSignature:"David Lloyd Clubs",stripDate:""};
+    settings=EVENT?EVENT.createEventConfig(dlConfig,{defaults:DEFAULTS}):dlConfig;
+
+    setEntitlement(ENTITLEMENTS.BUSINESS);
+    persistSettings();
+    showProductRoute("business", false, true);
+  }
+}
+
 async function loadVerifiedAccess(){
   let cached=null;
   try{cached=JSON.parse(localStorage.getItem(ACCESS_KEY)||"null");}catch(e){}
@@ -3348,7 +3366,7 @@ if(/^#setup=/.test(location.hash)){try{sessionStorage.setItem("mybishbashPhotobo
 importSetupPassFromLocation();
 checkFounderDemoAccess();
 handleCheckoutReturn();
-loadVerifiedAccess();
+loadVerifiedAccess().then(() => injectDavidLloydConfig());
 if("serviceWorker" in navigator){
   let hasServiceWorkerController=Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener("controllerchange",()=>{

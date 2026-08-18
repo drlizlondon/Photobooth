@@ -52,7 +52,7 @@ Three chains are load-bearing:
 | 19 | PB-11 Reprice: FREE £0 / ONE EVENT £19 / ANNUAL £49 *(amended 001)* | P4 | ☐ | — |
 | 20 | PB-12 Free-vs-paid comparison + purchase moment *(amended 001)* | P4 | ☐ | — |
 | 21 | PB-16 GATE: decide whether to activate billing *(amended 001)* | P6 | ☐ | — |
-| 22 | **PB-29 Branded client booth routes (first client: David Lloyd Clubs)** | P2 | ☑ | *(this commit)* |
+| 22 | **PB-29 Branded client booth routes (first client: David Lloyd Clubs)** | P2 | ☑ | `ceeabed` |
 
 Record the real commit hash when a packet lands. Placeholders like "this commit" or "pending" stop being meaningful the moment the session ends.
 

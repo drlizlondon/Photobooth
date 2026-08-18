@@ -1456,12 +1456,16 @@ function safeForeground(background){
 }
 function drawOutputBranding(ctx,L,branding,template){
   if(!branding)return;
-  const label=brandingLabel(branding),logo=branding.logoImage||null;
-  if(!label&&!logo)return;
-
   const u=L.u,W=L.W,H=L.H,M=L.M;
   const mode=String(branding.mode||"");
   const business=/business|white/i.test(mode);
+  /* The chip below is filled with the brand's own colour, so the mark that
+     sits on it must be the knockout one where a brand supplies it. A single
+     dark wordmark on a deep brand colour is unreadable. */
+  const label=brandingLabel(branding);
+  const logo=(business&&branding.logoImageInverse)||branding.logoImage||null;
+  if(!label&&!logo)return;
+
   const bg=business?(branding.primaryColor||"#171412"):"#fffdf8";
   const fg=safeForeground(bg);
   const textColour=business?fg:"#111";

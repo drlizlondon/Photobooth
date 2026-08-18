@@ -331,7 +331,7 @@ let legacyProfileAvailable=false;
 let entitlement=ENTITLEMENTS.FREE;
 let capabilities=PRODUCT?PRODUCT.getCapabilities(entitlement):{canPersonaliseEvent:false,canRemoveFreeBranding:false,canUploadBusinessLogo:false,canWhiteLabel:false,canCollectEmail:false,canConfigureSharing:false,canCollectConsent:false,canCollectConsentedPhotos:false};
 let businessEventConfig=PRODUCT?PRODUCT.createBusinessEventConfig():{collectEmail:false,requireEmail:false,allowShare:true,allowSave:true,collectMarketingConsent:false,collectPublicityConsent:false,collectConsentedPhotos:false};
-let businessBrand={name:"",primaryColor:"#2357ff",secondaryColor:"#ffcf33",logoImage:null,whiteLabel:false};
+let businessBrand={name:"",primaryColor:"#2357ff",secondaryColor:"#ffcf33",logoImage:null,logoImageInverse:null,whiteLabel:false};
 /* Set only while this tab is showing a branded client booth. It is a route
    fact, never persisted, and it is what stops real billing state from
    downgrading a preview mid-pitch. */
@@ -583,6 +583,33 @@ function applyEventTheme(target,value){
   target.dataset.theme=theme.id;
   target.dataset.decoration=theme.decoration;
   target.dataset.typography=theme.typography;
+  applyClientBrandTheme(target);
+}
+/* The registry theme supplies a client booth's composure — spacing,
+   decoration, typography — but never its colours. Those come from the
+   client's own brand, and the override lives here rather than at the call
+   site because showEventHome re-applies the theme on every return to the
+   welcome screen, which would otherwise wipe the branding each time. */
+function applyClientBrandTheme(target){
+  if(!target||!clientBoothSlug||!CLIENTS)return;
+  const client=CLIENTS.CLIENTS[clientBoothSlug];
+  if(!client||!client.brand)return;
+  const brand=client.brand;
+  const surface=brand.secondaryColor;
+  const ink=brand.textColor||safeForeground(surface);
+  const onBrand=safeForeground(brand.primaryColor);
+  target.style.setProperty("--event-surface",surface);
+  target.style.setProperty("--event-primary",brand.primaryColor);
+  target.style.setProperty("--event-accent",brand.primaryColor);
+  target.style.setProperty("--event-accent-ink",onBrand);
+  target.style.setProperty("--event-secondary",surface);
+  target.style.setProperty("--event-highlight",surface);
+  target.style.setProperty("--event-shape",surface);
+  target.style.setProperty("--event-ink",ink);
+  /* The purple CTA is the one place this brand raises its voice. */
+  target.style.setProperty("--event-button",brand.primaryColor);
+  target.style.setProperty("--event-button-ink",onBrand);
+  target.style.setProperty("--event-border",ink);
 }
 function syncThemeUI(value){
   const theme=themeFor(value);
@@ -953,7 +980,10 @@ function normaliseBranding(policy,extra){
     brandName:x.brandName||"",
     primaryColor:x.primaryColor||theme.primary,
     secondaryColor:x.secondaryColor||theme.highlight,
-    logoImage:x.logoImage||null
+    logoImage:x.logoImage||null,
+    /* Optional knockout mark for surfaces filled with primaryColor. Renderers
+       fall back to logoImage when a brand supplies only one. */
+    logoImageInverse:x.logoImageInverse||null
   };
 }
 function currentBranding(){
@@ -966,7 +996,9 @@ function currentBranding(){
       brandName:businessBrand.name,
       primaryColor:businessBrand.primaryColor,
       secondaryColor:businessBrand.secondaryColor,
-      logoImage:businessBrand.logoImage
+      logoImage:businessBrand.logoImage,
+      /* Used where the mark sits on the brand colour rather than on paper. */
+      logoImageInverse:businessBrand.logoImageInverse
     });
   }
   return normaliseBranding(policy);
@@ -3127,7 +3159,7 @@ function applyClientBooth(){
   /* Neither is a form control, so both are set after the configurator has
      derived everything that is. */
   businessBrand.whiteLabel=client.brand.whiteLabel===true;
-  businessBrand.logoImage=null;
+  businessBrand.logoImage=null;businessBrand.logoImageInverse=null;
   applyClientMetadata(client);
 
   /* White label is a promise about what the visitor sees, not only about what
@@ -3143,15 +3175,25 @@ function applyClientBooth(){
   /* Decode before use. A bare `new Image()` whose src is still loading draws
      nothing into a canvas and reports no error, so the first keepsake of the
      session would silently lose the logo that is the whole point. */
-  const logoURL=new URL(client.brand.logo,location.origin+productBasePath()).href;
-  loadImage(logoURL).then(img=>{
-    businessBrand.logoImage=img;
-    invalidatePolaroid();
-    if(photos.length&&currentMode!=="polaroid")renderWithFade();
-  }).catch(()=>{
-    /* The booth still works unbranded; say so where the owner will see it
-       rather than shipping a silently generic pitch. */
-    console.warn("Client logo failed to load: "+logoURL);
+  /* Two marks, because the mark lands on two kinds of surface: the strip's
+     paper footer takes the dark one, the cover's brand chip is filled with
+     the brand colour and takes the knockout. Both are decoded before any
+     canvas draw — an Image whose src is still loading draws nothing and
+     reports no error, so the first keepsake would silently lose the logo. */
+  const base=location.origin+productBasePath();
+  const variants=[["logoImage",client.brand.logo],["logoImageInverse",client.brand.logoInverse]];
+  variants.forEach(([field,path])=>{
+    if(!path)return;
+    const url=new URL(path,base).href;
+    loadImage(url).then(img=>{
+      businessBrand[field]=img;
+      invalidatePolaroid();
+      if(photos.length&&currentMode!=="polaroid")renderWithFade();
+    }).catch(()=>{
+      /* The booth still works unbranded; say so where the owner will see it
+         rather than shipping a silently generic pitch. */
+      console.warn("Client logo failed to load: "+url);
+    });
   });
 
   return client;

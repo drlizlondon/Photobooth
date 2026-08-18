@@ -652,7 +652,7 @@ test("does not force-reload safe-worker booths or cache product API responses", 
   assert.doesNotMatch(legacySet, /rae-photo-booth-live-v(?:8|9|10|11)/);
   var assetList = serviceWorker.slice(serviceWorker.indexOf("const ASSETS"), serviceWorker.indexOf("const CACHEABLE_ASSET_URLS"));
   assert.doesNotMatch(assetList, /\/v1\//);
-  assert.match(serviceWorker, /const CACHE="mybishbash-photobooth-v10"/);
+  assert.match(serviceWorker, /const CACHE="mybishbash-photobooth-v11"/);
 });
 
 test("keeps internal plans, tests and credentials out of the static deployment", function () {
@@ -748,15 +748,29 @@ test("grants a client booth's entitlement as a preview, never as purchased acces
 });
 
 test("decodes a client logo before drawing it and precaches it offline", function () {
-  assert.match(app, /loadImage\(logoURL\)\.then\(img=>\{[\s\S]*?businessBrand\.logoImage=img/);
-  assert.match(app, /new URL\(client\.brand\.logo,location\.origin\+productBasePath\(\)\)/);
-  assert.ok(
-    fs.existsSync(path.join(ROOT, "assets", "clients", "david-lloyd-logo.png")),
-    "the client logo must be committed, not left in a download folder"
-  );
-  ["./clients.js", "./assets/clients/david-lloyd-logo.png"].forEach(function (asset) {
-    assert.ok(serviceWorker.includes(asset), asset + " must be precached — the booth runs on venue wifi");
+  assert.match(app, /loadImage\(url\)\.then\(img=>\{[\s\S]*?businessBrand\[field\]=img/);
+  assert.match(app, /const url=new URL\(path,base\)\.href/);
+  assert.match(app, /location\.origin\+productBasePath\(\)/);
+
+  /* The chip is filled with the brand colour, so the mark on it must be the
+     knockout where one exists. */
+  assert.match(covers, /const logo=\(business&&branding\.logoImageInverse\)\|\|branding\.logoImage\|\|null/);
+  assert.match(app, /logoImageInverse:businessBrand\.logoImageInverse/);
+
+  Clients.CLIENT_SLUGS.forEach(function (slug) {
+    var brand = Clients.CLIENTS[slug].brand;
+    [brand.logo, brand.logoInverse].filter(Boolean).forEach(function (rel) {
+      assert.ok(
+        fs.existsSync(path.join(ROOT, rel)),
+        rel + " must be committed, not left in a download folder"
+      );
+      assert.ok(
+        serviceWorker.includes("./" + rel),
+        rel + " must be precached — the booth runs on venue wifi"
+      );
+    });
   });
+  assert.ok(serviceWorker.includes("./clients.js"), "clients.js must be precached");
 });
 
 test("loads the client registry before the app that reads it", function () {
@@ -770,13 +784,27 @@ test("loads the client registry before the app that reads it", function () {
 test("registers David Lloyd as data with a white-label, upload-incapable configuration", function () {
   var client = Clients.CLIENTS["david-lloyd"];
   assert.equal(client.name, "David Lloyd Clubs");
-  assert.equal(client.event.themeId, "sunshine");
+  assert.equal(client.event.themeId, "editorial");
+  /* Sampled from davidlloyd.co.uk, not invented — the CTA plum and the page
+     cream. A client whose palette drifts from its own brand is the defect
+     this route exists to avoid. */
+  assert.equal(client.brand.primaryColor, "#82285F");
+  assert.equal(client.brand.secondaryColor, "#FCFCF6");
+  assert.ok(client.brand.logoInverse, "a dark mark on the brand colour needs a knockout variant");
   assert.equal(client.brand.whiteLabel, true);
   assert.equal(client.entitlement, "BUSINESS");
 
   /* The load-bearing invariant: no route may make a photograph uploadable. */
   assert.equal(client.businessEvent.collectConsentedPhotos, false);
   assert.ok(Object.isFrozen(client), "a client is data and must be immutable");
+
+  /* The screen palette must come from the brand, not the registry theme —
+     and it must survive showEventHome re-applying the theme on every return
+     to the welcome screen, which is why the override lives inside
+     applyEventTheme rather than at the call site. */
+  assert.match(app, /function applyEventTheme\([\s\S]*?applyClientBrandTheme\(target\);\s*\}/);
+  assert.match(app, /--event-button",brand\.primaryColor/);
+  assert.equal(client.brand.textColor, "#474A4A");
 
   assert.ok(!/david[- ]?lloyd/i.test(app), "app.js must not name a customer");
   assert.ok(!/david[- ]?lloyd/i.test(landingSource), "landing.js must not name a customer");

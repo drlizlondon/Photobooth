@@ -64,9 +64,26 @@
            the logo at the wrong origin root the day that lands. Resolving
            against the base path also survives the trailing-slash form of a
            client route, where a bare relative path would 404. */
-        logo: "assets/clients/david-lloyd-logo.png",
-        primaryColor: "#245f9f",
-        secondaryColor: "#dcecff",
+        logo: "assets/clients/david-lloyd-logo-dark.png",
+        /* The cover's branding chip is filled with primaryColor, so a dark
+           mark on plum is unreadable. The knockout variant is used wherever
+           the mark sits on the brand colour. Both are the same trimmed
+           wordmark; the supplied asset was a 600x600 square that was mostly
+           white padding, which is why it rendered at thumbnail size. */
+        logoInverse: "assets/clients/david-lloyd-logo-light.png",
+
+        /* Sampled from davidlloyd.co.uk, not invented: #82285F is the
+           "Enquire now" CTA, #FCFCF6 the page ground. For a Business
+           entitlement outputTheme() derives the whole output palette from
+           these two — primary becomes accent, button and border; secondary
+           becomes background and highlight, with foreground computed for
+           contrast. The restraint is the brand: plum appears as an accent
+           only, never as a field. */
+        primaryColor: "#82285F",
+        secondaryColor: "#FCFCF6",
+        /* Their body copy and dark sections are this warm charcoal, not
+           black. It is the difference between "calm" and "stark". */
+        textColor: "#474A4A",
         /* Owner decision 2026-08-17: the keepsake carries the club's brand
            alone. MyBishBash attribution lives in previewNote, on screen,
            where the person evaluating it sees it and the guest's photograph
@@ -74,25 +91,74 @@
         whiteLabel: true
       },
 
-      /* Sunshine is the shipped summer theme — butter ground, coral
-         highlight, warm strip filter, sunburst decoration — and its primary
-         (#245f9f) is already the blue this brand reads in. No new theme. */
+      /* Editorial supplies the structure — clean frame, restrained
+         decoration, magazine template. The palette comes from brand above,
+         so the theme is chosen for its composure, not its colours. Sunshine
+         was the wrong instinct: a sunburst and butter-yellow ground is a
+         children's-party voice, and this brand is calm, cream and
+         photography-led. */
       event: {
-        themeId: "sunshine",
+        themeId: "editorial",
         eventType: "party",
-        eventTitle: "Summer at David Lloyd",
-        eventLine: "Sun's out. Strike a pose.",
+        eventTitle: "The Summer Glow",
+        eventLine: "Summer at David Lloyd",
         location: "",
         date: "",
         datePrecision: "unknown",
-        /* Left empty on purpose: the signature falls back to eventTitle, and
-           the white-label footer already prints the brand name as its label.
-           Setting both put "David Lloyd Clubs" on the strip twice. */
+
+        /* Neuzeit Grotesk is the site's face and is not on the device. Futura
+           is the closest available geometric grotesk; Snell answers the
+           script in their own wordmark. Baskerville over Didot for the
+           masthead — Didot is high-fashion loud, and this brand is not. */
+        fontDisplay: "baskerville",
+        fontText: "futura",
+        fontCondensed: "futuracond",
+        fontScript: "snell",
+
+        /* The signature falls back to eventTitle, and the footer already
+           prints the brand name as its label — setting both printed "David
+           Lloyd Clubs" on the strip twice. */
         stripSignature: "",
-        stripTop: "THE SUMMER EDIT",
+        stripTop: "THE SUMMER ISSUE",
         stripSecond: "",
         stripDate: "",
-        guestPinEnabled: false
+        guestPinEnabled: false,
+
+        /* A members' summer wellness issue, not a birthday party. Every slot
+           is set explicitly because the derived defaults are party copy —
+           "ONE NIGHT ONLY", "Not just an age. A whole vibe." — which is the
+           wrong register for a health club by some distance. */
+        coverMasthead: "SUMMER GLOW",
+        coverOccasion: "SUMMER",
+        /* Short on purpose: the editorial template sets `big` as a full-width
+           word along the same baseline, and a long script line runs straight
+           underneath it. Verified by rendering — "The Summer Glow" here was
+           overrun by GLOW. The title still leads as the masthead. */
+        coverScript: "Summer '26",
+        coverSkyline1: "THE SUMMER ISSUE",
+        coverSkyline2: "2026",
+        coverSkyline3: "MEMBERS' EDITION",
+        coverF1Title: "Strong is the new summer",
+        coverF1Dek: "Where your season begins.",
+        coverF2Title: "Pool, courts, poolside",
+        coverF2Dek: "Ninety minutes that are yours.",
+        coverF3Title: "The after-swim glow",
+        coverF3Dek: "Earned, not filtered.",
+        coverBig: "GLOW",
+        coverBigDek: "Summer, the David Lloyd way.",
+        coverFooter: "Move · Recover",
+        coverBarcode: "DL 26  SUMMER",
+        coverEyebrow: "The Summer Glow",
+        coverStack: "Summer Edition",
+        coverDateLine: "2026",
+        coverScriptSmall: "this summer at",
+        coverHeroScript: "The summer we",
+        coverHero: "Felt Our Best",
+        coverThanks: "Thank you for being part of your club this summer",
+        coverHashtag: "#SummerAtDavidLloyd",
+        coverIcons: "Move well, Recover fully, Belong here",
+        coverEditionWord: "Edition",
+        coverOfWord: "of"
       },
 
       /* A club booth that captures nothing is not the pitch. Email plus both

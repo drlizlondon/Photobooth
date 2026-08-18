@@ -1,6 +1,6 @@
 const CACHE_PREFIX="mybishbash-photobooth-";
-const CACHE="mybishbash-photobooth-v10";
-const ASSETS=["./","./index.html","./styles.css","./fonts.js","./covers.js","./polaroid.js","./mp4.js","./product.js","./event.js","./clients.js","./strip.js","./motion.js","./app.js","./marketing.js","./landing.js","./assets/demo-photos.jpg","./assets/clients/david-lloyd-logo.png","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png"];
+const CACHE="mybishbash-photobooth-v11";
+const ASSETS=["./","./index.html","./styles.css","./fonts.js","./covers.js","./polaroid.js","./mp4.js","./product.js","./event.js","./clients.js","./strip.js","./motion.js","./app.js","./marketing.js","./landing.js","./assets/demo-photos.jpg","./assets/clients/david-lloyd-logo-dark.png","./assets/clients/david-lloyd-logo-light.png","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png"];
 const CACHEABLE_ASSET_URLS=new Set(ASSETS.map(path=>new URL(path,self.registration.scope).href));
 
 /* v7 was the bridge away from the old cache-first workers. Those workers can

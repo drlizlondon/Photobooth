@@ -4,4 +4,10 @@
 User-agent: *
 Allow: /
 
+# Branded client booths are prepared for a named organisation and carry that
+# organisation's trademark. They are reachable by anyone holding the link and
+# deliberately absent from sitemap.xml; nothing here should be indexed or
+# associated with the client by a search engine. PB-29.
+Disallow: /david-lloyd
+
 Sitemap: https://raes-photo-booth.vercel.app/sitemap.xml

@@ -126,7 +126,13 @@ function dispatchPreview(){
 }
 
 function entranceAllowed(){
-  if(/(?:^|\/)business\/?$/.test(global.location.pathname))return false;
+  /* Route vocabulary comes from clients.js, which app.js also reads. This
+     test used to be its own copy of the business regex, and when branded
+     client routes were added the copy here was missed — the full-screen
+     entrance overlay opened on a client's URL and painted over the branded
+     booth rendering underneath it. One source, no drift. See PB-29. */
+  var routes=global.MyBishBashClients||null;
+  if(routes&&routes.isProductRoutePath(global.location.pathname))return false;
   if(global.location.hash)return false;
   try{return global.sessionStorage.getItem(ENTRANCE_KEY)!=="1";}catch(error){return true;}
 }

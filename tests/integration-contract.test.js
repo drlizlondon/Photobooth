@@ -12,6 +12,10 @@ function source(name) {
 }
 
 var app = source("app.js");
+var clientsSource = source("clients.js");
+var landingSource = source("landing.js");
+var robots = source("robots.txt");
+var Clients = require("../clients.js").MyBishBashClients;
 var covers = source("covers.js");
 var polaroid = source("polaroid.js");
 var strip = source("strip.js");
@@ -60,8 +64,21 @@ test("exposes Personal and Business as separate static product surfaces", functi
   assert.deepEqual(vercel.rewrites, [
     { source: "/", destination: "/index.html" },
     { source: "/business", destination: "/index.html" },
-    { source: "/business/", destination: "/index.html" }
+    { source: "/david-lloyd", destination: "/index.html" }
   ]);
+  /* index.html loads every script by relative src, so a trailing-slash URL
+     resolves them against /business/ or /david-lloyd/ and the app never
+     boots. A rewrite serves the shell and hides that; only a redirect to the
+     canonical form actually works. Verified in a browser: /business/ loaded
+     the document with zero scripts. */
+  assert.deepEqual(vercel.redirects, [
+    { source: "/business/", destination: "/business", permanent: false },
+    { source: "/david-lloyd/", destination: "/david-lloyd", permanent: false }
+  ]);
+  assert.ok(
+    !vercel.rewrites.some(function (rule) { return /.\/$/.test(rule.source); }),
+    "a trailing-slash route must redirect, never rewrite — the shell would load with no scripts"
+  );
 });
 
 test("renders attribution inside every output pipeline", function () {
@@ -546,7 +563,7 @@ test("collapses transient booth history and replaces example Event Home state", 
   assert.match(enterEvent, /current\.surface===HISTORY_SURFACE\.EVENT_HOME[\s\S]*?history\.replaceState\(next/);
   assert.ok(enterEvent.indexOf("history.replaceState") < enterEvent.indexOf("showEventHome(example,hostView)"));
   assert.match(savePersonal, /if\(boothExampleMode\)\{temporarySettingsSnapshot=null;boothExampleMode=false;\}/);
-  assert.match(app, /function productBasePath\(\)[\s\S]*?location\.pathname\.replace\(\/\\\/business\\\/\?\$\/,"\/"\)/);
+  assert.match(app, /function productBasePath\(\)[\s\S]*?CLIENTS\.basePathFrom\(location\.pathname\)/);
   assert.match(app, /function productURL\(route\)[\s\S]*?route==="business"[\s\S]*?"\/business":base/);
   assert.match(app, /const url=productURL\(productRoute\)/);
   assert.match(app, /history\.replaceState\(productHistoryState\(productRoute\),"",productURL\(productRoute\)\)/);
@@ -635,7 +652,7 @@ test("does not force-reload safe-worker booths or cache product API responses", 
   assert.doesNotMatch(legacySet, /rae-photo-booth-live-v(?:8|9|10|11)/);
   var assetList = serviceWorker.slice(serviceWorker.indexOf("const ASSETS"), serviceWorker.indexOf("const CACHEABLE_ASSET_URLS"));
   assert.doesNotMatch(assetList, /\/v1\//);
-  assert.match(serviceWorker, /const CACHE="mybishbash-photobooth-v9"/);
+  assert.match(serviceWorker, /const CACHE="mybishbash-photobooth-v10"/);
 });
 
 test("keeps internal plans, tests and credentials out of the static deployment", function () {
@@ -657,4 +674,111 @@ test("keeps every literal application DOM reference present and every id unique"
   var references = Array.from(app.matchAll(/\$\("([^"]+)"\)/g), function (match) { return match[1]; });
   assert.equal(idSet.size, ids.length, "HTML ids must be unique");
   assert.deepEqual(references.filter(function (id) { return !idSet.has(id); }), []);
+});
+
+/* PB-29 — branded client booths.
+
+   The first attempt at this feature hardcoded one customer into app.js and
+   was rejected. These assertions pin the two things that made it wrong: route
+   vocabulary that existed in three hand-maintained copies, and an entitlement
+   granted by visiting a URL. */
+
+test("keeps route vocabulary in exactly one place", function () {
+  var literalBusinessRoute = /\/\(\?:\^\|\\\/\)business/;
+  assert.ok(
+    !literalBusinessRoute.test(app),
+    "app.js must ask clients.js what a product route is, not carry its own copy"
+  );
+  assert.ok(
+    !literalBusinessRoute.test(landingSource),
+    "landing.js's entrance overlay must share the route test — its private copy is why a client route once rendered under the splash screen"
+  );
+  assert.match(landingSource, /MyBishBashClients[\s\S]*?isProductRoutePath/);
+  assert.match(app, /function routeFromLocation\(\)[\s\S]*?CLIENTS\.isProductRoutePath/);
+});
+
+test("resolves every registered client route to a rewrite, a noindex header and a robots rule", function () {
+  Clients.CLIENT_SLUGS.forEach(function (slug) {
+    var rewrites = vercel.rewrites.map(function (rule) { return rule.source; });
+    assert.ok(rewrites.includes("/" + slug), slug + " needs a rewrite");
+    assert.ok(
+      vercel.redirects.some(function (rule) {
+        return rule.source === "/" + slug + "/" && rule.destination === "/" + slug;
+      }),
+      slug + " needs its trailing-slash form redirected to the canonical path"
+    );
+
+    var noindexed = vercel.headers.filter(function (rule) { return rule.source === "/" + slug; });
+    assert.equal(noindexed.length, 1, slug + " must carry a noindex header");
+    noindexed.forEach(function (rule) {
+      assert.ok(rule.headers.some(function (header) {
+        return header.key === "X-Robots-Tag" && /noindex/.test(header.value);
+      }));
+    });
+
+    assert.ok(
+      robots.split(/\r?\n/).includes("Disallow: /" + slug),
+      slug + " carries a third party's trademark and must not be crawlable"
+    );
+    assert.ok(
+      !source("sitemap.xml").includes(slug),
+      slug + " must stay out of the sitemap"
+    );
+  });
+});
+
+test("grants a client booth's entitlement as a preview, never as purchased access", function () {
+  var booth = app.slice(app.indexOf("function applyClientBooth()"));
+  booth = booth.slice(0, booth.indexOf("\nasync function loadVerifiedAccess"));
+
+  /* Negative assertions run against code with comments stripped — a comment
+     explaining that persistSettings() is never called must not read as a call. */
+  var code = booth.replace(/\/\*[\s\S]*?\*\//g, "");
+
+  assert.match(booth, /applyFounderDemoGrant\(client\.entitlement,false,client\.previewNote\)/);
+  assert.ok(!/setEntitlement\(/.test(code), "a URL must not write entitlement directly");
+  assert.ok(!/ACCESS_KEY/.test(code), "a preview must never touch real access state");
+  assert.ok(!/persistSettings\(\)/.test(code), "a client booth must not overwrite the device's own saved event");
+  assert.match(booth, /if\(!temporarySettingsSnapshot\)temporarySettingsSnapshot=settings/);
+
+  /* Preserving location.href is what keeps the slug in the address bar, so a
+     refresh or a re-share of the link still opens the branded booth. */
+  assert.match(booth, /history\.replaceState\(\{surface:HISTORY_SURFACE\.EVENT_HOME[^}]*\},"",location\.href\)/);
+  assert.match(app, /async function loadVerifiedAccess\(\)\{[\s\S]*?if\(clientBoothSlug\)return;/);
+});
+
+test("decodes a client logo before drawing it and precaches it offline", function () {
+  assert.match(app, /loadImage\(logoURL\)\.then\(img=>\{[\s\S]*?businessBrand\.logoImage=img/);
+  assert.match(app, /new URL\(client\.brand\.logo,location\.origin\+productBasePath\(\)\)/);
+  assert.ok(
+    fs.existsSync(path.join(ROOT, "assets", "clients", "david-lloyd-logo.png")),
+    "the client logo must be committed, not left in a download folder"
+  );
+  ["./clients.js", "./assets/clients/david-lloyd-logo.png"].forEach(function (asset) {
+    assert.ok(serviceWorker.includes(asset), asset + " must be precached — the booth runs on venue wifi");
+  });
+});
+
+test("loads the client registry before the app that reads it", function () {
+  var clients = html.indexOf('src="clients.js"');
+  var appScript = html.indexOf('src="app.js"');
+  var landingScript = html.indexOf('src="landing.js"');
+  assert.ok(clients >= 0, "clients.js must be loaded");
+  assert.ok(appScript > clients && landingScript > clients);
+});
+
+test("registers David Lloyd as data with a white-label, upload-incapable configuration", function () {
+  var client = Clients.CLIENTS["david-lloyd"];
+  assert.equal(client.name, "David Lloyd Clubs");
+  assert.equal(client.event.themeId, "sunshine");
+  assert.equal(client.brand.whiteLabel, true);
+  assert.equal(client.entitlement, "BUSINESS");
+
+  /* The load-bearing invariant: no route may make a photograph uploadable. */
+  assert.equal(client.businessEvent.collectConsentedPhotos, false);
+  assert.ok(Object.isFrozen(client), "a client is data and must be immutable");
+
+  assert.ok(!/david[- ]?lloyd/i.test(app), "app.js must not name a customer");
+  assert.ok(!/david[- ]?lloyd/i.test(landingSource), "landing.js must not name a customer");
+  assert.match(clientsSource, /david-lloyd/);
 });

@@ -123,6 +123,7 @@ const FRAMES = [["white","White"],["black","Black"],["editorial","Editorial"],["
 const FILTERS = [["original","Original"],["bw","B&W"],["vintage","Vintage"],["warm","Warm"],["glow","Glow"]];
 const PRODUCT=window.MyBishBashProduct||null;
 const EVENT=window.MyBishBashEvent||null;
+const CLIENTS=window.MyBishBashClients||null;
 const MOTION=window.MyBishBashMotion||null;
 const STRIP=window.Strip||null;
 const ENTITLEMENTS=PRODUCT?PRODUCT.ENTITLEMENTS:{FREE:"FREE",ONE_EVENT:"ONE_EVENT",PERSONAL_6_MONTH:"PERSONAL_6_MONTH",PERSONAL_12_MONTH:"PERSONAL_12_MONTH",FOUNDING_LIFETIME:"FOUNDING_LIFETIME",BUSINESS:"BUSINESS"};
@@ -223,6 +224,23 @@ function applySurfaceMetadata(route){
   const canonical=document.querySelector('link[rel="canonical"]');
   if(canonical)canonical.setAttribute("href",url);
 }
+/* A client route carries the client's own title and description. Same setters
+   as applySurfaceMetadata, so there is one way metadata reaches the document;
+   the canonical points at the client's own URL rather than leaving the
+   generic Business page claiming it. */
+function applyClientMetadata(client){
+  if(!client||!client.meta)return;
+  const url=SITE_ORIGIN+"/"+client.slug;
+  document.title=client.meta.title;
+  setMeta('meta[name="description"]',client.meta.description);
+  setMeta('meta[property="og:title"]',client.meta.title);
+  setMeta('meta[name="twitter:title"]',client.meta.title);
+  setMeta('meta[property="og:description"]',client.meta.description);
+  setMeta('meta[name="twitter:description"]',client.meta.description);
+  setMeta('meta[property="og:url"]',url);
+  const canonical=document.querySelector('link[rel="canonical"]');
+  if(canonical)canonical.setAttribute("href",url);
+}
 function assertOriginConsistency(){
   if(!SITE_ORIGIN)return;
   const absolute=[
@@ -314,6 +332,10 @@ let entitlement=ENTITLEMENTS.FREE;
 let capabilities=PRODUCT?PRODUCT.getCapabilities(entitlement):{canPersonaliseEvent:false,canRemoveFreeBranding:false,canUploadBusinessLogo:false,canWhiteLabel:false,canCollectEmail:false,canConfigureSharing:false,canCollectConsent:false,canCollectConsentedPhotos:false};
 let businessEventConfig=PRODUCT?PRODUCT.createBusinessEventConfig():{collectEmail:false,requireEmail:false,allowShare:true,allowSave:true,collectMarketingConsent:false,collectPublicityConsent:false,collectConsentedPhotos:false};
 let businessBrand={name:"",primaryColor:"#2357ff",secondaryColor:"#ffcf33",logoImage:null,whiteLabel:false};
+/* Set only while this tab is showing a branded client booth. It is a route
+   fact, never persisted, and it is what stops real billing state from
+   downgrading a preview mid-pitch. */
+let clientBoothSlug=null;
 let stream=null;
 let photos=[];
 let currentMode="strip";
@@ -597,6 +619,13 @@ function eventIsPersonalised(){
   return boothReturnScreen==="welcome";
 }
 function eventIsDraft(){
+  /* The SAMPLE mark exists to stop an unstarted personal event producing real
+     keepsakes before its 48-hour licence is spent. A branded client booth is
+     Business-entitled and has no one-event licence to protect, so the mark has
+     nothing to guard here — and a watermark across every photograph would
+     defeat the only thing the route is for, which is showing a client exactly
+     what their members would receive. See PB-29. */
+  if(clientBoothSlug)return false;
   return eventIsPersonalised()&&String(settings.eventStatus||"DRAFT")==="DRAFT";
 }
 
@@ -1060,8 +1089,9 @@ function productHistoryState(route){
   return {surface:HISTORY_SURFACE.PRODUCT,productRoute:route==="business"?"business":"personal"};
 }
 function productBasePath(){
-  const withoutBusiness=location.pathname.replace(/\/business\/?$/,"/");
-  return withoutBusiness.endsWith("/")?withoutBusiness:withoutBusiness+"/";
+  /* Route vocabulary lives in clients.js so app.js and landing.js cannot
+     drift apart on what counts as a product route. See PB-29. */
+  return CLIENTS?CLIENTS.basePathFrom(location.pathname):"/";
 }
 function productURL(route){
   const base=productBasePath();
@@ -1086,7 +1116,11 @@ function showProductRoute(route,push,replace){
   }
   window.scrollTo(0,0);
 }
-function routeFromLocation(){return /(?:^|\/)business\/?$/.test(location.pathname)?"business":"personal";}
+/* A branded client booth is a Business-surface route: same rendering, same
+   capability family, different brand. It is deliberately NOT its own surface
+   vocabulary — that is how sibling concepts get minted. */
+function routeFromLocation(){return CLIENTS&&CLIENTS.isProductRoutePath(location.pathname)?"business":"personal";}
+function clientFromLocation(){return CLIENTS?CLIENTS.clientFromPath(location.pathname):null;}
 function applyExampleBoothSettings(){
   if(!temporarySettingsSnapshot)temporarySettingsSnapshot=settings;
   const afterDark=themeFor("after-dark");
@@ -2988,17 +3022,23 @@ async function verifyRestoreToken(token){
    default — it is the boundary that keeps an arbitrary querystring value
    from ever becoming an entitlement string fed to PRODUCT.getCapabilities. */
 const FOUNDER_DEMO_ALLOWED_TIERS=[ENTITLEMENTS.FREE,ENTITLEMENTS.PERSONAL_12_MONTH,ENTITLEMENTS.BUSINESS];
-function founderDemoBadge(){
+/* One badge for every entitlement that was granted rather than bought. The
+   wording changes with the audience — a founder demo says "not a paying
+   customer" to Lizzie, a client concept preview credits the builder to the
+   prospect — but the guarantee is identical and stated in one place: this
+   entitlement did not come from billing, and the page never pretends it did. */
+function previewBadge(label){
   let el=document.getElementById("founderDemoBadge");
-  if(el)return el;
-  el=document.createElement("div");
-  el.id="founderDemoBadge";
-  el.textContent="Founder demo — not a paying customer";
-  el.style.cssText="position:fixed;bottom:0;left:0;right:0;z-index:99999;padding:6px 12px;background:#111;color:#fff;font:12px/1.4 system-ui,sans-serif;text-align:center;pointer-events:none;opacity:0.85;";
-  document.body.appendChild(el);
+  if(!el){
+    el=document.createElement("div");
+    el.id="founderDemoBadge";
+    el.style.cssText="position:fixed;bottom:0;left:0;right:0;z-index:99999;padding:6px 12px;background:#111;color:#fff;font:12px/1.4 system-ui,sans-serif;text-align:center;pointer-events:none;opacity:0.85;";
+    document.body.appendChild(el);
+  }
+  el.textContent=label||"Founder demo — not a paying customer";
   return el;
 }
-function applyFounderDemoGrant(tier,persist){
+function applyFounderDemoGrant(tier,persist,label){
   if(!PRODUCT||FOUNDER_DEMO_ALLOWED_TIERS.indexOf(tier)===-1)return;
   /* capabilities is recomputed from `entitlement` through the same single
      resolver every other path uses (PRODUCT.getCapabilities) — demoComp is
@@ -3009,7 +3049,7 @@ function applyFounderDemoGrant(tier,persist){
     try{localStorage.setItem(FOUNDER_DEMO_KEY,JSON.stringify({plan:tier,demoComp:true,grantedAt:new Date().toISOString()}));}catch(e){}
   }
   applyEntitlementUI();
-  founderDemoBadge();
+  previewBadge(label);
   invalidatePolaroid();
   if(photos.length&&currentMode!=="polaroid")renderWithFade();
 }
@@ -3029,7 +3069,98 @@ function checkFounderDemoAccess(){
     if(cached&&cached.plan&&PRODUCT&&PRODUCT.ENTITLEMENT_VALUES.indexOf(cached.plan)!==-1)applyFounderDemoGrant(cached.plan,false);
   }catch(e){}
 }
+
+/* A branded client booth, opened by visiting that client's route. Everything
+   it does is a preview: the entitlement is granted the same way a founder
+   demo is (never through ACCESS_KEY, never reconciled against the Worker),
+   and the configuration is held in memory rather than written over whatever
+   real event this device already has saved. Close the tab and the device is
+   exactly as it was. */
+function applyClientBooth(){
+  const client=clientFromLocation();
+  if(!client||!EVENT)return null;
+  clientBoothSlug=client.slug;
+
+  /* Same contract as the booth example: the visitor's own saved event is
+     stashed, not overwritten, and persistSettings() is deliberately never
+     called on this path. */
+  if(!temporarySettingsSnapshot)temporarySettingsSnapshot=settings;
+
+  const theme=themeFor(client.event.themeId);
+  settings=EVENT.createEventConfig({
+    ...DEFAULTS,
+    ...themeSettings(theme),
+    ...client.event,
+    stripFrame:theme.stripFrame,
+    stripFilter:theme.stripFilter,
+    magazineTemplate:theme.magazineTemplate
+  },{defaults:DEFAULTS});
+
+  /* Drive the existing Business configurator from the client's data and let
+     it derive the brand and event config as it always does. Assigning
+     businessBrand/businessEventConfig directly does not work: both are
+     recomputed from these controls, so the form's own defaults would quietly
+     overwrite the client a moment later. One direction only — client data,
+     then controls, then derived config. */
+  const cfg=client.businessEvent;
+  $("businessBrandName").value=client.brand.name;
+  $("businessPrimary").value=client.brand.primaryColor;
+  $("businessSecondary").value=client.brand.secondaryColor;
+  $("businessCollectEmail").checked=cfg.collectEmail;
+  $("businessRequireEmail").checked=cfg.requireEmail;
+  $("businessAllowShare").checked=cfg.allowShare;
+  $("businessAllowSave").checked=cfg.allowSave;
+  $("businessMarketingConsent").checked=cfg.collectMarketingConsent;
+  $("businessPublicityConsent").checked=cfg.collectPublicityConsent;
+  $("businessCollectPhotos").checked=cfg.collectConsentedPhotos;
+
+  applyFounderDemoGrant(client.entitlement,false,client.previewNote);
+
+  /* Replace rather than push: pressing back from a client's booth should
+     leave the site, not reveal the generic product page underneath a
+     white-label pitch. Note location.href is preserved — the slug stays in
+     the address bar so refreshing and re-sharing the link still work. */
+  if(history.replaceState)history.replaceState({surface:HISTORY_SURFACE.EVENT_HOME,example:false,hostView:false},"",location.href);
+  showEventHome(false,false);
+  syncBusinessConfigurator();
+  updateBusinessBrandText();
+  /* Neither is a form control, so both are set after the configurator has
+     derived everything that is. */
+  businessBrand.whiteLabel=client.brand.whiteLabel===true;
+  businessBrand.logoImage=null;
+  applyClientMetadata(client);
+
+  /* White label is a promise about what the visitor sees, not only about what
+     the renderers draw. The two standing pieces of MyBishBash chrome on the
+     booth screen are removed with it — the "back to website" control most of
+     all, which would otherwise carry a prospect out of the pitch and onto the
+     generic product site. Attribution is not lost: it is in previewNote. */
+  if(businessBrand.whiteLabel){
+    const powered=$("welcomePoweredBy");if(powered)powered.hidden=true;
+    const back=$("backToProduct");if(back)back.hidden=true;
+  }
+
+  /* Decode before use. A bare `new Image()` whose src is still loading draws
+     nothing into a canvas and reports no error, so the first keepsake of the
+     session would silently lose the logo that is the whole point. */
+  const logoURL=new URL(client.brand.logo,location.origin+productBasePath()).href;
+  loadImage(logoURL).then(img=>{
+    businessBrand.logoImage=img;
+    invalidatePolaroid();
+    if(photos.length&&currentMode!=="polaroid")renderWithFade();
+  }).catch(()=>{
+    /* The booth still works unbranded; say so where the owner will see it
+       rather than shipping a silently generic pitch. */
+    console.warn("Client logo failed to load: "+logoURL);
+  });
+
+  return client;
+}
 async function loadVerifiedAccess(){
+  /* A branded client booth owns this tab's entitlement. Without this guard a
+     device that already holds real access (the founder's own iPad, mid-pitch)
+     would have the preview silently replaced by its own plan. */
+  if(clientBoothSlug)return;
   let cached=null;
   try{cached=JSON.parse(localStorage.getItem(ACCESS_KEY)||"null");}catch(e){}
   if(!cached||!cached.accessToken)return;
@@ -3348,6 +3479,10 @@ if(/^#setup=/.test(location.hash)){try{sessionStorage.setItem("mybishbashPhotobo
 importSetupPassFromLocation();
 checkFounderDemoAccess();
 handleCheckoutReturn();
+/* After the founder-demo restore so a client's route wins over a cached demo
+   tier on the founder's own device, and before loadVerifiedAccess, which
+   stands down entirely while a client booth is showing. */
+applyClientBooth();
 loadVerifiedAccess();
 if("serviceWorker" in navigator){
   let hasServiceWorkerController=Boolean(navigator.serviceWorker.controller);

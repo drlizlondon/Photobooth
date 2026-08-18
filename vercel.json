@@ -1,14 +1,24 @@
 {
+  "redirects": [
+    { "source": "/business/", "destination": "/business", "permanent": false },
+    { "source": "/david-lloyd/", "destination": "/david-lloyd", "permanent": false }
+  ],
   "rewrites": [
     { "source": "/", "destination": "/index.html" },
     { "source": "/business", "destination": "/index.html" },
-    { "source": "/business/", "destination": "/index.html" }
+    { "source": "/david-lloyd", "destination": "/index.html" }
   ],
   "headers": [
     {
       "source": "/sw.js",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/david-lloyd",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
       ]
     }
   ]

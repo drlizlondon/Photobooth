@@ -655,7 +655,7 @@ test("landing offers the three post-demo paths in the promised order", async ({ 
     },
     {
       heading: "Customise Your Own",
-      price: "FROM £9",
+      price: "FROM £19",
       action: "CUSTOMISE",
       tag: "BUTTON",
       href: null,

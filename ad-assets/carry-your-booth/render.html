@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MyBishBash carry-your-booth output render</title>
+  <style>
+    body { margin: 0; background: #171412; color: #fff; font: 16px system-ui, sans-serif; }
+    main { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; padding: 24px; }
+    figure { margin: 0; min-width: 0; }
+    canvas, video { display: block; width: 100%; height: auto; background: #000; }
+    #status { position: fixed; inset: auto 12px 12px; z-index: 2; padding: 8px 12px; background: #fff; color: #111; }
+  </style>
+</head>
+<body>
+  <main>
+    <figure><canvas id="stripOutput"></canvas></figure>
+    <figure><canvas id="magazineOutput"></canvas></figure>
+    <figure><canvas id="polaroidPreview"></canvas><video id="polaroidVideo" muted loop playsinline></video></figure>
+  </main>
+  <p id="status">Rendering…</p>
+  <a id="stripData" hidden>Strip data</a>
+  <a id="magazineData" hidden>Magazine data</a>
+  <a id="polaroidDownload" hidden download="ibiza-weekend-moving-polaroid.mp4">Download</a>
+
+  <script src="../../fonts.js"></script>
+  <script src="../../covers.js"></script>
+  <script src="../../polaroid.js"></script>
+  <script src="../../mp4.js"></script>
+  <script src="../../product.js"></script>
+  <script src="../../event.js"></script>
+  <script src="../../strip.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      const Event = window.MyBishBashEvent;
+      const Product = window.MyBishBashProduct;
+      const theme = Event.resolveTheme("sunshine");
+      const settings = Event.createEventConfig({
+        schemaVersion: Event.EVENT_CONFIG_SCHEMA_VERSION,
+        eventId: "ad-mias-ibiza-weekend",
+        eventType: "other",
+        eventTitle: "Mia's Ibiza Weekend",
+        location: "Ibiza",
+        eventLine: "Good friends. Golden hour. One unforgettable weekend.",
+        date: "14–17.08.26",
+        datePrecision: "exact",
+        themeId: "sunshine",
+        stripFrame: "white",
+        stripFilter: "warm",
+        magazineTemplate: "press",
+        polaroidTransition: "crossfade",
+        stripSignature: "IBIZA 2026",
+        stripDate: "14–17.08.26",
+        coverMasthead: "IBIZA",
+        coverSkyline1: "THE WEEKEND EDIT",
+        coverSkyline2: "14–17 AUG 2026",
+        coverF1Title: "ONE TRIP. ALL THE STORIES.",
+        coverBig: "AFTER DARK",
+        coverBigDek: "THE DINNER ISSUE",
+        coverFooter: "SUNSET • SUPPER • STAYING OUT",
+        polaroidLine1: "IBIZA 2026 ♡",
+        polaroidLine2: "14–17.08.26",
+        polaroidLine3: "Sunset • supper • pool days",
+        polaroidLine4: "The weekend we kept ♡"
+      });
+      const policy = Product.getOutputBrandingPolicy(Product.ENTITLEMENTS.ONE_EVENT);
+      const branding = {
+        mode: policy.mode,
+        text: policy.myBishBashText,
+        brandName: "",
+        primaryColor: theme.primary,
+        secondaryColor: theme.highlight,
+        logoImage: null
+      };
+
+      const urls = {
+        arrival: [
+          "generated/arrival-output-1.png",
+          "generated/arrival-output-2.png",
+          "generated/arrival-output-1.png"
+        ],
+        dinner: [
+          "generated/dinner-output-1.png",
+          "generated/dinner-output-2.png",
+          "generated/dinner-output-1.png"
+        ],
+        pool: [
+          "generated/pool-output-1.png",
+          "generated/pool-output-2.png",
+          "generated/pool-output-1.png"
+        ]
+      };
+
+      async function dataUrlToFile(url, handle) {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const writer = await handle.createWritable();
+        await writer.write(blob);
+        await writer.close();
+      }
+
+      async function postOutput(kind, dataUrl) {
+        const response = await fetch("http://127.0.0.1:4174/output/" + kind, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: dataUrl
+        });
+        if (!response.ok) throw new Error("Could not save " + kind + ": " + response.status);
+      }
+
+      function loadImage(url) {
+        return new Promise((resolve, reject) => {
+          const image = new Image();
+          image.decoding = "async";
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error("Could not load " + url));
+          image.src = url;
+        });
+      }
+
+      async function loadSet(list) {
+        const images = await Promise.all(list.map(loadImage));
+        await Promise.all(images.map(image => image.decode ? image.decode().catch(() => {}) : null));
+        return images;
+      }
+
+      function renderStrip(images) {
+        const canvas = document.getElementById("stripOutput");
+        const ctx = canvas.getContext("2d");
+        return window.Strip.render(ctx, {
+          canvas,
+          images,
+          frameStyle: settings.stripFrame,
+          filterStyle: settings.stripFilter,
+          fonts: {
+            serif: window.Fonts.faces(settings).serif,
+            sans: window.Fonts.faces(settings).sans,
+            script: window.Fonts.faces(settings).script
+          },
+          accent: theme.primary,
+          event: { name: settings.stripSignature, location: settings.location, date: settings.stripDate },
+          footer: { primary: settings.stripSignature, location: settings.location, date: settings.stripDate },
+          branding,
+          draft: false,
+          grade: ({ ctx: photoContext, destination }) => {
+            window.Covers.applyGrade(
+              photoContext,
+              destination.x,
+              destination.y,
+              destination.w,
+              destination.h,
+              "sepia(.10) saturate(1.12) brightness(1.03)"
+            );
+          }
+        });
+      }
+
+      function renderMagazine(images) {
+        const canvas = document.getElementById("magazineOutput");
+        const size = window.Covers.coverSize("portrait", 1200);
+        canvas.width = size.width;
+        canvas.height = size.height;
+        window.Covers.render(canvas.getContext("2d"), {
+          img: images[1],
+          fonts: window.Fonts.faces(settings),
+          width: size.width,
+          height: size.height,
+          copy: window.Covers.copyFor(settings),
+          accent: theme.primary,
+          accentInk: Event.safeForeground(theme.primary),
+          template: settings.magazineTemplate,
+          edition: { no: 1 },
+          branding
+        });
+      }
+
+      async function renderPolaroid(images) {
+        const job = window.Polaroid.compose({
+          base: 1080,
+          images,
+          copy: window.Polaroid.copyFor(settings),
+          hand: window.Fonts.stack("hand", settings),
+          transition: settings.polaroidTransition,
+          backdrop: theme.background,
+          attribution: branding,
+          draftPreview: false
+        });
+        const preview = document.getElementById("polaroidPreview");
+        preview.width = job.geo.W;
+        preview.height = job.geo.H;
+        job.drawAt(preview.getContext("2d"), 1.15);
+
+        const fps = 25;
+        const blob = await window.MP4.encode({
+          width: job.geo.W,
+          height: job.geo.H,
+          fps,
+          frameCount: job.frameCount(fps),
+          renderFrame: (ctx, frame) => job.drawFrame(ctx, frame, fps)
+        });
+        const href = URL.createObjectURL(blob);
+        const link = document.getElementById("polaroidDownload");
+        link.href = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(reader.error || new Error("Could not read Polaroid MP4."));
+          reader.readAsDataURL(blob);
+        });
+        const video = document.getElementById("polaroidVideo");
+        video.src = href;
+        window.__carryYourBoothPolaroid = { blob, href, width: job.geo.W, height: job.geo.H, duration: job.timeline.duration };
+      }
+
+      async function main() {
+        try {
+          if (document.fonts && document.fonts.ready) await document.fonts.ready;
+          const [arrival, dinner, pool] = await Promise.all([
+            loadSet(urls.arrival), loadSet(urls.dinner), loadSet(urls.pool)
+          ]);
+          renderStrip(arrival);
+          renderMagazine(dinner);
+          document.getElementById("stripData").href = document.getElementById("stripOutput").toDataURL("image/png");
+          document.getElementById("magazineData").href = document.getElementById("magazineOutput").toDataURL("image/png");
+          await renderPolaroid(pool);
+          window.saveCarryYourBoothOutputs = async function saveCarryYourBoothOutputs(directory) {
+            const stripHandle = await directory.getFileHandle("ibiza-weekend-photo-strip.png", { create: true });
+            const magazineHandle = await directory.getFileHandle("ibiza-weekend-magazine.png", { create: true });
+            const polaroidHandle = await directory.getFileHandle("ibiza-weekend-moving-polaroid.mp4", { create: true });
+            await dataUrlToFile(document.getElementById("stripData").href, stripHandle);
+            await dataUrlToFile(document.getElementById("magazineData").href, magazineHandle);
+            await dataUrlToFile(document.getElementById("polaroidDownload").href, polaroidHandle);
+          };
+          window.postCarryYourBoothOutputs = async function postCarryYourBoothOutputs() {
+            await postOutput("strip", document.getElementById("stripData").href);
+            await postOutput("magazine", document.getElementById("magazineData").href);
+            await postOutput("polaroid", document.getElementById("polaroidDownload").href);
+          };
+          if (new URLSearchParams(location.search).has("save")) {
+            await window.postCarryYourBoothOutputs();
+          }
+          document.getElementById("status").textContent = "READY";
+          document.body.dataset.ready = "true";
+        } catch (error) {
+          document.getElementById("status").textContent = error.stack || error.message || String(error);
+          document.body.dataset.ready = "error";
+        }
+      }
+
+      main();
+    }());
+  </script>
+</body>
+</html>

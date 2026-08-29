@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MyBishBash dinner-party output comparison</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Avenir Next", Avenir, "Helvetica Neue", Arial, sans-serif;
+      background: #151311;
+      color: #fff;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #151311; }
+    header { padding: 24px 24px 0; }
+    h1 { margin: 0; font-size: 22px; }
+    header p { margin: 6px 0 0; color: #cfc7bf; }
+    main { display: grid; gap: 28px; padding: 24px 24px 72px; }
+    section { padding: 20px; border: 1px solid #3b3631; border-radius: 18px; background: #211e1b; }
+    h2 { margin: 0 0 16px; font-size: 18px; text-transform: capitalize; }
+    .outputs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: start; }
+    figure { margin: 0; min-width: 0; }
+    figcaption { margin-bottom: 8px; color: #cfc7bf; font-size: 13px; }
+    canvas, video { display: block; width: 100%; height: auto; background: #090909; border-radius: 8px; }
+    #status {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index: 2;
+      max-width: min(620px, calc(100vw - 28px));
+      margin: 0;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: #fff;
+      color: #111;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, .38);
+    }
+
+    @media (max-width: 820px) {
+      .outputs { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body data-ready="working">
+  <header>
+    <h1>Nina's 30th Dinner · real output comparison</h1>
+    <p>Editorial and After Dark, rendered from the same three photographs.</p>
+  </header>
+  <main id="themes"></main>
+  <p id="status" role="status" aria-live="polite">Loading the real renderers…</p>
+
+  <script src="../../fonts.js"></script>
+  <script src="../../covers.js"></script>
+  <script src="../../polaroid.js"></script>
+  <script src="../../mp4.js"></script>
+  <script src="../../product.js"></script>
+  <script src="../../event.js"></script>
+  <script src="../../strip.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      const THEME_IDS = ["editorial", "after-dark"];
+      const SOURCE_URLS = [
+        "generated/selfie-1.png",
+        "generated/selfie-3.png",
+        "generated/selfie-2.png"
+      ];
+      const EVENT_SOURCE = {
+        schemaVersion: window.MyBishBashEvent.EVENT_CONFIG_SCHEMA_VERSION,
+        eventId: "ad-ninas-30th-dinner",
+        eventType: "birthday",
+        eventTitle: "Nina's 30th Dinner",
+        location: "London",
+        eventLine: "Good food. Better stories. Everyone together.",
+        date: "17.10.26",
+        datePrecision: "exact",
+        stripSignature: "NINA'S 30TH DINNER",
+        stripDate: "17.10.26",
+        coverMasthead: "NINA",
+        coverScript: "Nina's 30th",
+        coverSkyline1: "THE DINNER EDIT",
+        coverSkyline2: "LONDON · 17 OCTOBER 2026",
+        coverSkyline3: "COLLECTOR'S EDITION",
+        coverF1Title: "SIX AT THE TABLE",
+        coverF1Dek: "One dinner. All our favourite people.",
+        coverF2Title: "GOOD FOOD. BETTER STORIES.",
+        coverF2Dek: "Candles lit. Glasses raised.",
+        coverF3Title: "THE ONES WHO KNOW YOU BEST",
+        coverF3Dek: "Old jokes. New memories. Still us.",
+        coverBig: "THIRTY",
+        coverBigDek: "A birthday dinner worth keeping.",
+        coverFooter: "FRIENDS · DINNER · THIRTY",
+        coverBarcode: "030  17.10.26",
+        polaroidLine1: "Nina's 30th ♡",
+        polaroidLine2: "17.10.26",
+        polaroidLine3: "Good food • old friends",
+        polaroidLine4: "The one with everyone ♡"
+      };
+      const SHOULD_SAVE = new URLSearchParams(window.location.search).has("save");
+      const status = document.getElementById("status");
+      const themes = document.getElementById("themes");
+      const blobUrls = [];
+
+      function setStatus(message) {
+        status.textContent = message;
+        console.log("[dinner-party-render] " + message);
+      }
+
+      function assertRenderers() {
+        const required = {
+          EventConfig: window.MyBishBashEvent,
+          Product: window.MyBishBashProduct,
+          Strip: window.Strip,
+          Covers: window.Covers,
+          Polaroid: window.Polaroid,
+          MP4: window.MP4,
+          Fonts: window.Fonts
+        };
+        const missing = Object.keys(required).filter(function (name) { return !required[name]; });
+        if (missing.length) throw new Error("Missing real product modules: " + missing.join(", "));
+      }
+
+      function loadImage(url) {
+        return new Promise(function (resolve, reject) {
+          const image = new Image();
+          image.decoding = "async";
+          image.onload = function () { resolve(image); };
+          image.onerror = function () { reject(new Error("Could not load " + url)); };
+          image.src = url;
+        });
+      }
+
+      async function loadImages() {
+        const images = await Promise.all(SOURCE_URLS.map(loadImage));
+        await Promise.all(images.map(function (image) {
+          return typeof image.decode === "function" ? image.decode().catch(function () {}) : null;
+        }));
+        return images;
+      }
+
+      function createPanel(themeId) {
+        const section = document.createElement("section");
+        section.dataset.theme = themeId;
+        section.innerHTML =
+          "<h2>" + themeId.replace("-", " ") + "</h2>" +
+          "<div class=\"outputs\">" +
+            "<figure><figcaption>Magazine</figcaption><canvas data-output=\"magazine\"></canvas></figure>" +
+            "<figure><figcaption>Photo Strip</figcaption><canvas data-output=\"strip\"></canvas></figure>" +
+            "<figure><figcaption>Moving Polaroid (print still + MP4)</figcaption>" +
+              "<canvas data-output=\"polaroid-still\"></canvas>" +
+              "<video data-output=\"polaroid-video\" muted loop playsinline controls></video>" +
+            "</figure>" +
+          "</div>";
+        themes.appendChild(section);
+        return section;
+      }
+
+      function canvasBlob(canvas) {
+        return new Promise(function (resolve, reject) {
+          canvas.toBlob(function (blob) {
+            if (blob) resolve(blob);
+            else reject(new Error("A PNG output could not be created."));
+          }, "image/png", 1);
+        });
+      }
+
+      function filterCss(filterStyle) {
+        return {
+          original: "none",
+          bw: "grayscale(1) contrast(1.06)",
+          vintage: "sepia(.18) saturate(.78) contrast(.97) brightness(1.03)",
+          warm: "sepia(.10) saturate(1.12) brightness(1.03)",
+          glow: "brightness(1.07) contrast(.92) saturate(.95)"
+        }[filterStyle || "original"] || "none";
+      }
+
+      function brandingFor(theme) {
+        const Product = window.MyBishBashProduct;
+        const policy = Product.getOutputBrandingPolicy(Product.ENTITLEMENTS.ONE_EVENT);
+        return {
+          mode: policy.mode,
+          text: policy.myBishBashText,
+          brandName: "",
+          primaryColor: theme.primary,
+          secondaryColor: theme.highlight,
+          logoImage: null
+        };
+      }
+
+      function settingsFor(themeId) {
+        const Event = window.MyBishBashEvent;
+        return Event.createEventConfig(Object.assign({}, EVENT_SOURCE, { themeId: themeId }));
+      }
+
+      function renderStrip(canvas, images, settings, theme, branding) {
+        const selectedFilter = settings.themeStripFilter;
+        return window.Strip.render(canvas.getContext("2d"), {
+          canvas: canvas,
+          images: images,
+          frameStyle: settings.themeStripFrame,
+          filterStyle: selectedFilter,
+          fonts: window.Fonts.faces(settings),
+          accent: theme.primary,
+          event: {
+            name: settings.eventTitle,
+            location: settings.location,
+            date: settings.date
+          },
+          footer: {
+            primary: settings.eventTitle,
+            location: settings.location,
+            date: settings.date
+          },
+          branding: branding,
+          draft: false,
+          grade: function (details) {
+            window.Covers.applyGrade(
+              details.ctx,
+              details.destination.x,
+              details.destination.y,
+              details.destination.w,
+              details.destination.h,
+              filterCss(selectedFilter)
+            );
+          }
+        });
+      }
+
+      function renderMagazine(canvas, images, settings, theme, branding) {
+        const size = window.Covers.coverSize("portrait", 1200);
+        canvas.width = size.width;
+        canvas.height = size.height;
+        window.Covers.render(canvas.getContext("2d"), {
+          // The final frame in the three-photo sequence is the selected
+          // Magazine favourite, matching the advert's reveal cut.
+          img: images[2],
+          width: size.width,
+          height: size.height,
+          copy: window.Covers.copyFor(settings),
+          fonts: window.Fonts.faces(settings),
+          accent: theme.primary,
+          accentInk: window.MyBishBashEvent.safeForeground(theme.primary),
+          template: settings.themeMagazineTemplate,
+          edition: { no: 30 },
+          branding: branding
+        });
+      }
+
+      function polaroidOptions(base, images, settings, theme, branding) {
+        return {
+          base: base,
+          images: images,
+          copy: window.Polaroid.copyFor(settings),
+          hand: window.Fonts.stack("hand", settings),
+          transition: "crossfade",
+          backdrop: theme.background,
+          attribution: branding,
+          draftPreview: false
+        };
+      }
+
+      async function renderPolaroid(panel, images, settings, theme, branding) {
+        const stillCanvas = panel.querySelector("[data-output='polaroid-still']");
+        const video = panel.querySelector("[data-output='polaroid-video']");
+
+        // Match the product's real 1400px print export rather than reading a
+        // possibly mid-transition frame back from the lower-resolution video.
+        const printJob = window.Polaroid.compose(polaroidOptions(1400, images, settings, theme, branding));
+        stillCanvas.width = printJob.geo.W;
+        stillCanvas.height = printJob.geo.H;
+        printJob.drawStill(stillCanvas.getContext("2d"), 0);
+
+        if (!window.MP4.isSupported()) {
+          throw new Error("This browser cannot run the real Moving Polaroid MP4 encoder.");
+        }
+        const videoJob = window.Polaroid.compose(polaroidOptions(1080, images, settings, theme, branding));
+        const fps = 25;
+        const videoBlob = await window.MP4.encode({
+          width: videoJob.geo.W,
+          height: videoJob.geo.H,
+          fps: fps,
+          frameCount: videoJob.frameCount(fps),
+          renderFrame: function (context, frame) { videoJob.drawFrame(context, frame, fps); }
+        });
+        const videoUrl = URL.createObjectURL(videoBlob);
+        blobUrls.push(videoUrl);
+        video.src = videoUrl;
+        return {
+          stillBlob: await canvasBlob(stillCanvas),
+          videoBlob: videoBlob,
+          stillSize: { width: printJob.geo.W, height: printJob.geo.H },
+          videoSize: { width: videoJob.geo.W, height: videoJob.geo.H },
+          duration: videoJob.timeline.duration
+        };
+      }
+
+      async function saveBlob(filename, blob) {
+        const response = await fetch("/__dinner-party-output?filename=" + encodeURIComponent(filename), {
+          method: "POST",
+          headers: { "Content-Type": blob.type || "application/octet-stream" },
+          body: blob
+        });
+        if (!response.ok) {
+          const detail = await response.text().catch(function () { return ""; });
+          throw new Error("Could not save " + filename + " (" + response.status + ") " + detail);
+        }
+      }
+
+      async function renderTheme(themeId, images) {
+        const Event = window.MyBishBashEvent;
+        const settings = settingsFor(themeId);
+        const theme = Event.resolveTheme(settings);
+        const branding = brandingFor(theme);
+        const panel = createPanel(themeId);
+        const stripCanvas = panel.querySelector("[data-output='strip']");
+        const magazineCanvas = panel.querySelector("[data-output='magazine']");
+
+        setStatus("Rendering " + theme.name + " Magazine and Photo Strip…");
+        renderStrip(stripCanvas, images, settings, theme, branding);
+        renderMagazine(magazineCanvas, images, settings, theme, branding);
+        const stripBlob = await canvasBlob(stripCanvas);
+        const magazineBlob = await canvasBlob(magazineCanvas);
+
+        setStatus("Encoding " + theme.name + " Moving Polaroid…");
+        const polaroid = await renderPolaroid(panel, images, settings, theme, branding);
+        const files = {
+          magazine: themeId + "-magazine.png",
+          strip: themeId + "-photo-strip.png",
+          polaroidStill: themeId + "-moving-polaroid-still.png",
+          polaroidVideo: themeId + "-moving-polaroid.mp4"
+        };
+
+        if (SHOULD_SAVE) {
+          setStatus("Saving " + theme.name + " outputs…");
+          await Promise.all([
+            saveBlob(files.magazine, magazineBlob),
+            saveBlob(files.strip, stripBlob),
+            saveBlob(files.polaroidStill, polaroid.stillBlob),
+            saveBlob(files.polaroidVideo, polaroid.videoBlob)
+          ]);
+        }
+
+        return {
+          themeId: themeId,
+          themeName: theme.name,
+          eventConfig: settings,
+          brandingPolicy: {
+            mode: branding.mode,
+            text: branding.text
+          },
+          files: files,
+          sizes: {
+            magazine: { width: magazineCanvas.width, height: magazineCanvas.height },
+            strip: { width: stripCanvas.width, height: stripCanvas.height },
+            polaroidStill: polaroid.stillSize,
+            polaroidVideo: polaroid.videoSize
+          },
+          movingPolaroidDuration: polaroid.duration
+        };
+      }
+
+      async function main() {
+        try {
+          assertRenderers();
+          if (document.fonts && document.fonts.ready) await document.fonts.ready;
+          setStatus("Loading the three dinner-party photographs…");
+          const images = await loadImages();
+          const results = [];
+          for (const themeId of THEME_IDS) results.push(await renderTheme(themeId, images));
+          window.__dinnerPartyRender = {
+            event: {
+              eventId: EVENT_SOURCE.eventId,
+              eventType: EVENT_SOURCE.eventType,
+              eventTitle: EVENT_SOURCE.eventTitle,
+              location: EVENT_SOURCE.location,
+              eventLine: EVENT_SOURCE.eventLine,
+              date: EVENT_SOURCE.date,
+              datePrecision: EVENT_SOURCE.datePrecision
+            },
+            sourceUrls: SOURCE_URLS.slice(),
+            saved: SHOULD_SAVE,
+            results: results
+          };
+          setStatus(SHOULD_SAVE ? "READY · all eight real outputs saved" : "READY · comparison rendered");
+          document.body.dataset.ready = "true";
+        } catch (error) {
+          const detail = error && (error.stack || error.message) || String(error);
+          console.error(error);
+          status.textContent = detail;
+          document.body.dataset.ready = "error";
+          window.__dinnerPartyRenderError = detail;
+        }
+      }
+
+      window.addEventListener("beforeunload", function () {
+        blobUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+      });
+      main();
+    }());
+  </script>
+</body>
+</html>

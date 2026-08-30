@@ -64,8 +64,20 @@ test("exposes Personal and Business as separate static product surfaces", functi
   assert.deepEqual(vercel.rewrites, [
     { source: "/", destination: "/index.html" },
     { source: "/business", destination: "/index.html" },
-    { source: "/david-lloyd", destination: "/index.html" }
+    { source: "/david-lloyd", destination: "/index.html" },
+    { source: "/(.*)", destination: "/404.html" }
   ]);
+  /* The catch-all must be LAST: rewrites are matched in array order, so if
+     it came before the three named routes it would swallow them too. It
+     relies on Vercel checking the filesystem for a real static file before
+     falling through to rewrites at all (the same behaviour that already
+     lets "/" not shadow "/styles.css") — genuinely unmatched paths are the
+     only ones that reach it (C-16). */
+  assert.equal(
+    vercel.rewrites[vercel.rewrites.length - 1].source,
+    "/(.*)",
+    "the catch-all rewrite must be the last rule so it cannot shadow a named route"
+  );
   /* index.html loads every script by relative src, so a trailing-slash URL
      resolves them against /business/ or /david-lloyd/ and the app never
      boots. A rewrite serves the shell and hides that; only a redirect to the

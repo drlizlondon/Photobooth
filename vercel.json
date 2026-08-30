@@ -6,7 +6,8 @@
   "rewrites": [
     { "source": "/", "destination": "/index.html" },
     { "source": "/business", "destination": "/index.html" },
-    { "source": "/david-lloyd", "destination": "/index.html" }
+    { "source": "/david-lloyd", "destination": "/index.html" },
+    { "source": "/(.*)", "destination": "/404.html" }
   ],
   "headers": [
     {

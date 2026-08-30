@@ -189,6 +189,22 @@ function applyBusinessContact(){
   }
   details.hidden=!details.childNodes.length;
 }
+/* Personal has no waitlist or launch-notification mechanism of any kind
+   (C-07) — while checkout stays closed, the same contact address PB-01
+   established is the honest bridge for an interested buyer, carrying a
+   subject distinct from the Business enquiry one so replies sort cleanly.
+   Front-end only: a mailto: link, no new backend, no third-party form. */
+function personalInterestMailto(planLabel){
+  if(!BUSINESS_CONTACT.email)return "";
+  const subject="MyBishBash Photobooth - Personal launch interest ("+(planLabel||"Personal")+")";
+  return "mailto:"+BUSINESS_CONTACT.email+"?subject="+encodeURIComponent(subject);
+}
+function applyPersonalInterestContact(){
+  document.querySelectorAll("[data-personal-interest-contact]").forEach(el=>{
+    const href=personalInterestMailto(el.getAttribute("data-plan-label"));
+    if(href)el.setAttribute("href",href);
+  });
+}
 /* One origin, asserted rather than hoped for. The absolute URLs in the head
    are static because link-preview crawlers do not run JavaScript, so this
    checks at boot that they still agree with site-origin. If PB-15 repoints
@@ -2988,8 +3004,16 @@ async function startCheckout(plan){
      closed until both billing and its authoritative API are deliberately on. */
   if(!BILLING_LIVE||!API_BASE){
     if(status){
-      status.textContent="Personal plans are not on sale yet — we are finalising them. The free photobooth is ready to use now.";
+      status.textContent="";
       status.className="checkout-status";
+      const label=(PRODUCT&&PRODUCT.getPlanMetadata(plan)&&PRODUCT.getPlanMetadata(plan).label)||"Personal";
+      status.appendChild(document.createTextNode(label+" is not on sale yet. We are finalising it, and the free photobooth is ready to use now. "));
+      const href=personalInterestMailto(label);
+      if(href){
+        const a=document.createElement("a");
+        a.href=href;a.textContent="Tell us you are interested";
+        status.appendChild(a);
+      }
     }
     return;
   }
@@ -3520,6 +3544,7 @@ setSetupStep(0);
 syncBusinessConfigurator();
 updateBusinessBrandText();
 applyBusinessContact();
+applyPersonalInterestContact();
 applyBillingState();
 applySurfaceMetadata(routeFromLocation());
 assertOriginConsistency();

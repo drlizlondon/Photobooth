@@ -426,6 +426,10 @@ canvas.mag-style-preview{display:block;width:100%;height:auto;background:#e9e2d8
    out after the party that photographs stopped saving. */
 .storage-notice{position:fixed;left:12px;right:12px;bottom:14px;z-index:90;margin:0 auto;max-width:560px;padding:11px 18px;border:1px solid var(--ink);border-radius:14px;background:var(--paper);color:var(--ink);font-size:12px;font-weight:700;line-height:1.35;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.16)}
 .storage-notice[hidden]{display:none}
+/* Only rendered when JavaScript is unavailable — the camera product genuinely
+   cannot run without it, and previously that failure was completely silent
+   (C-23). */
+.noscript-notice{margin:0;padding:14px 18px;background:var(--ink);color:var(--paper);font-size:14px;font-weight:700;line-height:1.4;text-align:center}
 
 /* Business contact block. The four "Talk to us" controls target this section,
    so the funnel has a real destination even before an enquiry email exists. */

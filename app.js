@@ -773,6 +773,7 @@ async function dropOldestSessions(count){
 async function saveSessionToGallery(sessionPhotos,orientation,experience,recordId){
   if(!sessionPhotos||sessionPhotos.length<1||sessionPhotos.length>3)return null;
   const record=galleryRecord(sessionPhotos,orientation,experience,recordId);
+  let droppedForSpace=0;
   try{
     try{
       await putSession(record);
@@ -782,10 +783,19 @@ async function saveSessionToGallery(sessionPhotos,orientation,experience,recordI
       if(!isQuotaError(error))throw error;
       const freed=await dropOldestSessions(3);
       if(!freed)throw error;
+      droppedForSpace=3;
       await putSession(record);
     }
-    clearStorageNotice();
-    await trimGallery();
+    const trimmed=await trimGallery();
+    const removed=droppedForSpace+trimmed;
+    /* Every deletion this function performs is disclosed, not swallowed:
+       a host who reused a "20 sessions still there" mental model must be
+       told the moment that stops being true. */
+    if(removed>0){
+      showStorageNotice("This device was nearly full, so "+removed+" older session"+(removed===1?" was":"s were")+" removed to make room. Save or share the photos you want to keep.");
+    }else{
+      clearStorageNotice();
+    }
     await warnIfStorageLow();
     return record;
   }catch(error){
@@ -819,10 +829,13 @@ async function warnIfStorageLow(){
 /* The cap is whatever the device can actually hold, not a number chosen in
    advance. With no estimate available nothing is trimmed and the quota error
    above is the backstop. */
+/* Returns the number of sessions actually deleted, so a caller can disclose
+   it — silently trimming a party's gallery is exactly the defect this
+   function used to have (C-01, 2026-08-29). */
 async function trimGallery(){
   try{
     const budget=await storageBudget();
-    if(budget<=0)return;
+    if(budget<=0)return 0;
     const all=await getGallerySessions();
     let used=0,keep=0;
     for(const item of all){
@@ -830,13 +843,15 @@ async function trimGallery(){
       if(keep>=GALLERY_MIN_SESSIONS&&used>budget)break;
       keep+=1;
     }
-    if(keep>=all.length)return;
+    if(keep>=all.length)return 0;
+    const removed=all.length-keep;
     const db=await openGalleryDB();
     const tx=db.transaction("sessions","readwrite"),store=tx.objectStore("sessions");
     all.slice(keep).forEach(item=>store.delete(item.id));
     await new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});
     db.close();
-  }catch(e){}
+    return removed;
+  }catch(e){return 0;}
 }
 async function getGallerySessions(){
   try{

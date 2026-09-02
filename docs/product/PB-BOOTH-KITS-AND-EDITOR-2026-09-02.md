@@ -101,7 +101,7 @@
 ## PB-33 — "withluv-level" delight pass (Birthday kit + kit-apply joy moment)
 **The polish that makes Birthday *happier*. After PB-31. First-class, not an afterthought.**
 
-**Reference bar:** `https://withluv.co` — soft/celebratory, a heavy display headline with a **handwritten script accent word**, floating/tilted card + polaroid framing, gentle spring motion, warmth. "withluv level of animation" = joyful but **tasteful** — eased, tilted reveals and a genuine joy-moment, never gaudy.
+**Reference bar — QUALITY, NOT LOOK (founder, 2026-09-02):** `https://withluv.co` is the bar for the *level of craft and polish* — smooth, eased, tasteful, premium motion and a genuine sense of delight. **Do NOT copy withluv's aesthetic** — not its lavender/purple palette, not its specific type or layout, not its brand. The Birthday kit gets its **own** celebratory identity (warm, joyful, its own palette + type), executed to that quality level. Match the craft; invent the look. "withluv level of animation" = joyful but tasteful — eased, considered reveals and a real joy-moment, never gaudy, never a clone.
 
 **Goal:** raise the Birthday kit (and the kit-apply moment generally) to that bar, in the vanilla stack (CSS transitions/keyframes + a lightweight Canvas confetti/sparkle — **no heavy library**, consistent with the no-build app).
 

@@ -105,13 +105,24 @@
         <p class="product-kicker hero-kicker">FOR PERSONAL EVENTS</p>
         <h1 id="heroTitle" aria-label="Your party. Your photobooth.">Your party.<br>Your <span>photobooth.</span></h1>
         <p class="hero-proposition">Create a personalised photobooth for your event, open it at the party, and let guests make and share their favourites.</p>
-        <div class="hero-actions">
-          <button class="product-cta hero-start" data-start-photobooth type="button">
+        <div class="hero-actions" id="heroActions">
+          <!-- PB-19: exactly one of these two groups is shown, decided at boot by
+               whether this device already has a saved booth (updateHeroEntryRoutes
+               in app.js). A returning owner never sees the new-visitor choice. -->
+          <button class="product-cta hero-start" data-start-photobooth type="button" id="heroCreateFreeBtn">
             <svg aria-hidden="true" viewBox="0 0 28 22" focusable="false"><path d="M2 6.5h5l2-3h10l2 3h5v14H2z"></path><circle cx="14" cy="13.5" r="4.5"></circle></svg>
-            <span>START PHOTOBOOTH</span>
+            <span>CREATE MY FREE PHOTOBOOTH</span>
+          </button>
+          <button class="hero-start hero-secondary-btn" type="button" id="heroTryDemoBtn">
+            <span>TRY THE DEMO</span>
+          </button>
+          <button class="product-cta hero-start" type="button" id="heroOpenBoothBtn" hidden>
+            <svg aria-hidden="true" viewBox="0 0 28 22" focusable="false"><path d="M2 6.5h5l2-3h10l2 3h5v14H2z"></path><circle cx="14" cy="13.5" r="4.5"></circle></svg>
+            <span>OPEN MY PHOTOBOOTH</span>
+            <small id="heroOpenBoothIdentity"></small>
           </button>
         </div>
-        <p class="trust-line">Free to try · No sign-up · Photos stay on your device</p>
+        <p class="trust-line" id="heroTrustLine">Free to try · No sign-up · Photos stay on your device</p>
         <p class="entrance-connection">Your guests could arrive like this. <a href="#makeYours">Now make yours.</a></p>
         <div class="hero-benefits" aria-label="Photobooth benefits">
           <span>Use a suitable phone or tablet</span>
@@ -577,6 +588,13 @@
         <div><input id="welcomePinInput" type="password" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{4}" maxlength="4" aria-describedby="welcomePinStatus"><button type="submit">ENTER</button></div>
       </form>
       <p id="welcomePinStatus" role="status" aria-live="polite"></p>
+    </div>
+    <!-- PB-19: shown only while previewing the example event (boothExampleMode).
+         The demo is a look, never a capture — enterGuestBooth() in app.js keeps
+         Start from ever reaching the camera here and reveals this panel instead. -->
+    <div id="welcomeDemoPanel" class="welcome-demo-panel" hidden>
+      <p>This is a live preview — nothing here is saved, and the camera is never used.</p>
+      <button id="welcomeDemoCreateBtn" class="product-cta" type="button">CREATE MY FREE PHOTOBOOTH</button>
     </div>
     <button id="startBtn" class="round-start" type="button">
       <span id="startLabelText">ENTER</span>

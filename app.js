@@ -2,7 +2,11 @@ const DEFAULTS = {
   schemaVersion:3,
   eventId:"",
   eventType:"party",
-  eventTitle:"Your Celebration",
+  /* Blank means "generate a generic per-event-type identity" (C-08) — event.js
+     createEventConfig resolves this via genericEventTitle(eventType), so a
+     free user is never stamped with one fixed celebration name regardless of
+     what kind of event they picked. */
+  eventTitle:"",
   location:"",
   eventLine:"",
   date:String(new Date().getFullYear()),
@@ -139,6 +143,7 @@ const FOUNDER_DEMO_SECRET="56180f4cd6ac23480070a2feea8f5209";
 const GALLERY_DB="mybishbashPhotoboothGallery";
 const LEGACY_GALLERY_DB="raePhotoBoothGallery";
 const GALLERY_MIGRATION_KEY="mybishbashPhotoboothGalleryMigratedV1";
+const GALLERY_EVENT_SCOPE_MIGRATION_KEY="mybishbashPhotoboothGalleryEventScopeMigratedV1";
 const EDITION_KEY="mybishbashPhotoboothEditionSequenceV1";
 /* Business contact details come from the meta tags in index.html and nowhere
    else. Previously the URL was written into four anchors and a meta nobody
@@ -468,6 +473,16 @@ function loadSettings(){
   }
 }
 
+/* PB-19: captured before loadSettings() below, which — like the rest of the
+   persistent-free-booth model (PB-18) — eagerly writes a fresh default
+   config to storage on a visitor's very first page load. Reading the key
+   first is the only way to tell "this device already had a booth when this
+   page started loading" from "it does now, because loadSettings just made
+   one" — the distinction the landing hero's OPEN/DEMO/CREATE routing needs. */
+let hadStoredBoothOnLoad=false;
+try{hadStoredBoothOnLoad=!!localStorage.getItem(SETTINGS_KEY);}catch(e){}
+function hasStoredBooth(){return hadStoredBoothOnLoad;}
+
 /* Initialise only after LEGACY_COPY and migrateSettings exist. Calling
    loadSettings above those const declarations would enter their temporal
    dead zone, silently fall back to defaults and leave old storage unmigrated. */
@@ -714,9 +729,33 @@ async function migrateLegacyGallery(){
     localStorage.setItem(GALLERY_MIGRATION_KEY,"done");
   }catch(e){/* Existing gallery remains available for a later migration retry. */}
 }
+let galleryEventScopeMigrationPromise=null;
+/* Sessions saved before a session carried an eventId (every gallery record
+   made before this change, C-02) have nothing to scope them to. Attributing
+   them to whichever event is active the first time this code runs on a
+   device keeps them exactly where PB-20 requires — nothing a customer
+   already made ever disappears — while every session captured from here on
+   is correctly scoped to the event that made it. */
+async function migrateGalleryEventScope(){
+  if(localStorage.getItem(GALLERY_EVENT_SCOPE_MIGRATION_KEY)==="done")return;
+  try{
+    const eventId=String((settings&&settings.eventId)||"");
+    if(eventId){
+      const db=await openNamedGalleryDB(GALLERY_DB);
+      const tx=db.transaction("sessions","readwrite"),store=tx.objectStore("sessions");
+      const all=await new Promise((res,rej)=>{const r=store.getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error);});
+      all.filter(item=>!item.eventId).forEach(item=>store.put({...item,eventId}));
+      await new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});
+      db.close();
+    }
+    localStorage.setItem(GALLERY_EVENT_SCOPE_MIGRATION_KEY,"done");
+  }catch(e){/* Existing gallery remains available for a later migration retry. */}
+}
 async function openGalleryDB(){
   if(!galleryMigrationPromise)galleryMigrationPromise=migrateLegacyGallery();
   await galleryMigrationPromise;
+  if(!galleryEventScopeMigrationPromise)galleryEventScopeMigrationPromise=migrateGalleryEventScope();
+  await galleryEventScopeMigrationPromise;
   return openNamedGalleryDB(GALLERY_DB);
 }
 /* Schema 1 stored each photo as a base64 data URL. A data URL is a third
@@ -757,7 +796,11 @@ function galleryRecord(sessionPhotos,orientation,experience,recordId){
   const bytes=sessionPhotos.map(dataUrlToBytes);
   const hasRecordId=recordId!==null&&recordId!==undefined&&Number.isFinite(Number(recordId));
   const id=hasRecordId?Number(recordId):Date.now();
-  const base={id,createdAt:new Date(id).toISOString(),orientation,experience:experience||"shared"};
+  /* Every session is stamped with the event that made it (C-02) — a shared
+     device that has hosted more than one event must not let their galleries
+     intermix. getGallerySessions() scopes reads to this field by default. */
+  const eventId=String((settings&&settings.eventId)||"");
+  const base={id,createdAt:new Date(id).toISOString(),orientation,experience:experience||"shared",eventId};
   if(bytes.every(Boolean))return {...base,schema:GALLERY_SCHEMA,photoType:"image/jpeg",photos:bytes};
   /* A photo that will not decode to bytes is still worth keeping verbatim. */
   return {...base,photos:[...sessionPhotos]};
@@ -776,7 +819,10 @@ function putSession(record){
   }));
 }
 async function dropOldestSessions(count){
-  const all=await getGallerySessions();
+  /* Freeing device storage under quota pressure is a device-wide concern,
+     not a per-event one — it must be able to reach every event's sessions,
+     not just the active event's. */
+  const all=await getGallerySessions({scope:"device"});
   if(all.length<=count)return false;
   const doomed=all.slice(-count);
   const db=await openGalleryDB();
@@ -852,7 +898,10 @@ async function trimGallery(){
   try{
     const budget=await storageBudget();
     if(budget<=0)return 0;
-    const all=await getGallerySessions();
+    /* Storage pressure is device-wide too — trimming only the active event's
+       sessions could leave the device full of a past event's photos while
+       still deleting the party that is happening right now. */
+    const all=await getGallerySessions({scope:"device"});
     let used=0,keep=0;
     for(const item of all){
       used+=sessionBytes(item);
@@ -869,13 +918,22 @@ async function trimGallery(){
     return removed;
   }catch(e){return 0;}
 }
-async function getGallerySessions(){
+/* Reads default to the active event only (C-02, 2026-09-03) — a device that
+   has hosted more than one event must not let their galleries intermix on
+   screen. Pass {scope:"device"} for the genuinely device-wide concerns
+   (freeing storage under quota pressure) that must reach every event's
+   sessions, not just the active one. */
+async function getGallerySessions(options){
+  const scopeToEvent=!options||options.scope!=="device";
   try{
     const db=await openGalleryDB();
     const tx=db.transaction("sessions","readonly"),store=tx.objectStore("sessions");
     const all=await new Promise((res,rej)=>{const r=store.getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error);});
     db.close();
-    return all.sort((a,b)=>b.id-a.id);
+    const sorted=all.sort((a,b)=>b.id-a.id);
+    if(!scopeToEvent)return sorted;
+    const eventId=String((settings&&settings.eventId)||"");
+    return sorted.filter(item=>String(item.eventId||"")===eventId);
   }catch(e){return [];}
 }
 async function countGallerySessions(){
@@ -1160,6 +1218,20 @@ function productURL(route){
   const base=productBasePath();
   return route==="business"?base.replace(/\/$/,"")+"/business":base;
 }
+/* PB-19: on the personal landing screen, show exactly one of "OPEN MY
+   PHOTOBOOTH" (a returning owner) or "TRY THE DEMO" + "CREATE MY FREE
+   PHOTOBOOTH" (a new visitor) — never march an existing owner through the
+   marketing journey they already finished. */
+function updateHeroEntryRoutes(){
+  const openBtn=$("heroOpenBoothBtn"),createBtn=$("heroCreateFreeBtn"),demoBtn=$("heroTryDemoBtn");
+  if(!openBtn||!createBtn||!demoBtn)return;
+  const owner=hasStoredBooth();
+  openBtn.hidden=!owner;
+  createBtn.hidden=owner;
+  demoBtn.hidden=owner;
+  const identity=$("heroOpenBoothIdentity");
+  if(identity)identity.textContent=owner?String(settings.eventTitle||"").trim():"";
+}
 function showProductRoute(route,push,replace){
   teardownBoothSession();restoreTemporarySettings();
   const business=route==="business";
@@ -1168,6 +1240,7 @@ function showProductRoute(route,push,replace){
   const productRoute=business?"business":"personal";
   updateProductNav(productRoute);
   applySurfaceMetadata(productRoute);
+  if(!business)updateHeroEntryRoutes();
   if(push&&history.pushState){
     const url=productURL(productRoute);
     const current=history.state||{};
@@ -1202,6 +1275,10 @@ function updateWelcomeMode(hostView){
   $("startBtn").hidden=pinRequired||guestEnded;
   const hostName=String(settings.eventTitle||"this event").replace(/(?:['’]s\b.*|\b(?:party|wedding|birthday|hen)\b.*)$/i,"").trim();
   $("welcomePinMessage").textContent="This photobooth is just for "+(hostName||"the event")+"’s guests.";
+  /* PB-19: the demo panel only ever applies to the guest-facing example
+     preview — a host previewing their own real event never sees it. */
+  const demoPanel=$("welcomeDemoPanel");
+  if(demoPanel)demoPanel.hidden=!(boothExampleMode&&!hostView);
 }
 function refreshHostEventStatus(){
   if(!EVENT)return;
@@ -2933,6 +3010,12 @@ function launchFreeBooth(){
 function previewExampleBooth(){
   enterEventHome(true);
 }
+/* PB-19: a returning owner's one-action route back to their own booth,
+   in host view, without passing through setup — extends the existing
+   EVENT_HOME surface rather than minting a new one. */
+function openMyPhotobooth(){
+  enterEventHome(false,true);
+}
 function returnToProduct(){
   returnFromEventToProduct();
 }
@@ -3304,6 +3387,13 @@ function resetGuestCompletionState(clearFields){
 }
 
 function enterGuestBooth(){
+  /* PB-19: the demo is a look, never a capture — it must never request the
+     camera or write to storage. Reveal the create-your-own CTA instead of
+     proceeding into the real guest capture flow. */
+  if(boothExampleMode){
+    updateWelcomeMode(false);
+    return;
+  }
   if(EVENT&&eventIsPersonalised()){
     settings=EVENT.refreshEventLifecycle(settings);
     if(settings.eventStatus==="ENDED"){
@@ -3447,6 +3537,12 @@ $("openPersonalSetup").onclick=()=>openPersonalSettings("landing");
 $("openPersonalSetupSecondary").onclick=()=>openPersonalSettings("landing");
 $("previewExampleBooth").onclick=previewExampleBooth;
 $("backToProduct").onclick=returnToProduct;
+/* PB-19: the three honest landing routes — a returning owner opens straight
+   into their own booth; a new visitor gets a camera-free, storage-free demo
+   or creates a real free booth in one action. */
+if($("heroOpenBoothBtn"))$("heroOpenBoothBtn").onclick=openMyPhotobooth;
+if($("heroTryDemoBtn"))$("heroTryDemoBtn").onclick=previewExampleBooth;
+if($("welcomeDemoCreateBtn"))$("welcomeDemoCreateBtn").onclick=launchFreeBooth;
 window.addEventListener("mybishbash:preview-event",event=>{
   if(!event.detail)return;
   if(!temporarySettingsSnapshot)temporarySettingsSnapshot=settings;

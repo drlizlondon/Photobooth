@@ -50,6 +50,17 @@
         startLabel: "START",
         startHint: "enter the booth"
       },
+      /* PB-33: the "withluv-quality" delight pass. Never a new palette (the
+         vibe stays sunshine, per the rule above) — fonts is a display+script
+         type pairing pulled from the SAME curated fonts.js roles every other
+         field already uses (fontDisplay/fontScript), so it is exactly as
+         much "data, not code" as copy is. Applying it is a generic loop over
+         KIT_FONT_FIELDS in app.js, not a birthday-shaped branch — a future
+         kit that wants its own pairing just adds this same object. */
+      fonts: {
+        display: "baskerville",
+        script: "brush"
+      },
       /* Not consumed by any renderer yet — a single built-in sample sheet
          (assets/demo-photos.jpg) is all the admin preview has today. Carried
          here so a future per-kit sample set is a data change, not a new
@@ -70,6 +81,11 @@
         startLabel: "BEGIN",
         startHint: "enter the booth"
       },
+      /* Wedding, Kids Party and Minimal keep the shipped font pairing — only
+         Birthday asks for its own (founder direction, PB-33). null here (not
+         an omitted key) says explicitly "no override" rather than leaving
+         readers to wonder whether it was forgotten. */
+      fonts: null,
       previewSampleTag: "wedding"
     },
     {
@@ -86,6 +102,7 @@
         startLabel: "GO",
         startHint: "enter the booth"
       },
+      fonts: null,
       previewSampleTag: "kids-party"
     },
     {
@@ -106,6 +123,7 @@
         startLabel: "",
         startHint: ""
       },
+      fonts: null,
       previewSampleTag: "minimal"
     }
   ];

@@ -73,3 +73,34 @@ test("loads as a browser global without CommonJS or dependencies", function () {
   assert.equal(sandbox.MyBishBashKits.KIT_IDS.length, 4);
   assert.equal(sandbox.MyBishBashKits.find("wedding").vibe, "editorial");
 });
+
+/* PB-33 — the Birthday kit's "withluv-quality" pairing is data (a display
+   and a script role key), never a new font system: it must name real
+   fonts.js options, and only Birthday may set one — the other three ship
+   with fonts:null (the shipped pairing), pinned mechanically rather than
+   trusted from a description. */
+test("Birthday's font pairing names real fonts.js roles; the other three stay unset", function () {
+  var source = fs.readFileSync(path.join(__dirname, "..", "fonts.js"), "utf8");
+  var sandbox = {};
+  sandbox.window = sandbox;
+  var vm = require("node:vm");
+  vm.runInNewContext(source, sandbox, { filename: "fonts.js" });
+  var Fonts = sandbox.Fonts;
+  var displayKeys = Fonts.optionsFor("display").map(function (o) { return o[0]; });
+  var scriptKeys = Fonts.optionsFor("script").map(function (o) { return o[0]; });
+
+  var birthday = Kits.find("birthday");
+  assert.notEqual(birthday.fonts, null, "Birthday is the withluv-quality kit and must set its own pairing");
+  assert.ok(
+    displayKeys.indexOf(birthday.fonts.display) !== -1,
+    "birthday.fonts.display must be a real fonts.js display option, never invented here"
+  );
+  assert.ok(
+    scriptKeys.indexOf(birthday.fonts.script) !== -1,
+    "birthday.fonts.script must be a real fonts.js script option, never invented here"
+  );
+
+  ["wedding", "kids-party", "minimal"].forEach(function (id) {
+    assert.equal(Kits.find(id).fonts, null, id + " keeps the shipped font pairing");
+  });
+});

@@ -664,7 +664,7 @@ test("does not force-reload safe-worker booths or cache product API responses", 
   assert.doesNotMatch(legacySet, /rae-photo-booth-live-v(?:8|9|10|11)/);
   var assetList = serviceWorker.slice(serviceWorker.indexOf("const ASSETS"), serviceWorker.indexOf("const CACHEABLE_ASSET_URLS"));
   assert.doesNotMatch(assetList, /\/v1\//);
-  assert.match(serviceWorker, /const CACHE="mybishbash-photobooth-v11"/);
+  assert.match(serviceWorker, /const CACHE="mybishbash-photobooth-v12"/);
 });
 
 test("keeps internal plans, tests and credentials out of the static deployment", function () {

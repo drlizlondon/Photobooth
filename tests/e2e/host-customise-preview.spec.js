@@ -277,7 +277,12 @@ test("host can customise, use own photos, test the real camera and start separat
   expect(themeLayout.helperSize).toBeGreaterThanOrEqual(16);
   expect(themeLayout.fieldLabelSize).toBeGreaterThanOrEqual(16);
   expect(themeLayout.selectSize).toBeGreaterThanOrEqual(16);
-  expect(themeLayout.columns).toBe(testInfo.project.name === "ipad-portrait" ? 2 : 1);
+  /* PB-30 consolidated the editor onto one responsive scale: the settings
+     column is full-width at every tier now (no more two-column desktop
+     split), so the @container(min-width:620px) query that drives the Vibe
+     grid to two columns fires for BOTH iPad tiers, not just portrait. Only
+     the narrower phone container stays single-column. */
+  expect(themeLayout.columns).toBe(testInfo.project.name === "phone-portrait" ? 1 : 2);
 
   await assertTouchTargets(page, [
     '.host-theme-grid label[data-theme="pop"]',

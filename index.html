@@ -710,6 +710,39 @@
     <div class="admin-grid guided-grid">
       <div class="settings-fields">
         <section id="setupPanel0" class="setup-step active" data-setup-panel="0" role="tabpanel" aria-labelledby="setupStep0">
+          <div class="kit-picker" aria-labelledby="chooseKitTitle" aria-describedby="kitPickerHelp">
+            <p class="step-kicker">START HERE</p>
+            <h3 id="chooseKitTitle">Pick a Booth Kit</h3>
+            <p id="kitPickerHelp" class="field-help large">One tap sets the event type, vibe, output style and starting words below. Everything stays yours to edit afterwards.</p>
+            <div class="kit-grid" role="list">
+              <button class="kit-card" type="button" data-kit="birthday" aria-pressed="false" role="listitem">
+                <span class="kit-card-head"><strong>Birthday</strong><span class="kit-selected" aria-hidden="true">&#10003; Applied</span></span>
+                <span class="kit-description">Warm and joyful — cake, candles, your people</span>
+                <span class="kit-colours" aria-hidden="true"><i></i><i></i><i></i></span>
+              </button>
+              <button class="kit-card" type="button" data-kit="wedding" aria-pressed="false" role="listitem">
+                <span class="kit-card-head"><strong>Wedding</strong><span class="kit-selected" aria-hidden="true">&#10003; Applied</span></span>
+                <span class="kit-description">Elegant and editorial, ready for the big day</span>
+                <span class="kit-colours" aria-hidden="true"><i></i><i></i><i></i></span>
+              </button>
+              <button class="kit-card" type="button" data-kit="kids-party" aria-pressed="false" role="listitem">
+                <span class="kit-card-head"><strong>Kids Party</strong><span class="kit-selected" aria-hidden="true">&#10003; Applied</span></span>
+                <span class="kit-description">Bright, bold primaries — built for chaos</span>
+                <span class="kit-colours" aria-hidden="true"><i></i><i></i><i></i></span>
+              </button>
+              <button class="kit-card" type="button" data-kit="minimal" aria-pressed="false" role="listitem">
+                <span class="kit-card-head"><strong>Minimal</strong><span class="kit-selected" aria-hidden="true">&#10003; Applied</span></span>
+                <span class="kit-description">Clean and understated, out of the way</span>
+                <span class="kit-colours" aria-hidden="true"><i></i><i></i><i></i></span>
+              </button>
+              <button class="kit-card kit-card-scratch" type="button" data-kit="" aria-pressed="false" role="listitem">
+                <span class="kit-card-head"><strong>Start from scratch</strong><span class="kit-selected" aria-hidden="true">&#10003; Applied</span></span>
+                <span class="kit-description">Skip the presets — set every field yourself.</span>
+              </button>
+            </div>
+            <p id="kitPickerStatus" class="kit-picker-status" role="status" aria-live="polite" hidden></p>
+          </div>
+          <input id="setKitId" type="hidden" value="">
           <p class="step-kicker">STEP 1 OF 5</p>
           <h3>Name your event</h3>
           <p class="field-help large">Tell us the event. MyBishBash carries its identity through the entrance and every finished output.</p>
@@ -991,6 +1024,7 @@
 <script src="mp4.js"></script>
 <script src="product.js"></script>
 <script src="event.js"></script>
+<script src="kits.js"></script>
 <script src="clients.js"></script>
 <script src="strip.js"></script>
 <script src="motion.js"></script>

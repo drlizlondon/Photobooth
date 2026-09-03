@@ -1,6 +1,11 @@
 const DEFAULTS = {
   schemaVersion:3,
   eventId:"",
+  /* Which Booth Kit (kits.js) was last applied, carried by id only — see
+     applyBoothKit(). Blank means "start from scratch": no kit tile is
+     highlighted and nothing about this field ever gates or duplicates the
+     plain settings it pre-filled. */
+  kitId:"",
   eventType:"party",
   eventTitle:"Your Celebration",
   location:"",
@@ -124,6 +129,7 @@ const FILTERS = [["original","Original"],["bw","B&W"],["vintage","Vintage"],["wa
 const PRODUCT=window.MyBishBashProduct||null;
 const EVENT=window.MyBishBashEvent||null;
 const CLIENTS=window.MyBishBashClients||null;
+const KITS=window.MyBishBashKits||null;
 const MOTION=window.MyBishBashMotion||null;
 const STRIP=window.Strip||null;
 const ENTITLEMENTS=PRODUCT?PRODUCT.ENTITLEMENTS:{FREE:"FREE",ONE_EVENT:"ONE_EVENT",PERSONAL_6_MONTH:"PERSONAL_6_MONTH",PERSONAL_12_MONTH:"PERSONAL_12_MONTH",FOUNDING_LIFETIME:"FOUNDING_LIFETIME",BUSINESS:"BUSINESS"};
@@ -651,6 +657,49 @@ function applyThemeRendererDefaults(value){
   if($("setStripFrame"))$("setStripFrame").value=theme.stripFrame;
   if($("setStripFilter"))$("setStripFilter").value=theme.stripFilter;
   if($("setMagazineTemplate"))$("setMagazineTemplate").value=theme.magazineTemplate;
+}
+/* ---------- Booth Kits (PB-31) ----------
+   A kit is a bulk pre-fill of the very same controls the wizard already
+   exposes — event type, Vibe theme (and its renderer defaults), which
+   preview tab opens by default, and a few starting copy lines — written
+   straight into the existing form fields and replayed through
+   draftSettings()/renderAdminPreview() exactly like a manual edit. Nothing
+   about a kit is a separate render or save path: after applying one, every
+   field is exactly as free to change as if the host had typed it in first,
+   because that field IS what got typed in. */
+function syncKitPickerUI(kitId){
+  document.querySelectorAll(".kit-card").forEach(card=>{
+    const active=(card.dataset.kit||"")===(kitId||"");
+    card.classList.toggle("active",active);
+    card.setAttribute("aria-pressed",String(active));
+  });
+}
+const KIT_COPY_FIELDS={eventTitle:"setEventTitle",eventLine:"setEventLine",welcomeEyebrow:"setWelcomeEyebrow",startLabel:"setStartLabel",startHint:"setStartHint"};
+function applyBoothKit(kitId){
+  const kit=KITS?KITS.find(kitId):null;
+  if($("setKitId"))$("setKitId").value=kit?kit.id:"";
+  syncKitPickerUI(kit?kit.id:"");
+  const status=$("kitPickerStatus");
+  if(!kit){
+    if(status){status.textContent="Starting from scratch — every field below is yours to set.";status.hidden=false;}
+    return;
+  }
+  if($("setEventType"))$("setEventType").value=kit.eventType;
+  const themeRadio=document.querySelector('input[name="eventTheme"][value="'+kit.vibe+'"]');
+  if(themeRadio)themeRadio.checked=true;
+  syncThemeUI(kit.vibe);
+  applyThemeRendererDefaults(kit.vibe);
+  applyRootTheme(kit.vibe);
+  const copy=kit.copy||{};
+  Object.keys(KIT_COPY_FIELDS).forEach(key=>{
+    const value=copy[key],id=KIT_COPY_FIELDS[key];
+    /* Blank kit copy means "leave the booth's own sensible default alone"
+       (Minimal's whole point) — it must never blank out a field the host
+       has already filled in by hand. */
+    if(typeof value==="string"&&value.trim()&&$(id))$(id).value=value;
+  });
+  if(status){status.textContent=kit.name+" applied — "+kit.tagline+". Every field below stays yours to edit.";status.hidden=false;}
+  selectAdminPreview(kit.outputDefault==="magazine"||kit.outputDefault==="polaroid"?kit.outputDefault:"strip",false);
 }
 function eventMeta(s){
   const bits=[];
@@ -1352,6 +1401,7 @@ function fillSettingsUI(){
   applyScreenText();
 
   const map={
+    setKitId:"kitId",
     setEventType:"eventType",setEventTitle:"eventTitle",setLocation:"location",setDate:"date",setDatePrecision:"datePrecision",setEventLine:"eventLine",
     setStripFrame:"stripFrame",setStripFilter:"stripFilter",setMagazineTemplate:"magazineTemplate",
     setStripTop:"stripTop",setStripSecond:"stripSecond",setStripSignature:"stripSignature",setStripDate:"stripDate"
@@ -1361,6 +1411,10 @@ function fillSettingsUI(){
   if($("setEventType"))$("setEventType").value=String(settings.eventType||"party").replace(/_/g,"-");
   refreshCoverPlaceholders();
   syncThemeUI(settings);
+  /* A shared booth carries its kit by id (PB-14 Setup Pass) — reconstruct
+     which tile reads as "Applied" from that id alone; the fields it
+     pre-filled are already restored above like any other setting. */
+  syncKitPickerUI(settings.kitId||"");
   $("setPolaroidTransition").value=settings.polaroidTransition;
   $("setCountdown").value=String(settings.countdown);
   $("setMirror").checked=settings.mirror;
@@ -1518,6 +1572,7 @@ function draftSettings(){
   const theme=themeFor(selectedTheme?selectedTheme.value:settings);
   const draft={
     ...settings,
+    kitId:$("setKitId")?$("setKitId").value:"",
     eventType:String($("setEventType").value||"party").replace(/-/g,"_"),
     eventTitle:$("setEventTitle").value.trim()||DEFAULTS.eventTitle,
     location:$("setLocation").value.trim(),
@@ -3430,6 +3485,18 @@ document.querySelectorAll('input[name="eventTheme"]').forEach(input=>input.oncha
   applyThemeRendererDefaults(input.value);
   applyRootTheme(input.value);
   renderAdminPreview();
+});
+/* Each kit tile's colour strip borrows its Vibe theme's palette straight
+   from event.js — one source, no second copy of theme colours to drift. */
+document.querySelectorAll(".kit-card[data-kit]").forEach(card=>{
+  const kit=KITS&&card.dataset.kit?KITS.find(card.dataset.kit):null;
+  if(kit){
+    const theme=themeFor(kit.vibe);
+    card.style.setProperty("--kit-primary",theme.primary);
+    card.style.setProperty("--kit-secondary",theme.secondary);
+    card.style.setProperty("--kit-highlight",theme.highlight);
+  }
+  card.onclick=()=>applyBoothKit(card.dataset.kit||"");
 });
 $("resetSettings").onclick=()=>{
   if(!confirm("Reset this booth to the MyBishBash defaults? Your local gallery will not be removed."))return;

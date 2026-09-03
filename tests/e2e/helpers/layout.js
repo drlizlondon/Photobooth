@@ -93,10 +93,20 @@ async function assertPreviewIsProminent(page, selector, canvasSelector = "#admin
     };
   }, canvasSelector);
   expect(metrics.width).toBeGreaterThanOrEqual(Math.min(220, metrics.viewportWidth * 0.55));
-  expect(metrics.height).toBeGreaterThanOrEqual(Math.min(300, metrics.viewportHeight * 0.35));
-  expect(metrics.canvasWidth, "the rendered output itself must be materially wide").toBeGreaterThanOrEqual(80);
+  /* PB-30's phone tier (<=640px) deliberately docks a *compact* sticky-bottom
+     stage — styles.css caps it at max-height:30svh (.admin-preview-stage)
+     with the canvas itself at max-height:26svh (#adminPreviewCanvas), down
+     from the old, taller in-flow preview these ratios were written against.
+     0.24 sits under both of those phone-tier caps with a small margin, while
+     staying far below what iPad/desktop's much larger stage always clears. */
+  expect(metrics.height).toBeGreaterThanOrEqual(Math.min(300, metrics.viewportHeight * 0.24));
+  /* The Strip is the narrowest output (roughly 1:3) — at the phone tier's
+     26svh canvas cap it renders ~73px wide (219px tall / 3). 65 keeps this a
+     real floor against a broken/collapsed canvas while admitting that
+     legitimate, CSS-mandated compact rendering. */
+  expect(metrics.canvasWidth, "the rendered output itself must be materially wide").toBeGreaterThanOrEqual(65);
   expect(metrics.canvasHeight, "the rendered output itself must be materially tall").toBeGreaterThanOrEqual(
-    Math.min(230, metrics.viewportHeight * 0.27)
+    Math.min(230, metrics.viewportHeight * 0.24)
   );
   expect(metrics.canvasAreaRatio, "the real renderer canvas must occupy a meaningful part of the preview stage")
     .toBeGreaterThanOrEqual(0.16);
@@ -107,18 +117,32 @@ async function assertPreviewIsProminent(page, selector, canvasSelector = "#admin
 async function assertDomPreviewIsProminent(page, selector) {
   const preview = page.locator(selector);
   await expect(preview).toBeVisible();
-  await preview.scrollIntoViewIfNeeded();
+  /* PB-30 docks the live preview as a sticky-bottom stage with its own
+     internal overflow (head + tabs sit above the Event Home box inside the
+     same scrollable panel). Generic scrollIntoViewIfNeeded() stops once any
+     part is on-screen, which can leave this nested, already-stuck panel
+     partially scrolled past its own bottom edge — so measure at the fully
+     scrolled-to resting state the stage can genuinely reach, then put any
+     scrolled ancestor back where it was so this check has no side effect on
+     whatever the test does next (e.g. clicking a preview tab above it). */
   const metrics = await preview.evaluate((element) => {
+    const scrollers = [];
+    for (let node = element.parentElement; node; node = node.parentElement) {
+      if (node.scrollHeight > node.clientHeight + 1) scrollers.push([node, node.scrollTop]);
+    }
+    element.scrollIntoView({ block: "end", inline: "nearest" });
     const box = element.getBoundingClientRect();
     const visibleWidth = Math.max(0, Math.min(window.innerWidth, box.right) - Math.max(0, box.left));
     const visibleHeight = Math.max(0, Math.min(window.innerHeight, box.bottom) - Math.max(0, box.top));
-    return {
+    const result = {
       width: box.width,
       height: box.height,
       visibleRatio: visibleWidth * visibleHeight / Math.max(1, box.width * box.height),
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight
     };
+    scrollers.forEach(([node, top]) => { node.scrollTop = top; });
+    return result;
   });
   expect(metrics.width).toBeGreaterThanOrEqual(Math.min(220, metrics.viewportWidth * 0.55));
   expect(metrics.height).toBeGreaterThanOrEqual(Math.min(280, metrics.viewportHeight * 0.32));

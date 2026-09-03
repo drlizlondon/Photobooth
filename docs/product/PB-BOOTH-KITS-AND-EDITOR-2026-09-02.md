@@ -125,5 +125,6 @@
 1. **PB-30** (frame) → 2. **PB-31** (Booth Kits) → 3. **PB-33** (Birthday/delight) → 4. **PB-32** (disclosure completion; partly delivered by PB-30).
 - One packet per session; branch off `main`; commit locally per repo protocol; **never push** (founder deploys via her Lovable/Vercel step). Exit bar per packet: app loads clean, the packet's acceptance boxes verifiable in the browser at phone/iPad/desktop, existing tests still green.
 - Extend `renderAdminPreview`, the wizard, `<details>` disclosure, and PB-14 Setup Pass — do not mint parallel systems. Keep "Booth Kit" out of the `covers.js` TEMPLATES namespace.
+- **Follow-on programme (2026-09-03):** Worlds — live virtual backgrounds — is specced as **PB-34 → PB-36** in `PB-WORLDS-2026-09-03.md` and runs **after** PB-32 on the same stacked chain. It hooks into Booth Kits through one optional data field (`worldId`, see that spec §3.4); nothing in PB-30→33 needs to anticipate it.
 
 *Document read: ☐ Lizzie*

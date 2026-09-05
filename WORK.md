@@ -42,12 +42,12 @@ Three chains are load-bearing:
 | 9 | PB-09 Differentiate camera failures, remove the alert | P3 | ☑ | *(pending)* |
 | 10 | PB-10 Close the measured accessibility gaps | P3 | ☑ | `ab8ca06` |
 | 11 | **PB-17 Make local photo storage survivable** | P3 | ☑ | `69f7dbe` |
-| 12 | **PB-18 Persistent Free booth with event-type identity** | P3 | ☐ | — |
-| 13 | **PB-19 "Your Photobooth" return access + three entry routes** | P3 | ☐ | — |
+| 12 | **PB-18 Persistent Free booth with event-type identity** | P3 | ◐ | — |
+| 13 | **PB-19 "Your Photobooth" return access + three entry routes** | P3 | ☑ | *(pending — pb-event-model-gaps branch)* |
 | 14 | PB-13 Make the app subpath-ready | P5 | ☐ | — |
 | 15 | PB-14 Settings export/import *(amended 001 — now a product feature)* | P5 | ☐ | — |
 | 16 | PB-15 Cut over to mybishbash.app/photobooth | P5 | ☐ | — |
-| 17 | **PB-20 Event lifecycle domain model** | P4 | ☐ | — |
+| 17 | **PB-20 Event lifecycle domain model** | P4 | ◐ | — |
 | 18 | **PB-21 Extend the entitlement model for ONE_EVENT** | P4 | ☐ | — |
 | 19 | PB-11 Reprice: FREE £0 / ONE EVENT £19 / ANNUAL £49 *(amended 001)* | P4 | ☐ | — |
 | 20 | PB-12 Free-vs-paid comparison + purchase moment *(amended 001)* | P4 | ☐ | — |
@@ -56,13 +56,19 @@ Three chains are load-bearing:
 
 Record the real commit hash when a packet lands. Placeholders like "this commit" or "pending" stop being meaningful the moment the session ends.
 
+**Ground-truth reconciliation (2026-09-03, pb-event-model-gaps branch):** `◐` marks a packet whose underlying contract already shipped (schemaVersion/eventId/eventType/datePrecision on EventConfig; the seven-value event-type list; DRAFT/LIVE/ENDED lifecycle with activation guards — all present in `event.js`/`app.js`) but whose full acceptance-criteria list was not re-walked line-by-line this session, so it is not ticked outright. Genuinely closed this session, verified against `docs/product/AUDIT-CONSOLIDATED-2026-08-29.md`:
+- **C-02** (gallery not event-scoped) — `galleryRecord()` now stamps every session with the active `eventId` (`app.js`); `getGallerySessions()` scopes reads to the current event by default, with an explicit `{scope:"device"}` escape hatch for the genuinely device-wide storage-management functions (`trimGallery`, `dropOldestSessions`); a one-time migration backfills pre-existing eventId-less sessions to the current event so no photo is ever hidden. Verified live: two events on one device now see disjoint galleries.
+- **C-08** (free identity hardcoded to "Your Celebration") — `DEFAULTS.eventTitle` (`app.js`) and `EVENT_FIELD_DEFAULTS.eventTitle` (`event.js`) are now blank; `createEventConfig` resolves a blank title to a generic identity keyed by `eventType` (`genericEventTitle()`, `event.js`) — "My Birthday", "My Wedding", "My Baby Shower", "My Anniversary", "My Graduation", "My Party", "My Celebration" (the `other`/catch-all case). Verified live for all seven types.
+- **PB-19** ("Your Photobooth" return access) — landing hero now shows exactly one of OPEN MY PHOTOBOOTH (returning owner, straight to Event Home in host view, identity shown) or TRY THE DEMO + CREATE MY FREE PHOTOBOOTH (new visitor, distinct actions). The demo is guarded in `enterGuestBooth()` so Start never reaches `getUserMedia` or writes to storage. Verified live with instrumented `getUserMedia`/`localStorage`.
+- **DRAFT/SAMPLE watermark on Magazine + Moving Polaroid MP4 — found already complete, no code changed.** Magazine: `renderMagazine()`/admin preview call `drawDraftPreview()` (`app.js`) after `Covers.render()`, painting the mark onto the same canvas Save/Share export from — `covers.js` itself is untouched, exactly as its "protected" status requires. Moving Polaroid: `polaroidOptions()` passes `draftPreview:eventIsDraft()` into `Polaroid.compose()`, whose `drawFrame()`/`drawAt()` composite the watermark after chrome on every frame; `mp4.js`'s two encoders (`encodeWebCodecs`, `encodeRecorder`) both call that same `renderFrame` callback per frame, so the mark is baked into every encoded frame with zero changes to `mp4.js`. Both paths are covered by existing tests (`tests/integration-contract.test.js` "drawDraftPreview"; `tests/polaroid-live.test.js` "SAMPLE watermark ... every frame").
+
 ## Verification requirements (every packet)
 
 1. Preflight green — there is no build step and no root `package.json`, so the preflight is this literal command:
    ```bash
    node --test tests/*.test.js && (cd worker && npm run check)
    ```
-   Current pass re-verified 2026-08-11: **84 root product/renderer/experience tests pass, 14 Worker tests pass, Worker typechecking passes; 98 tests total, 0 fail.**
+   Root suite re-verified 2026-09-03 on `pb-event-model-gaps`: **113 root product/renderer/experience/event tests pass, 0 fail.** (Worker suite not re-run this session — no worker files touched; the prior "84 root / 14 Worker / 98 total" figure from 2026-08-11 is stale for the root count specifically and should not be relied on.)
 2. The packet's acceptance criteria checked off in the commit message.
 3. Any packet touching `index.html` or `styles.css` confirms all ten landing-page demo canvases still report `data-demo-ready="true"` — the landing page drives the real renderers.
 4. Product manually loadable and deployable after the commit. This is a static site with no build step: a broken commit is a broken production deploy.

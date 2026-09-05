@@ -48,6 +48,29 @@
       other: "Other"
     });
 
+    /* A brand new event has no name yet. Rather than stamp every free booth
+       with one fixed phrase regardless of what it actually is (C-08), a blank
+       title resolves to a generic identity for the chosen event type — still
+       obviously a placeholder, but not identical for a birthday and a
+       wedding. This is deliberately not the PB-23 copy-preset engine: it is
+       one string per type, used only when the host has not named their
+       event yet. */
+    var GENERIC_EVENT_TITLES = freeze({
+      birthday: "My Birthday",
+      wedding: "My Wedding",
+      baby_shower: "My Baby Shower",
+      anniversary: "My Anniversary",
+      graduation: "My Graduation",
+      party: "My Party",
+      other: "My Celebration"
+    });
+
+    function genericEventTitle(eventType) {
+      var text = trimmed(eventType).toLowerCase().replace(/[\s-]+/g, "_");
+      return has(GENERIC_EVENT_TITLES, text) ?
+        GENERIC_EVENT_TITLES[text] : GENERIC_EVENT_TITLES.other;
+    }
+
     var DATE_PRECISIONS = freeze({
       EXACT: "exact",
       APPROXIMATE: "approximate",
@@ -182,7 +205,9 @@
       schemaVersion: EVENT_CONFIG_SCHEMA_VERSION,
       eventId: "",
       eventType: "birthday",
-      eventTitle: "Your Celebration",
+      /* Blank means "generate a generic identity from eventType" (C-08) — see
+         genericEventTitle(), applied in createEventConfig below. */
+      eventTitle: "",
       location: "",
       eventLine: "",
       date: "",
@@ -532,7 +557,7 @@
         config.eventType,
         has(input, "eventType") || has(opts.defaults, "eventType")
       );
-      config.eventTitle = trimmed(config.eventTitle) || EVENT_FIELD_DEFAULTS.eventTitle;
+      config.eventTitle = trimmed(config.eventTitle) || genericEventTitle(config.eventType);
       config.location = trimmed(config.location);
       config.eventLine = trimmed(config.eventLine);
       config.date = trimmed(config.date);
@@ -1004,6 +1029,9 @@
       copyPrimitiveFields(baseline, EVENT_FIELD_DEFAULTS);
       copyPrimitiveFields(baseline, defaults || {});
       baseline.schemaVersion = EVENT_CONFIG_SCHEMA_VERSION;
+      if (!trimmed(baseline.eventTitle)) {
+        baseline.eventTitle = genericEventTitle(baseline.eventType);
+      }
       applyCanonicalTheme(baseline);
       baseline.eventId = "";
       baseline.eventStatus = EVENT_STATUSES.DRAFT;
@@ -1229,6 +1257,8 @@
       LIVE_DURATION_MS: LIVE_DURATION_MS,
       EVENT_TYPES: EVENT_TYPES,
       EVENT_TYPE_LABELS: EVENT_TYPE_LABELS,
+      GENERIC_EVENT_TITLES: GENERIC_EVENT_TITLES,
+      genericEventTitle: genericEventTitle,
       DATE_PRECISIONS: DATE_PRECISIONS,
       EVENT_STATUSES: EVENT_STATUSES,
       GUEST_PIN_AUTHORITIES: GUEST_PIN_AUTHORITIES,

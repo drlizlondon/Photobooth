@@ -388,9 +388,16 @@ canvas.mag-style-preview{display:block;width:100%;height:auto;background:#e9e2d8
    strip, checked accent) at a lighter weight — kits are a bulk pre-fill of
    the very same fields the Vibe/Words steps already expose, not a new kind
    of choice. */
-.kit-picker{margin:0 0 42px}
+.kit-picker{position:relative;margin:0 0 42px}
 .kit-grid{display:grid;grid-template-columns:1fr;gap:14px;min-width:0}
-.kit-card{display:flex;min-width:0;min-height:118px;flex-direction:column;gap:9px;border:1px solid var(--ink);background:#fff;padding:16px 18px;text-align:left;cursor:pointer;transition:transform .16s ease,box-shadow .16s ease;font:inherit;color:inherit}
+/* PB-33 joy-moment overlay: an absolutely-positioned canvas over the whole
+   picker, pointer-events:none so it never blocks a tap, hidden by default
+   and only drawn into for its ~1s burst (launchKitJoyConfetti, app.js). */
+.kit-joy-canvas{position:absolute;inset:0;z-index:6;pointer-events:none}
+.kit-joy-canvas[hidden]{display:none}
+.kit-card{display:flex;min-width:0;min-height:118px;flex-direction:column;gap:9px;border:1px solid var(--ink);background:#fff;padding:16px 18px;text-align:left;cursor:pointer;transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s cubic-bezier(.34,1.56,.64,1);font:inherit;color:inherit}
+.kit-card:not(.active):hover{transform:translate(-2px,-3px);box-shadow:4px 5px 0 var(--yellow)}
+.kit-card:active{transform:translate(0,0) scale(.98)}
 .kit-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
 .kit-card-head strong{font-size:19px;line-height:1.15;letter-spacing:-.01em}
 .kit-selected{flex:0 0 auto;visibility:hidden;border:1px solid var(--ink);background:#111;color:#fff;padding:6px 9px;font-size:13px;line-height:1;font-weight:900;letter-spacing:0}
@@ -417,6 +424,14 @@ canvas.mag-style-preview{display:block;width:100%;height:auto;background:#e9e2d8
 .admin-preview{position:sticky;bottom:0;z-index:5;min-width:0;max-height:64svh;overflow-y:auto;background:#eee8df;border:1px solid var(--ink);padding:clamp(16px,2.4vw,28px);box-shadow:0 -16px 30px -10px rgba(17,17,17,.28);transition:box-shadow .2s ease}.admin-preview-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,.72fr);gap:26px;align-items:end;margin-bottom:24px}.admin-preview-head h3{font-family:"Avenir Next",Avenir,Helvetica,Arial,sans-serif;font-size:clamp(28px,3vw,39px);line-height:1.02;letter-spacing:-.04em;margin:8px 0 0}.admin-preview-head>p{font-size:16px;line-height:1.55;color:#514c46;margin:0}.admin-preview-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:18px}.admin-preview-tab,.admin-orientation-tab{min-width:0;min-height:54px;border:1px solid var(--ink);background:#fff;padding:9px 8px;font-size:16px;line-height:1.2;font-weight:900;letter-spacing:0}.admin-preview-tab.active,.admin-preview-tab[aria-selected="true"],.admin-orientation-tab.active,.admin-orientation-tab[aria-pressed="true"]{background:#111;color:#fff;border-color:#111;box-shadow:inset 0 -3px 0 var(--yellow)}
 .admin-preview-stage{min-height:min(54svh,720px);max-height:62svh;max-width:820px;margin:0 auto;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid rgba(17,17,17,.28);background:#e2d9cc;padding:18px}#adminPreviewCanvas{display:block;max-width:100%;max-height:58svh;width:auto;height:auto;margin:0 auto;background:#fff;box-shadow:0 18px 42px rgba(50,40,30,.2)}.admin-event-home-preview{width:min(720px,100%);min-height:min(50svh,620px);display:flex;align-items:center;justify-content:center;padding:clamp(28px,5vw,64px);border:1px solid var(--event-border,var(--ink));text-align:center}.admin-event-home-preview .welcome-inner{width:100%;position:relative;z-index:1}.admin-event-home-preview .eyebrow{font-size:14px;letter-spacing:.16em}.admin-event-home-preview h3{max-width:12ch;margin:18px auto 13px;font-family:var(--event-heading-family,"Avenir Next",Avenir,Helvetica,Arial,sans-serif);font-size:clamp(42px,6vw,76px);font-weight:var(--event-heading-weight,900);line-height:.9;letter-spacing:var(--event-heading-spacing,-.055em);color:var(--event-ink)}.admin-event-home-preview .welcome-date,.admin-event-home-preview .welcome-event-line{font-size:16px;line-height:1.5}.admin-event-home-button{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;margin:16px auto 0}
 .admin-preview-play-motion{width:100%;min-height:50px;margin-top:14px;border:1px solid var(--ink);background:#fff;color:var(--ink);font-size:16px;font-weight:900;letter-spacing:.02em}.admin-preview-controls{display:grid;grid-template-columns:minmax(190px,.38fr) minmax(270px,.62fr);gap:22px;margin-top:22px}.orientation-control,.preview-photo-picker{min-width:0;border:0;border-top:1px solid rgba(17,17,17,.45);background:transparent;padding:18px 0 0}.orientation-control[hidden]+.preview-photo-picker{grid-column:1/-1}.orientation-control>span,.preview-photo-copy strong{display:block;font-size:16px;letter-spacing:.02em;font-weight:900}.orientation-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.preview-photo-picker{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px 16px;align-items:center}.preview-photo-copy{min-width:0}.preview-photo-copy span{display:block;margin-top:7px;font-size:16px;line-height:1.5;color:#514c46}.preview-upload-action{position:relative;min-height:52px;border:1px solid var(--ink);background:#fff;padding:0 17px;display:inline-flex;align-items:center;justify-content:center;text-align:center;font-size:16px;font-weight:900;letter-spacing:.01em;cursor:pointer}.preview-upload-action input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.preview-upload-action:focus-within{outline:3px solid var(--blue);outline-offset:3px}#previewPhotoStatus{grid-column:1/-1;min-height:24px;margin:0;font-size:16px;line-height:1.5;color:#514c46}.preview-photo-thumbs{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.preview-photo-thumbs:empty{display:none}.preview-photo-thumbs img,.preview-photo-thumbs canvas{display:block;width:100%;aspect-ratio:4/5;object-fit:cover;border:1px solid var(--ink);background:#ddd}.preview-photo-thumb{display:block;width:100%;min-width:0;min-height:72px;padding:3px;overflow:hidden;border:1px solid var(--line);background:#fff}.preview-photo-thumb>img,.preview-photo-thumb>canvas{display:block;width:100%;height:100%;aspect-ratio:4/5;object-fit:cover;border:0;background:#ddd}.preview-photo-thumb.active,.preview-photo-thumb[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 2px var(--ink)}.preview-photo-picker #clearPreviewPhotos{grid-column:1/-1;justify-self:start;width:auto;min-height:48px;padding:8px 0;font-size:16px}.test-camera-btn{width:100%;min-height:60px;margin-top:22px;border:1px solid var(--ink);background:var(--party-raspberry);color:#fff;padding:0 22px;font-size:16px;font-weight:900;letter-spacing:.04em;box-shadow:5px 6px 0 var(--party-blue)}.preview-note{text-align:center;font-size:16px;line-height:1.55;color:#514c46;margin:18px auto 0;max-width:64ch}
+
+/* PB-33 kit-apply joy moment: a spring-eased pop on the two live preview
+   surfaces that actually change (Event Home + the output canvas). The
+   class is added and removed by playKitApplyReveal() (app.js) on every
+   kit apply, restarted each time via a forced reflow. Transform/opacity
+   only, so it never shifts the sticky preview stage's own box. */
+@keyframes kitApplyPop{0%{opacity:.35;transform:scale(.94) translateY(8px)}60%{opacity:1}100%{opacity:1;transform:none}}
+.kit-apply-pop{animation:kitApplyPop .55s cubic-bezier(.34,1.56,.64,1)}
 
 .gallery-tools{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:14px}.gallery-help{margin:0;font-size:13px;line-height:1.5;color:var(--muted)}.gallery-clear{width:auto;min-height:48px;padding:8px 0}.event-gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.gallery-session{min-width:0;min-height:48px;border:1px solid var(--line);background:#fff;padding:10px;text-align:left}.gallery-thumb-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin-bottom:8px}.gallery-thumb-grid img{width:100%;aspect-ratio:1/1;object-fit:cover;background:#111}.gallery-session-meta{font-size:12px;color:var(--muted)}.gallery-empty{font-size:14px;color:var(--muted);padding:10px 0}
 
@@ -555,6 +570,28 @@ body.entrance-open{overflow:hidden}
 :is(.event-entrance-card,.personal-compare .booth-example,.welcome-screen)[data-theme="sunshine"]::before{width:min(38vw,470px);height:auto;aspect-ratio:1;left:auto;right:-10%;top:-20%;border-radius:50%;background:var(--event-highlight);box-shadow:0 0 0 18px color-mix(in srgb,var(--event-highlight) 35%,transparent);transform:none}
 :is(.event-entrance-card,.personal-compare .booth-example,.welcome-screen)[data-theme="sunshine"]::after{width:min(36vw,410px);height:min(19vw,220px);left:-10%;right:auto;bottom:-8%;border-radius:50% 50% 0 0;background:var(--event-secondary);transform:rotate(-7deg)}
 
+/* Booth Kit identity layer (PB-33) — on top of the vibe theme, never a
+   substitute for it: the Birthday kit still runs Sunshine's real palette
+   (kits.js.vibe is a mechanically-tested real theme id, never invented
+   here), and this only adds its OWN celebratory framing — a tilted,
+   polaroid-bordered card and a script-accent eyebrow reading the SAME
+   fontScript role the Strip signature already uses (--event-script-family,
+   set generically in applyEventTheme). data-kit is blank for every other
+   kit and for "start from scratch", so nothing here fires for them; a
+   future kit that wants its own layer adds its own [data-kit="…"] block
+   here, exactly like a theme does above — never a bespoke JS branch. */
+:is(.event-entrance-card,.personal-compare .booth-example,.welcome-screen)[data-kit="birthday"]{
+  transform:rotate(-1.4deg);
+  border-width:12px;
+  border-color:#fff;
+  box-shadow:0 0 0 1px var(--event-border,var(--ink)),10px 13px 0 -3px rgba(17,17,17,.16);
+}
+:is(.event-entrance-card,.personal-compare .booth-example,.welcome-screen)[data-kit="birthday"] .eyebrow{
+  font-family:var(--event-script-family,cursive);
+  font-size:23px;
+  letter-spacing:.01em;
+}
+
 .camera-top>span{display:flex;flex-direction:column;gap:5px}.camera-top b{font-size:9px;letter-spacing:.17em}.camera-top small{font-size:10px;letter-spacing:.14em}.strip-framing-guide{position:absolute;z-index:2;left:50%;top:50%;width:min(88vw,calc(82svh * 1.119));aspect-ratio:564/504;transform:translate(-50%,-50%);border:2px solid rgba(255,255,255,.9);box-shadow:0 0 0 200vmax rgba(0,0,0,.18);pointer-events:none}.strip-framing-guide::before,.strip-framing-guide::after{content:"";position:absolute;width:22px;height:22px;border-color:var(--party-yellow)}.strip-framing-guide::before{left:-2px;top:-2px;border-left:4px solid var(--party-yellow);border-top:4px solid var(--party-yellow)}.strip-framing-guide::after{right:-2px;bottom:-2px;border-right:4px solid var(--party-yellow);border-bottom:4px solid var(--party-yellow)}.strip-framing-guide span{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);padding:4px 7px;background:rgba(0,0,0,.5);color:#fff;font-size:7px;letter-spacing:.17em;white-space:nowrap}
 .still-photo-btn{margin-top:0}.review-nav[hidden]{display:none}.review-panel.output-locked .mode-controls:not(.active){display:none}.review-panel.output-locked #stripControls{display:none!important}.review-panel.output-locked #magazineStyleStep .control-label,.review-panel.output-locked #magazineStyleChoices{display:none!important}
 
@@ -646,5 +683,10 @@ body.host-test-mode .review-screen{flex-direction:column;justify-content:flex-st
 }
 
 @media(prefers-reduced-motion:reduce){
-  .admin-preview,.admin-preview *,.host-test-bar *,#adminPreviewCanvas,.test-camera-btn,.theme-card,.kit-card{animation:none!important;transition:none!important;scroll-behavior:auto!important}.admin-preview,.test-camera-btn,.host-test-bar{box-shadow:none}
+  .admin-preview,.admin-preview *,.host-test-bar *,#adminPreviewCanvas,.test-camera-btn,.theme-card,.kit-card,.kit-apply-pop{animation:none!important;transition:none!important;scroll-behavior:auto!important}.admin-preview,.test-camera-btn,.host-test-bar{box-shadow:none}
+  /* PB-33: the joy-moment canvas and script-accent framing are motion, not
+     structure — launchKitJoyConfetti() already no-ops under reduced motion
+     (app.js), and this belt-and-braces rule keeps the canvas invisible even
+     if a stale draw were ever left mid-flight. */
+  .kit-joy-canvas{display:none!important}
 }

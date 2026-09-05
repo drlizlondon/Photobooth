@@ -602,9 +602,21 @@ function applyEventTheme(target,value){
   target.style.setProperty("--event-button",theme.button);
   target.style.setProperty("--event-button-ink",theme.buttonInk);
   target.style.setProperty("--event-border",theme.border);
+  /* --event-script-family carries the SAME fontScript role the Strip
+     signature and cover script already read (fonts.js) onto the DOM Event
+     Home preview, so a kit's script accent (PB-33) is one property, not a
+     second font system. Set for every booth, not just a kit-scoped one —
+     kitId-gated CSS below decides who actually uses it. */
+  target.style.setProperty("--event-script-family",Fonts?Fonts.stack("script",value):"cursive");
   target.dataset.theme=theme.id;
   target.dataset.decoration=theme.decoration;
   target.dataset.typography=theme.typography;
+  /* dataset.kit carries the currently applied Booth Kit id (PB-31's
+     settings.kitId), generic for every kit — CSS keyed off this attribute
+     is what gives Birthday (or any future kit) its own identity layer
+     without a JS branch. Blank when no kit is applied ("start from
+     scratch"), same as the field's own blank-means-nothing contract. */
+  target.dataset.kit=String((value&&value.kitId)||"");
   applyClientBrandTheme(target);
 }
 /* The registry theme supplies a client booth's composure — spacing,
@@ -675,6 +687,7 @@ function syncKitPickerUI(kitId){
   });
 }
 const KIT_COPY_FIELDS={eventTitle:"setEventTitle",eventLine:"setEventLine",welcomeEyebrow:"setWelcomeEyebrow",startLabel:"setStartLabel",startHint:"setStartHint"};
+const KIT_FONT_FIELDS={display:"setFontDisplay",script:"setFontScript"};
 function applyBoothKit(kitId){
   const kit=KITS?KITS.find(kitId):null;
   if($("setKitId"))$("setKitId").value=kit?kit.id:"";
@@ -698,8 +711,97 @@ function applyBoothKit(kitId){
        has already filled in by hand. */
     if(typeof value==="string"&&value.trim()&&$(id))$(id).value=value;
   });
+  /* kit.fonts (PB-33) is optional and, when present, a display+script type
+     pairing written into the very same hidden fontDisplay/fontScript inputs
+     the Advanced typography picker already owns — generic across every
+     kit, never a birthday-only branch. Wedding/Kids Party/Minimal carry
+     fonts:null today and are untouched here. */
+  Object.keys(KIT_FONT_FIELDS).forEach(key=>{
+    const value=kit.fonts&&kit.fonts[key],id=KIT_FONT_FIELDS[key];
+    if(typeof value==="string"&&value.trim()&&$(id))$(id).value=value;
+  });
+  if(typeof refreshFontSpecimens==="function")refreshFontSpecimens();
   if(status){status.textContent=kit.name+" applied — "+kit.tagline+". Every field below stays yours to edit.";status.hidden=false;}
   selectAdminPreview(kit.outputDefault==="magazine"||kit.outputDefault==="polaroid"?kit.outputDefault:"strip",false);
+  /* The joy moment (PB-33): a brief, tasteful celebration on every kit
+     apply — confetti/sparkle burst + the preview elements easing into
+     place. No-ops entirely under prefers-reduced-motion, which is how
+     "identical end state, instant transition" is satisfied: nothing extra
+     ever runs, renderAdminPreview() already paints the correct result. */
+  playKitApplyReveal();
+  launchKitJoyConfetti();
+}
+/* Spring-eased entrance for the two live preview surfaces a kit apply
+   actually changes — the Event Home DOM preview and the output canvas.
+   Restarting the CSS animation (the reflow-forcing offsetWidth read) is the
+   standard trick for replaying a class-driven keyframe on repeated
+   clicks. Time-boxed to the CSS animation's own duration; nothing here
+   touches layout, so the sticky preview stage never shifts. */
+function playKitApplyReveal(){
+  if(prefersReducedMotion())return;
+  [$("adminEventHomePreview"),$("adminPreviewCanvas")].forEach(el=>{
+    if(!el)return;
+    el.classList.remove("kit-apply-pop");
+    void el.offsetWidth;
+    el.classList.add("kit-apply-pop");
+  });
+}
+/* A lightweight Canvas confetti/sparkle burst over the kit grid itself —
+   the moment of choosing, not a permanent fixture. Deliberately not the
+   review screen's DOM-span confetti (launchConfetti/#confettiLayer):
+   that layer lives only on the capture/review screen and this one needs to
+   sit inside the setup wizard without adding a heavy dependency, per
+   PB-33. Non-blocking (pointer-events:none) and self-clearing well inside
+   the ~1s time-box; a second kit tap cancels the running burst rather than
+   stacking frames. */
+let kitJoyFrame=0;
+function launchKitJoyConfetti(){
+  if(prefersReducedMotion())return;
+  const canvas=$("kitJoyCanvas");
+  if(!canvas||!canvas.parentElement)return;
+  if(kitJoyFrame)cancelAnimationFrame(kitJoyFrame);
+  const host=canvas.parentElement,rect=host.getBoundingClientRect();
+  if(!rect.width||!rect.height)return;
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  canvas.width=rect.width*dpr;canvas.height=rect.height*dpr;
+  canvas.style.width=rect.width+"px";canvas.style.height=rect.height+"px";
+  const ctx=canvas.getContext("2d");
+  if(!ctx)return;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const colours=["#ff8b72","#245f9f","#fff0aa","#b52167","#ffffff"];
+  const particles=[];
+  for(let i=0;i<28;i++){
+    particles.push({
+      x:rect.width/2+(Math.random()-0.5)*70,
+      y:rect.height*0.16,
+      vx:(Math.random()-0.5)*3.4,
+      vy:-(2.2+Math.random()*2.4),
+      g:0.1+Math.random()*0.06,
+      size:3+Math.random()*4,
+      rot:Math.random()*Math.PI*2,
+      vr:(Math.random()-0.5)*0.4,
+      colour:colours[i%colours.length]
+    });
+  }
+  const duration=950,start=performance.now();
+  canvas.hidden=false;
+  (function frame(now){
+    const t=now-start;
+    ctx.clearRect(0,0,rect.width,rect.height);
+    if(t>=duration){canvas.hidden=true;kitJoyFrame=0;return;}
+    const life=1-t/duration;
+    particles.forEach(p=>{
+      p.vy+=p.g;p.x+=p.vx;p.y+=p.vy;p.rot+=p.vr;
+      ctx.save();
+      ctx.globalAlpha=Math.max(0,life);
+      ctx.translate(p.x,p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle=p.colour;
+      ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6);
+      ctx.restore();
+    });
+    kitJoyFrame=requestAnimationFrame(frame);
+  })(start);
 }
 function eventMeta(s){
   const bits=[];
